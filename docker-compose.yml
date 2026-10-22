@@ -1,0 +1,72 @@
+# WMC Inventar – Betrieb (N-01)
+# web: die Anwendung (Django + WhiteNoise)
+# db:  PostgreSQL 16
+# cron: ruft tageslauf auf (TESTSCHNITTSTELLE 1)
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: inventar
+      POSTGRES_USER: inventar
+      POSTGRES_PASSWORD: inventar
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d inventar"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  web:
+    build:
+      context: .
+      args:
+        BASIS: python:3.12-slim
+    environment:
+      INVENTAR_DEBUG: "0"
+      INVENTAR_SECRET_KEY: ${INVENTAR_SECRET_KEY:?}
+      DATABASE_URL: postgres://inventar:inventar@db:5432/inventar
+      BASIS_URL: ${BASIS_URL:-http://127.0.0.1:8000}
+      MAIL_ABLAGE: /srv/inventar/var/mails
+      DATEIABLAGE: /srv/inventar/var/dateien
+      KENNZAHLEN_TOKEN: ${KENNZAHLEN_TOKEN:-}
+      BEISPIEL_PASSWORT: ${BEISPIEL_PASSWORT:-Beispiel-Passwort-2026}
+    volumes:
+      - var-data:/srv/inventar/var
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py collectstatic --noinput &&
+             python manage.py runserver 0.0.0.0:8000"
+
+  cron:
+    build:
+      context: .
+      args:
+        BASIS: python:3.12-slim
+    environment:
+      INVENTAR_DEBUG: "0"
+      INVENTAR_SECRET_KEY: ${INVENTAR_SECRET_KEY:?}
+      DATABASE_URL: postgres://inventar:inventar@db:5432/inventar
+      BASIS_URL: ${BASIS_URL:-http://127.0.0.1:8000}
+      MAIL_ABLAGE: /srv/inventar/var/mails
+      DATEIABLAGE: /srv/inventar/var/dateien
+    volumes:
+      - var-data:/srv/inventar/var
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "while true; do
+               python manage.py tageslauf;
+               sleep 3600;
+             done"
+
+volumes:
+  db-data:
+  var-data:

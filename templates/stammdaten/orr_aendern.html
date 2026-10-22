@@ -1,0 +1,5 @@
+{% extends "basis.html" %}
+{% block titel %}Ort ändern · WMC Inventar{% endblock %}
+{% block inhalt %}
+{% include "stammdaten/_formular.html" with titel="Ort ändern" form=form zurueck="/orte/" %}
+{% endblock %}

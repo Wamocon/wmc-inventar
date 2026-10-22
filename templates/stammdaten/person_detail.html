@@ -1,0 +1,19 @@
+{% extends "basis.html" %}
+{% block titel %}{{ person.nachname }} {{ person.vorname }} · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div><h1>{{ person.nachname }} {{ person.vorname }}</h1><p class="muted lead">Person (F-121)</p></div>
+  {% if user.ist_admin %}<div class="actions"><a class="btn" href="/personen/{{ person.pk }}/aendern/" data-test="person-aendern">Ändern</a></div>{% endif %}
+</div>
+<dl class="detail-grid" data-test="person-detail">
+  <dt>Anrede</dt><dd>{{ person.anrede|default:"—" }}</dd>
+  <dt>Vorname</dt><dd>{{ person.vorname|default:"—" }}</dd>
+  <dt>Nachname</dt><dd>{{ person.nachname|default:"—" }}</dd>
+  <dt>E-Mail</dt><dd>{{ person.email|default:"—" }}</dd>
+  <dt>Abteilung</dt><dd>{{ person.abteilung|default:"—" }}</dd>
+  <dt>Eintritt</dt><dd>{% if person.eintritt %}{{ person.eintritt }}{% else %}—{% endif %}</dd>
+  <dt>Austritt</dt><dd>{% if person.austritt %}{{ person.austritt }}{% else %}—{% endif %}</dd>
+  <dt>Anschrift</dt><dd>{{ person.anschrift|default:"—" }}</dd>
+  <dt>Status</dt><dd>{{ "aktiv" if person.aktiv else "inaktiv" }}</dd>
+</dl>
+{% endblock %}

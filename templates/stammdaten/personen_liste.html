@@ -1,0 +1,19 @@
+{% extends "basis.html" %}
+{% block titel %}Personen · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div><h1>Personen</h1><p class="muted lead">Personen pflegen (F-121).</p></div>
+  {% if user.ist_admin %}<div class="actions"><a class="btn primary" href="/personen/neu/" data-test="person-anlegen">Neue Person</a></div>{% endif %}
+</div>
+<div class="liste" data-test="personen-liste">
+  {% for p in personen %}
+  <div class="zeile">
+    <a href="/personen/{{ p.pk }}/">{{ p.nachname }} {{ p.vorname }}</a>
+    <span class="muted">{{ p.email }}{% if p.abteilung %} · {{ p.abteilung }}{% endif %}</span>
+    {% if user.ist_admin %}<a class="btn sm" href="/personen/{{ p.pk }}/aendern/">Ändern</a>{% endif %}
+  </div>
+  {% empty %}
+  <div class="zeile muted">Keine Personen vorhanden.</div>
+  {% endfor %}
+</div>
+{% endblock %}

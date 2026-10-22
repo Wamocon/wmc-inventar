@@ -1,0 +1,5 @@
+{% extends "basis.html" %}
+{% block titel %}Person ändern · WMC Inventar{% endblock %}
+{% block inhalt %}
+{% include "stammdaten/_formular.html" with titel=person.vollstaendiger_name form=form zurueck="/personen/" %}
+{% endblock %}

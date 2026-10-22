@@ -1,0 +1,19 @@
+{% extends "basis.html" %}
+{% block titel %}Profile · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div><h1>Ausstattungsprofile</h1><p class="muted lead">Profile pflegen (F-61).</p></div>
+  {% if user.ist_admin %}<div class="actions"><a class="btn primary" href="/profile/neu/" data-test="profil-anlegen">Neues Profil</a></div>{% endif %}
+</div>
+<div class="liste" data-test="profile-liste">
+  {% for p in profile %}
+  <div class="zeile">
+    <a href="#">{{ p.name }}</a>
+    <span class="muted">{{ p.positionen.count }} Position(en)</span>
+    {% if user.ist_admin %}<a class="btn sm" href="/profile/{{ p.pk }}/aendern/">Ändern</a>{% endif %}
+  </div>
+  {% empty %}
+  <div class="zeile muted">Keine Profile vorhanden.</div>
+  {% endfor %}
+</div>
+{% endblock %}

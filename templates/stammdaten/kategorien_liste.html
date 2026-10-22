@@ -1,0 +1,19 @@
+{% extends "basis.html" %}
+{% block titel %}Kategorien · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div><h1>Kategorien</h1><p class="muted lead">Kategorien pflegen (F-120).</p></div>
+  {% if ist_admin %}<div class="actions"><a class="btn primary" href="/kategorien/neu/" data-test="kategorie-anlegen">Neue Kategorie</a></div>{% endif %}
+</div>
+<div class="liste" data-test="kategorien-liste">
+  {% for k in kategorien %}
+  <div class="zeile">
+    <a href="#">{{ k.name }}</a>
+    <span class="muted">{% if k.hat_datentraeger %}hat Datenträger{% else %}kein Datenträger{% endif %}{% if k.seriennummer_pflicht %} · Seriennummer Pflicht{% endif %}</span>
+    {% if ist_admin %}<a class="btn sm" href="/kategorien/{{ k.pk }}/aendern/">Ändern</a>{% endif %}
+  </div>
+  {% empty %}
+  <div class="zeile muted">Keine Kategorien vorhanden.</div>
+  {% endfor %}
+</div>
+{% endblock %}

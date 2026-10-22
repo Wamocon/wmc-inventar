@@ -1,0 +1,26 @@
+{% extends "basis.html" %}
+{% block titel %}Anmelden · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="login-wrap">
+  <h1>Anmelden</h1>
+  <p class="muted">Melden Sie sich mit Ihrer E-Mail-Adresse und Ihrem Passwort an.</p>
+  {% if fehler %}<div class="fehler-kasten" data-test="fehler">{{ fehler }}</div>{% endif %}
+  <form method="post" action="/anmelden/" novalidate>
+    {% csrf_token %}
+    <div class="login-feld">
+      <label for="{{ form.email.id_for_label }}" class="req">E-Mail</label>
+      {{ form.email }}
+    </div>
+    <div class="login-feld">
+      <label for="{{ form.passwort.id_for_label }}" class="req">Passwort</label>
+      {{ form.passwort }}
+    </div>
+    <div class="login-akt">
+      <button type="submit" class="btn primary" data-test="anmelden-button">Anmelden</button>
+    </div>
+    <div class="login-links">
+      <a class="btn link" href="/passwort-vergessen/">Passwort vergessen</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

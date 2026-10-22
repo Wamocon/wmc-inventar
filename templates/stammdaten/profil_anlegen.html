@@ -1,0 +1,5 @@
+{% extends "basis.html" %}
+{% block titel %}Profil anlegen · WMC Inventar{% endblock %}
+{% block inhalt %}
+{% include "stammdaten/_formular.html" with titel="Neues Profil" form=form zurueck="/profile/" %}
+{% endblock %}

@@ -1,0 +1,19 @@
+{% extends "basis.html" %}
+{% block titel %}Orte · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div><h1>Orte</h1><p class="muted lead">Orte pflegen (F-60).</p></div>
+  {% if user.ist_admin %}<div class="actions"><a class="btn primary" href="/orte/neu/" data-test="ort-anlegen">Neuer Ort</a></div>{% endif %}
+</div>
+<div class="liste" data-test="orte-liste">
+  {% for o in orte %}
+  <div class="zeile">
+    <span class="num">{{ o.kennung }}</span>
+    <span class="muted">{{ o.name }}{% if o.standort %} · {{ o.standort }}{% endif %}{% if o.raum %} · {{ o.raum }}{% endif %}</span>
+    {% if user.ist_admin %}<a class="btn sm" href="/orte/{{ o.pk }}/aendern/">Ändern</a>{% endif %}
+  </div>
+  {% empty %}
+  <div class="zeile muted">Keine Orte vorhanden.</div>
+  {% endfor %}
+</div>
+{% endblock %}

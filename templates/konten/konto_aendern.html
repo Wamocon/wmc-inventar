@@ -1,0 +1,24 @@
+{% extends "basis.html" %}
+{% block titel %}Konto ändern · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div><h1>Konto ändern</h1><p class="muted lead">{{ konto.email }}</p></div>
+</div>
+<form method="post" novalidate>
+  {% csrf_token %}
+  <div class="form-grid">
+    {% for f in form %}
+      <div class="field">
+        <label for="{{ f.id_for_label }}"{% if f.field.required %} class="req"{% endif %}>{{ f.label }}</label>
+        {{ f }}
+        {% if f.field.help_text %}<small class="help">{{ f.field.help_text }}</small>{% endif %}
+        {% for e in f.errors %}<small class="help" style="color:var(--err)">{{ e }}</small>{% endfor %}
+      </div>
+    {% endfor %}
+  </div>
+  <div class="actions">
+    <button type="submit" class="btn primary" data-test="konto-speichern">Speichern</button>
+    <a class="btn" href="/konten/">Abbrechen</a>
+  </div>
+</form>
+{% endblock %}

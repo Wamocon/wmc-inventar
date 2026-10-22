@@ -1,0 +1,74 @@
+{% load static %}<!DOCTYPE html>
+<html lang="de" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>{% block titel %}WMC Inventar{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'fonts/archivo.css' %}">
+  <link rel="stylesheet" href="{% static 'basis.css' %}">
+  {% block kopf %}{% endblock %}
+</head>
+<body>
+  <header class="topbar" data-test="rahmen">
+    <div class="top-in">
+      <a class="brand" href="/" data-test="nav-uebersicht">
+        <span class="brand-tag" aria-hidden="true">WMC</span>
+        <span>Inventar</span>
+      </a>
+      {% block navigation %}
+      <nav class="topnav" data-test="hauptnavigation" aria-label="Hauptnavigation">
+        {% if user.is_authenticated %}
+          {% if user.ist_admin or user.ist_leser %}
+            <a class="nav-item" href="/geraete/" data-test="nav-geraete">Geräte</a>
+            <a class="nav-item" href="/arbeitsplaetze/" data-test="nav-arbeitsplaetze">Arbeitsplätze</a>
+            <a class="nav-item" href="/personen/" data-test="nav-personen">Personen</a>
+          {% endif %}
+          {% if user.ist_admin %}
+            <a class="nav-item" href="/import/" data-test="nav-import">Import</a>
+            <a class="nav-item" href="/etiketten/" data-test="nav-etiketten">Etiketten</a>
+            <a class="nav-item" href="/einstellungen/" data-test="nav-einstellungen">Einstellungen</a>
+          {% endif %}
+          {% if user.ist_admin or user.ist_mitarbeiter %}
+            <a class="nav-item" href="/meine-geraete/" data-test="nav-meine-geraete">Meine Geräte</a>
+          {% endif %}
+          {% if user.ist_mitarbeiter %}
+            <a class="nav-item" href="/meine-geraete/" data-test="nav-leihen">Leihen</a>
+          {% endif %}
+        {% endif %}
+      </nav>
+      {% endblock %}
+      <div class="user">
+        {% if user.is_authenticated %}
+          <div class="who">
+            <span>{{ user.email }}</span>
+            <small>{{ user.get_rolle_display }}</small>
+          </div>
+          <form method="post" action="/abmelden/" data-test="abmelden">
+            {% csrf_token %}
+            <button type="submit" class="btn link">Abmelden</button>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+  </header>
+
+  <main class="main">
+    {% if messages %}
+      <div class="meldungen" data-test="meldungen">
+        {% for m in messages %}
+          <div class="meldung {{ m.tags }}" data-test="meldung">{{ m }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+    {% block inhalt %}{% endblock %}
+  </main>
+
+  <footer class="footer">
+    <div class="footer-in">
+      <span>WMC Inventar · Version 1</span>
+    </div>
+  </footer>
+  {% block ende %}{% endblock %}
+</body>
+</html>
