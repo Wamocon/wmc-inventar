@@ -1,0 +1,13 @@
+# Laufzeit der Anwendung (Python 3.10 oder neuer). Auf der DGX vorab in .venv installiert; ohne Internet gibt es nur diese Pakete.
+Django==5.2.18            # aktuelle LTS-Version
+psycopg[binary]==3.3.6    # PostgreSQL im Betrieb
+weasyprint==70.0          # PDF aus HTML; braucht Pango auf dem System
+pyhanko==0.38.0           # Siegel (PAdES) und Signaturprüfung
+segno==1.6.6              # QR-Codes
+openpyxl==3.1.5           # Import und Export .xlsx
+pillow==12.2.0            # Fotos verkleinern
+pillow-heif==1.8.1        # HEIC-Fotos (F-134)
+pypdfium2==5.13.0         # erste PDF-Seite als Bild (Grundriss, F-67)
+argon2-cffi==25.1.0       # Passwort-Hash Argon2id (N-02)
+whitenoise==6.12.0        # statische Dateien im Container
+gunicorn==26.2.0          # Anwendungsserver im Container

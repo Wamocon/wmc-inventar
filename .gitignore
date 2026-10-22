@@ -1,0 +1,20 @@
+# Umgebung und Laufzeitdaten
+.venv/
+var/
+wheelhouse/
+media/
+staticfiles/
+.env
+__pycache__/
+*.pyc
+
+# Gehört nie ins Repository
+WMC_Hardwarebestand.xlsx
+*.p12
+*.pfx
+*.pem
+*.key
+
+# Testläufe: nur der letzte Stand unter tests/robot/ergebnisse/ wird eingecheckt
+tests/robot/ergebnisse/*.png
+tests/robot/ergebnisse/browser/

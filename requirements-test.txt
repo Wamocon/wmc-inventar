@@ -1,0 +1,7 @@
+# Nur für Theos Robot-Framework-Tests, zusätzlich zu requirements.txt.
+# Die Browser Library braucht Node.js und einmalig "rfbrowser init chromium" (mit Internet, macht das Einrichtungsskript).
+robotframework==7.5
+robotframework-browser==20.6.0
+robotframework-requests==0.9.7
+pypdf==6.21.2             # Text und Seiten der PDFs
+zxing-cpp==3.1.0          # QR-Codes aus Etiketten-PDFs lesen (mit pypdfium2)
