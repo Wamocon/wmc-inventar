@@ -10,7 +10,7 @@ Drei bis sechs Sätze: was fertig ist, was nicht, was Erwin vor der Abnahme wiss
 
 | Meilenstein | Stand | Commit | Datum | Hinweis |
 |---|---|---|---|---|
-| M1 Grundgerüst | offen | | | |
+| M1 Grundgerüst | fertig | 711ddd5 | 22.10.2026 | Projekt, Anmeldung, Konten, Stammdaten, beispieldaten |
 | M2 Bestand | offen | | | |
 | M3 Lebenszyklus | offen | | | |
 | M4 Arbeitsplätze | offen | | | |
@@ -24,11 +24,11 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 
 | ID | Prio | M | Anforderung | Stand | Nachweis / Hinweis |
 |---|---|---|---|---|---|
-| F-01 | M | M1 | Anmeldung mit E-Mail und Passwort | offen | |
-| F-02 | M | M1 | Admin legt Konten an, vergibt Rollen, deaktiviert Konten | offen | |
-| F-03 | M | M1 | Passwort vergessen | offen | |
-| F-04 | M | M1 | Passwort ändern | offen | |
-| F-05 | S | M1 | Sitzungsende | offen | |
+| F-01 | M | M1 | Anmeldung mit E-Mail und Passwort | erfüllt | `konten/views.py:anmelden`, Test: F-01 Sperre nach 5 Fehlversuchen |
+| F-02 | M | M1 | Admin legt Konten an, vergibt Rollen, deaktiviert Konten | erfüllt | `konten/views.py:konto_anlegen`, `konten/views.py:konto_aendern` |
+| F-03 | M | M1 | Passwort vergessen | erfüllt | `konten/views.py:passwort_vergessen`, Mail-Link 1 h, einmalig |
+| F-04 | M | M1 | Passwort ändern | erfüllt | `konten/views.py:passwort_aendern`, mind. 12 Zeichen |
+| F-05 | S | M1 | Sitzungsende | erfüllt | `SESSION_COOKIE_AGE = 8h` in `inventar/settings.py` |
 | F-10 | M | M2 | Gerät erfassen | offen | |
 | F-11 | M | M2 | Mehrere gleiche Geräte auf einmal erfassen | offen | |
 | F-12 | M | M4 | Etikett direkt nach dem Speichern drucken | offen | |
@@ -60,7 +60,7 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 | F-56 | M | M3 | Löschnachweis bei Datenträgern | offen | |
 | F-57 | M | M3 | Verlust und Diebstahl | offen | |
 | F-58 | M | M3 | Archiv | offen | |
-| F-60 | M | M1 | Arbeitsplätze und Lagerorte pflegen | offen | |
+| F-60 | M | M1 | Arbeitsplätze und Lagerorte pflegen | erfüllt | `stammdaten/views.py:orte_liste`, `orte_anlegen`, `orte_aendern` |
 | F-61 | M | M4 | Ausstattungsprofile pflegen und Arbeitsplätzen zuweisen | offen | |
 | F-62 | M | M4 | Soll-Ist-Abgleich je Arbeitsplatz | offen | |
 | F-63 | M | M4 | Übersicht und Bedarf | offen | |
@@ -102,8 +102,8 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 | F-111 | M | M5 | Leihen | offen | |
 | F-112 | M | M5 | Datensparsamkeit | offen | |
 | F-113 | S | M5 | QR-Scan als Mitarbeiter | offen | |
-| F-120 | M | M1 | Kategorien pflegen | offen | |
-| F-121 | M | M1 | Personen pflegen | offen | |
+| F-120 | M | M1 | Kategorien pflegen | erfüllt | `stammdaten/views.py:kategorien_liste`, `kategorien_anlegen`, `kategorien_aendern` |
+| F-121 | M | M1 | Personen pflegen | erfüllt | `stammdaten/views.py:personen_liste`, `personen_anlegen`, `personen_aendern` |
 | F-122 | M | M7 | Einstellungen | offen | |
 | F-130 | M | M3 | PDF aus Vorlage | offen | |
 | F-131 | M | M3 | Daten vorbelegen | offen | |
@@ -117,16 +117,16 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 | F-139 | M | M6 | Versand und Ablage | offen | |
 | F-140 | M | M6, M7 | Erinnerung | offen | |
 | F-141 | M | M6 | Gegenzeichnung bei Rücknahme ist Pflicht | offen | |
-| N-01 | | M1 | Betrieb | offen | |
-| N-02 | | M1 | Sicherheit | offen | |
+| N-01 | | M1 | Betrieb | teilweise | Dockerfile und docker-compose.yml vorhanden; Docker auf der DGX nicht geprüft |
+| N-02 | | M1 | Sicherheit | erfüllt | Argon2id, CSRF, CSP ohne Inline-Skripte, sichere Cookies |
 | N-03 | | M3 | Nachvollziehbarkeit | offen | |
-| N-04 | | M1 | Datenschutz | offen | |
+| N-04 | | M1 | Datenschutz | erfüllt | Personendaten beschränkt auf Anrede, Vorname, Nachname, E-Mail, Abteilung, Ein-/Austritt, Anschrift (N-04) |
 | N-05 | | M6 | Signatur | offen | |
 | N-06 | | M7 | Datensicherung | offen | |
 | N-07 | | M7 | Mengengerüst | offen | |
-| N-08 | | alle | Bedienung | offen | |
-| N-09 | | alle | Gestaltung | offen | |
-| N-10 | | alle | Qualität | offen | |
+| N-08 | | alle | Bedienung | erfüllt | Zeitzone Europe/Berlin, Datum TT.MM.JJJJ, deutsche Sprache |
+| N-09 | | alle | Gestaltung | teilweise | WAMOCON-CI in `static/basis.css`; Schrift Archivo aus `static/fonts/` (vorhanden im Repo) |
+| N-10 | | alle | Qualität | teilweise | `manage.py check` grün; Tests in M2+ je Anforderung |
 | N-11 | | M7 | Wartbarkeit | offen | |
 
 ## Wie getestet
