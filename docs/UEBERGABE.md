@@ -1,10 +1,10 @@
 # Übergabe WMCNL-2755
 
-Ausgefüllt von: Gregor · Datum: TT.MM.JJJJ · Letzter Commit: HASH
+Ausgefüllt von: Gregor · Datum: 23.10.2026 · Letzter Commit: 099303b
 
 ## Zusammenfassung
 
-M1 Grundgerüst, M2 Bestand und M3 Lebenszyklus sind fertig. Alle 61 Tests sind grün. Der Login-Bug (Feld `fehlersuche` statt `fehlversuche`) aus Theos Lauf zu M2 ist behoben. PDF-Protokolle (FRM-001, FRM-002) und Signatur kommen in M6.
+M1 Grundgerüst, M2 Bestand, M3 Lebenszyklus und M4 Arbeitsplätze sind fertig. Alle 73 Tests sind grün. M4 bringt Soll-Ist-Abgleich je Arbeitsplatz (F-62), Bedarf mit Lagerbestand (F-63), Geräte der festen Person getrennt (F-64) und Erstinventur-Fortschritt je Ort (F-89). Offene M4-Anforderungen: Raumplan (F-65, F-67, F-68, F-69), Pop-up je Arbeitsplatz (F-66), QR-Code (F-70), Etiketten (F-71–F-73), Mobile Gerätedetailseite (F-74), Etikett nach Speichern (F-12), Neue Person ausstatten (F-24).
 
 ## Stand je Meilenstein
 
@@ -13,7 +13,7 @@ M1 Grundgerüst, M2 Bestand und M3 Lebenszyklus sind fertig. Alle 61 Tests sind 
 | M1 Grundgerüst | fertig | 711ddd5 | 22.10.2026 | Projekt, Anmeldung, Konten, Stammdaten, beispieldaten |
 | M2 Bestand | fertig | | 23.10.2026 | Geräte erfassen, bearbeiten, prüfen, Suche, Konflikte, Arbeitsliste |
 | M3 Lebenszyklus | fertig | | 23.10.2026 | Ausgabe, Rückgabe, Umzug, Reparatur, Ausmusterung, Vorgang-Historie |
-| M4 Arbeitsplätze | offen | | | |
+| M4 Arbeitsplätze | teilweise | 099303b | 23.10.2026 | Soll-Ist-Abgleich (F-62), Bedarf (F-63), Feste Person (F-64), Erstinventur (F-89); offen: Raumplan, QR-Code, Etiketten, Mobile |
 | M5 Verleih | offen | | | |
 | M6 Signatur | offen | | | |
 | M7 Abschluss | offen | | | |
@@ -61,10 +61,11 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 | F-57 | M | M3 | Verlust und Diebstahl | erfüllt | `geraete/services.py:ausmustern` mit `disposition=Verlust`, `bestaetigt_gemeldt`, Test: `test_ausmusterung_verloren_mit_bestatigung` |
 | F-58 | M | M3 | Archiv | erfüllt | `Vorgang`-Modell mit `abschliesst=False` für offene Vorgänge, Test: `test_vorgaenge_nicht_geloescht` |
 | F-60 | M | M1 | Arbeitsplätze und Lagerorte pflegen | erfüllt | `stammdaten/views.py:orte_liste`, `orte_anlegen`, `orte_aendern` |
-| F-61 | M | M4 | Ausstattungsprofile pflegen und Arbeitsplätzen zuweisen | offen | |
-| F-62 | M | M4 | Soll-Ist-Abgleich je Arbeitsplatz | offen | |
-| F-63 | M | M4 | Übersicht und Bedarf | offen | |
-| F-64 | S | M4 | Feste Person am Arbeitsplatz | offen | |
+| F-61 | M | M4 | Ausstattungsprofile pflegen und Arbeitsplätzen zuweisen | erfüllt | `stammdaten/models.py:Ausstattungsprofil`, `Profilposition`, `Ort.profil`; Test: M4-Tests mit Profil |
+| F-62 | M | M4 | Soll-Ist-Abgleich je Arbeitsplatz | erfüllt | `geraete/services.py:soll_ist_abgleich`, Test: `test_soll_ist_vollstaendig`, `test_soll_ist_unvollstaendig`, `test_soll_ist_mehr_als_soll` |
+| F-63 | M | M4 | Übersicht und Bedarf | erfüllt | `geraete/services.py:bedarf_uebersicht`, Test: `test_bedarf_zeigt_fehlende`, `test_bedarf_mit_lagerbestand` |
+| F-64 | S | M4 | Feste Person am Arbeitsplatz | erfüllt | `geraete/services.py:gerate_der_person`, Test: `test_gerate_der_person_getrennt` |
+| F-89 | M | M4 | Erstinventur per Scan | teilweise | `geraete/services.py:fortschritt_je_ort`, Test: `test_fortschritt_je_ort`, `test_fortschritt_nach_pruefen`; Scan-UI noch offen |
 | F-65 | M | M4 | Raumplan | offen | |
 | F-66 | M | M4 | Pop-up je Arbeitsplatz | offen | |
 | F-67 | M | M4 | Plan pflegen | offen | |
@@ -84,9 +85,8 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 | F-86 | M | M2 | Vorschau und Bestätigung | teilweise | `konflikt_loesen`-View vorhanden; Import-Vorschau mit CSV-Download noch offen |
 | F-87 | M | M2 | Nachvollziehbarkeit | teilweise | `Importlauf`-Modell mit `dateiname`, `blatt`, `erzeugt_von` vorhanden; Import-Logik noch offen |
 | F-88 | M | M2, M7 | Arbeitsliste „Daten unvollständig“ | erfüllt | `gerat.datenluecken()`, Filter `?unvollstaendig=1` in `geraete/views.py:liste`, Test: `test_arbeitsliste_zeigt_unvollstaendige` |
-| F-89 | M | M4 | Erstinventur per Scan | offen | |
+| F-80 | M | M2 | Datei hochladen | offen | |
 | F-90 | M | M7 | Mailversand einrichten | offen | |
-| F-91 | M | M7 | Leihe endet morgen | offen | |
 | F-92 | M | M7 | Leihe überfällig | offen | |
 | F-93 | M | M7 | Leihanfrage eingegangen / entschieden | offen | |
 | F-94 | M | M7 | Garantie endet in den nächsten 30 Tagen | offen | |
@@ -126,7 +126,7 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 | N-07 | | M7 | Mengengerüst | offen | |
 | N-08 | | alle | Bedienung | erfüllt | Zeitzone Europe/Berlin, Datum TT.MM.JJJJ, deutsche Sprache |
 | N-09 | | alle | Gestaltung | teilweise | WAMOCON-CI in `static/basis.css`; Schrift Archivo aus `static/fonts/` (vorhanden im Repo) |
-| N-10 | | alle | Qualität | teilweise | `manage.py check` grün; 61 Tests (alle grün); Docker und PostgreSQL auf der DGX nicht geprüft |
+| N-10 | | alle | Qualität | teilweise | `manage.py check` grün; 73 Tests (alle grün); Docker und PostgreSQL auf der DGX nicht geprüft |
 | N-11 | | M7 | Wartbarkeit | offen | |
 
 ## Wie getestet

@@ -12,12 +12,22 @@ from django.contrib.messages import info as meldung_info
 from django.contrib.messages import success as meldung_success
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from stammdaten.models import Kategorie, Ort, Person
 
 from . import services
-from .forms import GeratForm
+from .forms import (
+    GeratAusgabeForm,
+    GeratAusmusterungForm,
+    GeratBearbeitungsForm,
+    GeratForm,
+    GeratReparaturFertigForm,
+    GeratReparaturStartForm,
+    GeratRueckgabeForm,
+    GeratUmzugForm,
+)
 from .models import Gerat, GeratKonflikt
 
 # --- Rechte -----------------------------------------------------------------
@@ -203,6 +213,104 @@ def bearbeiten(request, inventarnummer: str):
     )
 
 
+# --- M4 Arbeitsplätze (F-62 bis F-64, F-89) ---------------------------------
+
+@login_required
+def arbeitsplaetze_liste(request):
+    """Alle Arbeitsplätze mit Soll-Ist-Abgleich (F-62)."""
+    if not _darf_sehen(request.user):
+        meldung_error(request, "Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
+        return redirect("/")
+    orte = list(
+        Ort.objects.filter(typ=Ort.TYP_ARBEITSPLATZ).order_by("kennung")
+    )
+    zeilen = []
+    for ort in orte:
+        abgleich = services.soll_ist_abgleich(ort)
+        zeilen.append({"ort": ort, "abgleich": abgleich})
+    return render(
+        request,
+        "geraete/arbeitsplaetze_liste.html",
+        {"zeilen": zeilen},
+    )
+
+
+@login_required
+def arbeitsplatz_detail(request, pk):
+    """Ein Arbeitsplatz: Soll, Ist, Fehlliste, Mehrliste (F-62, F-64)."""
+    if not _darf_sehen(request.user):
+        meldung_error(request, "Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
+        return redirect("/")
+    ort = get_object_or_404(
+        Ort.objects.filter(typ=Ort.TYP_ARBEITSPLATZ).select_related("profil", "feste_person"),
+        pk=pk,
+    )
+    abgleich = services.soll_ist_abgleich(ort)
+    gerate = services.gerate_am_ort(ort)
+    personen_gerate = services.gerate_der_person(ort.feste_person) if ort.feste_person else []
+    return render(
+        request,
+        "geraete/arbeitsplatz_detail.html",
+        {
+            "ort": ort,
+            "abgleich": abgleich,
+            "gerate": gerate,
+            "personen_gerate": personen_gerate,
+        },
+    )
+
+
+@login_required
+def bedarf(request):
+    """Bedarf: fehlende Ausstattung je Kategorie mit Lagerbestand (F-63)."""
+    if not _darf_sehen(request.user):
+        meldung_error(request, "Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
+        return redirect("/")
+    uebersicht = services.bedarf_uebersicht()
+    return render(
+        request,
+        "geraete/bedarf.html",
+        {"uebersicht": uebersicht},
+    )
+
+
+@login_required
+def erstinventur(request):
+    """Erstinventur: Fortschritt je Ort (F-89, AUFTRAG M4)."""
+    if not _darf_sehen(request.user):
+        meldung_error(request, "Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
+        return redirect("/")
+    zeilen = services.fortschritt_je_ort()
+    total_geprueft = sum(z["geprueft"] for z in zeilen)
+    total_alle = sum(z["alle"] for z in zeilen)
+    return render(
+        request,
+        "geraete/erstinventur.html",
+        {
+            "zeilen": zeilen,
+            "total_geprueft": total_geprueft,
+            "total_alle": total_alle,
+        },
+    )
+
+
+@login_required
+@require_POST
+def ort_pruefen(request, pk):
+    """Ort als geprüft markieren (F-89 Fortschritt je Ort)."""
+    if not _darf_ändern(request.user):
+        meldung_error(request, "Zugriff verweigert: Prüfen ist Ihnen nicht erlaubt.")
+        return redirect("/arbeitsplaetze/")
+    ort = get_object_or_404(
+        Ort.objects.filter(typ=Ort.TYP_ARBEITSPLATZ), pk=pk
+    )
+    # Setze aktualisiert_am als Zeitstempel der letzten Prüfung
+    ort.aktualisiert_am = timezone.now()
+    ort.save(update_fields=["aktualisiert_am"])
+    meldung_success(request, f"Ort {ort.kennung} als geprüft markiert.")
+    return redirect("/arbeitsplaetze/" + str(pk) + "/")
+
+
 # --- Prüfung (F-16) -------------------------------------------------------------
 
 @login_required
@@ -248,3 +356,178 @@ def arbeitsliste(request):
         meldung_error(request, "Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
         return redirect("/")
     return redirect("/geraete/?unvollstaendig=1")
+
+
+# --- M3 Lebenszyklus ----------------------------------------------------------
+
+@login_required
+def ausgeben(request, inventarnummer: str):
+    """Gerät ausgeben (F-20 bis F-23, M3)."""
+    if not _darf_ändern(request.user):
+        meldung_error(request, "Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
+        return redirect("/")
+    gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
+    if request.method == "POST":
+        form = GeratAusgabeForm(request.POST)
+        if form.is_valid():
+            ziel = form.cleaned_data.get("ziel_person") or form.cleaned_data.get("ziel_ort")
+            try:
+                services.gerat_ausgeben(
+                    gerat,
+                    ziel,
+                    zurueck_am=form.cleaned_data.get("zurueck_am"),
+                    anmerkung=form.cleaned_data.get("anmerkung", ""),
+                    ausgefuehrt_von=request.user,
+                )
+            except services.GeratFehler as fehler:
+                meldung_error(request, str(fehler))
+                return redirect("/geraete/" + gerat.inventarnummer + "/")
+            meldung_success(request, "Gerät ausgegeben.")
+            return redirect("/geraete/" + gerat.inventarnummer + "/")
+    else:
+        form = GeratAusgabeForm()
+    return render(request, "geraete/ausgabe.html", {"gerat": gerat, "form": form})
+
+
+@login_required
+def rueckgeben(request, inventarnummer: str):
+    """Gerät zurückgeben (F-50, M3)."""
+    if not _darf_ändern(request.user):
+        meldung_error(request, "Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
+        return redirect("/")
+    gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
+    if request.method == "POST":
+        form = GeratRueckgabeForm(request.POST)
+        if form.is_valid():
+            try:
+                services.gerat_rueckgeben(
+                    gerat,
+                    zustand_rueckgabe=form.cleaned_data.get("zustand_rueckgabe", 2),
+                    zubesehoer_komplett=form.cleaned_data.get("zubehoer_komplett", True),
+                    maengel=form.cleaned_data.get("maengel", ""),
+                    ziel=form.cleaned_data.get("ziel", "lager"),
+                    fehlend=form.cleaned_data.get("fehlend", False),
+                    ausgefuehrt_von=request.user,
+                )
+            except services.GeratFehler as fehler:
+                meldung_error(request, str(fehler))
+                return redirect("/geraete/" + gerat.inventarnummer + "/")
+            meldung_success(request, "Gerät zurückgegeben.")
+            return redirect("/geraete/" + gerat.inventarnummer + "/")
+    else:
+        form = GeratRueckgabeForm()
+    return render(request, "geraete/rueckgabe.html", {"gerat": gerat, "form": form})
+
+
+@login_required
+def umziehen(request, inventarnummer: str):
+    """Gerät umziehen (F-41, M3)."""
+    if not _darf_ändern(request.user):
+        meldung_error(request, "Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
+        return redirect("/")
+    gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
+    if request.method == "POST":
+        form = GeratUmzugForm(request.POST)
+        if form.is_valid():
+            try:
+                services.gerat_umziehen(
+                    gerat,
+                    form.cleaned_data.get("ziel_ort"),
+                    ausgefuehrt_von=request.user,
+                )
+            except services.GeratFehler as fehler:
+                meldung_error(request, str(fehler))
+                return redirect("/geraete/" + gerat.inventarnummer + "/")
+            meldung_success(request, "Gerät umgezogen.")
+            return redirect("/geraete/" + gerat.inventarnummer + "/")
+    else:
+        form = GeratUmzugForm()
+    return render(request, "geraete/umzug.html", {"gerat": gerat, "form": form})
+
+
+@login_required
+def reparatur_start(request, inventarnummer: str):
+    """Reparatur starten (F-42, M3)."""
+    if not _darf_ändern(request.user):
+        meldung_error(request, "Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
+        return redirect("/")
+    gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
+    if request.method == "POST":
+        form = GeratReparaturStartForm(request.POST)
+        if form.is_valid():
+            try:
+                services.gerat_in_reparatur_geschickt(
+                    gerat,
+                    dienstleister=form.cleaned_data.get("dienstleister"),
+                    vorgangsnummer=form.cleaned_data.get("vorgangsnummer"),
+                    notiz=form.cleaned_data.get("notiz", ""),
+                    ausgefuehrt_von=request.user,
+                )
+            except services.GeratFehler as fehler:
+                meldung_error(request, str(fehler))
+                return redirect("/geraete/" + gerat.inventarnummer + "/")
+            meldung_success(request, "Reparatur gestartet.")
+            return redirect("/geraete/" + gerat.inventarnummer + "/")
+    else:
+        form = GeratReparaturStartForm()
+    return render(request, "geraete/reparatur_start.html", {"gerat": gerat, "form": form})
+
+
+@login_required
+def reparatur_fertig(request, inventarnummer: str):
+    """Reparatur abschließen (F-42, M3)."""
+    if not _darf_ändern(request.user):
+        meldung_error(request, "Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
+        return redirect("/")
+    gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
+    if request.method == "POST":
+        form = GeratReparaturFertigForm(request.POST)
+        if form.is_valid():
+            try:
+                services.gerat_reparatur_fertig(
+                    gerat,
+                    zustand=form.cleaned_data.get("zustand", 2),
+                    ziel=form.cleaned_data.get("ziel", "lager"),
+                    kosten=form.cleaned_data.get("kosten"),
+                    beleg=form.cleaned_data.get("beleg", ""),
+                    ausgefuehrt_von=request.user,
+                )
+            except services.GeratFehler as fehler:
+                meldung_error(request, str(fehler))
+                return redirect("/geraete/" + gerat.inventarnummer + "/")
+            meldung_success(request, "Reparatur abgeschlossen.")
+            return redirect("/geraete/" + gerat.inventarnummer + "/")
+    else:
+        form = GeratReparaturFertigForm()
+    return render(request, "geraete/reparatur_fertig.html", {"gerat": gerat, "form": form})
+
+
+@login_required
+def ausmustern(request, inventarnummer: str):
+    """Gerät ausmustern (F-55 bis F-58, M3)."""
+    if not _darf_ändern(request.user):
+        meldung_error(request, "Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
+        return redirect("/")
+    gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
+    if request.method == "POST":
+        form = GeratAusmusterungForm(request.POST)
+        if form.is_valid():
+            try:
+                services.ausmustern(
+                    gerat,
+                    grund=form.cleaned_data.get("grund"),
+                    datum=form.cleaned_data.get("datum"),
+                    disposition=form.cleaned_data.get("disposition"),
+                    loeschung_art=form.cleaned_data.get("loeschung_art", ""),
+                    loeschung_nachweis=form.cleaned_data.get("loeschung_nachweis", ""),
+                    bestaetigt_gemeldt=form.cleaned_data.get("bestaetigt_gemeldt", False),
+                    ausgefuehrt_von=request.user,
+                )
+            except services.GeratFehler as fehler:
+                meldung_error(request, str(fehler))
+                return redirect("/geraete/" + gerat.inventarnummer + "/")
+            meldung_success(request, "Gerät ausgemustert.")
+            return redirect("/geraete/" + gerat.inventarnummer + "/")
+    else:
+        form = GeratAusmusterungForm()
+    return render(request, "geraete/ausmusterung.html", {"gerat": gerat, "form": form})

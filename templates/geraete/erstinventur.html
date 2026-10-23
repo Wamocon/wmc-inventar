@@ -1,0 +1,28 @@
+{% extends "basis.html" %}
+{% block titel %}Erstinventur · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div><h1>Erstinventur</h1><p class="muted lead">Fortschritt je Ort: geprüft / alle Geräte (F-89, AUFTRAG M4).</p></div>
+  <div class="actions"><a class="btn" href="/geraete/arbeitsplaetze/" data-test="zurueck">Zurück</a></div>
+</div>
+
+<div class="abschnitt">
+  <h2>Gesamt</h2>
+  <p data-test="gesamt-fortschritt">{{ total_geprueft }} von {{ total_alle }} geprüft</p>
+</div>
+
+<div class="liste" data-test="fortschritt-liste">
+  {% for z in zeilen %}
+  <div class="zeile">
+    <span data-test="ort-kennung">{{ z.ort.kennung }}</span>
+    <span data-test="fortschritt">{{ z.geprueft }} / {{ z.alle }} geprüft</span>
+    {% if z.vollstaendig %}
+    <span class="chip-status in-benutzung" data-test="vollstaendig">vollständig</span>
+    {% endif %}
+    <a class="btn sm" href="/geraete/arbeitsplaetze/{{ z.ort.pk }}/" data-test="detail-link">Ansehen</a>
+  </div>
+  {% empty %}
+  <div class="zeile muted">Keine Arbeitsplätze gefunden.</div>
+  {% endfor %}
+</div>
+{% endblock %}

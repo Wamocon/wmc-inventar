@@ -99,6 +99,9 @@ class Ort(models.Model):
     plan_id = models.IntegerField("Plan-ID", null=True, blank=True)
     position_x = models.FloatField("Position x (%)", null=True, blank=True)
     position_y = models.FloatField("Position y (%)", null=True, blank=True)
+    # M4: Zeitstempel der letzten Änderung; Basis für den Fortschritt
+    # „geprüft / alle“ bei der Erstinventur (F-89, AUFTRAG M4).
+    aktualisiert_am = models.DateTimeField(null=True, blank=True)
 
     # Nur Arbeitsplätze (Kapitel 3.2)
     feste_person = models.ForeignKey(

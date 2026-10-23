@@ -641,3 +641,153 @@ class M3LebenszyklusTests(TestCase):
                 self.gerat, dienstleister="FixIT", vorgangsnummer="VR-999",
                 notiz="X", ausgefuehrt_von=self.admin,
             )
+
+
+# --- M4 Arbeitsplätze (F-62 bis F-64, F-89) -----------------------------------
+
+class M4ArbeitsplatzTests(TestCase):
+    """Soll-Ist-Abgleich, Bedarf, Erstinventur (AUFTRAG M4)."""
+
+    def setUp(self):
+        self.admin = konto_erstellen("m4.admin")
+        self.kat_monitor = Kategorie.objects.create(name="Monitor")
+        self.kat_docking = Kategorie.objects.create(name="Dockingstation")
+        self.kat_notebook = Kategorie.objects.create(name="Notebook")
+        self.person = Person.objects.create(
+            anrede=Person.ANREDE_FRAU, vorname="Erika", nachname="Muster",
+            email="e.muster@wamocon.de",
+        )
+        from stammdaten.models import Ausstattungsprofil, Profilposition
+        self.profil = Ausstattungsprofil.objects.create(name="Standard")
+        Profilposition.objects.create(profil=self.profil, kategorie=self.kat_monitor, anzahl=2)
+        Profilposition.objects.create(profil=self.profil, kategorie=self.kat_docking, anzahl=1)
+        self.ort = Ort.objects.create(
+            typ=Ort.TYP_ARBEITSPLATZ, kennung="M4-AP-01", name="M4-Arbeitsplatz",
+            profil=self.profil, feste_person=self.person,
+        )
+        self.lager = Ort.objects.create(
+            typ=Ort.TYP_LAGER, kennung="M4-LAG", name="M4-Lager"
+        )
+
+    def _gerat(self, kategorie, ort=None, person=None, status=Gerat.STATUS_IN_BENUTZUNG):
+        return services.gerat_anlegen(
+            kategorie=kategorie, hersteller="Test", modell="M4",
+            erzeugt_von=self.admin,
+        )
+
+    # --- F-62: Soll-Ist-Abgleich -------------------------------------------------
+
+    def test_soll_ist_vollstaendig(self):
+        for i in range(2):
+            g = self._gerat(self.kat_monitor, ort=self.ort)
+            services.gerat_umziehen(g, self.ort, ausgefuehrt_von=self.admin)
+        g = self._gerat(self.kat_docking, ort=self.ort)
+        services.gerat_umziehen(g, self.ort, ausgefuehrt_von=self.admin)
+        abgleich = services.soll_ist_abgleich(self.ort)
+        self.assertEqual(abgleich["ergebnis"], "vollstaendig")
+        self.assertEqual(abgleich["fehlend"], [])
+        self.assertEqual(abgleich["zuviel"], [])
+
+    def test_soll_ist_unvollstaendig(self):
+        g = self._gerat(self.kat_monitor, ort=self.ort)
+        services.gerat_umziehen(g, self.ort, ausgefuehrt_von=self.admin)
+        abgleich = services.soll_ist_abgleich(self.ort)
+        self.assertEqual(abgleich["ergebnis"], "unvollstaendig")
+        self.assertEqual(len(abgleich["fehlend"]), 2)
+        fehlend = {k.name: a for k, a in abgleich["fehlend"]}
+        self.assertEqual(fehlend["Monitor"], 1)
+        self.assertEqual(fehlend["Dockingstation"], 1)
+
+    def test_soll_ist_mehr_als_soll(self):
+        for i in range(3):
+            g = self._gerat(self.kat_monitor, ort=self.ort)
+            services.gerat_umziehen(g, self.ort, ausgefuehrt_von=self.admin)
+        g = self._gerat(self.kat_docking, ort=self.ort)
+        services.gerat_umziehen(g, self.ort, ausgefuehrt_von=self.admin)
+        abgleich = services.soll_ist_abgleich(self.ort)
+        self.assertEqual(abgleich["ergebnis"], "mehr-als-soll")
+        self.assertEqual(abgleich["zuviel"], [(self.kat_monitor, 1)])
+
+    def test_geraete_aus_reparatur_nicht_im_abgleich(self):
+        g = self._gerat(self.kat_monitor, ort=self.ort)
+        services.gerat_umziehen(g, self.ort, ausgefuehrt_von=self.admin)
+        services.gerat_in_reparatur_geschickt(
+            g, dienstleister="FixIT", vorgangsnummer="VR-M4",
+            notiz="Defekt", ausgefuehrt_von=self.admin,
+        )
+        abgleich = services.soll_ist_abgleich(self.ort)
+        self.assertEqual(abgleich["ergebnis"], "unvollstaendig")
+        fehlend = {k.name: a for k, a in abgleich["fehlend"]}
+        self.assertEqual(fehlend["Monitor"], 2)
+        self.assertEqual(fehlend["Dockingstation"], 1)
+
+    def test_geraete_ausgemustert_nicht_im_abgleich(self):
+        from datetime import date
+        g = self._gerat(self.kat_monitor, ort=self.ort)
+        services.gerat_umziehen(g, self.ort, ausgefuehrt_von=self.admin)
+        services.ausmustern(
+            g, grund="defekt", datum=date(2026, 10, 1),
+            disposition="Recycling", ausgefuehrt_von=self.admin,
+        )
+        abgleich = services.soll_ist_abgleich(self.ort)
+        self.assertEqual(abgleich["ergebnis"], "unvollstaendig")
+        fehlend = {k.name: a for k, a in abgleich["fehlend"]}
+        self.assertEqual(fehlend["Monitor"], 2)
+        self.assertEqual(fehlend["Dockingstation"], 1)
+
+    # --- F-64: Geräte der Person getrennt ---------------------------------------
+
+    def test_gerate_der_person_getrennt(self):
+        g = self._gerat(self.kat_notebook, person=self.person)
+        services.gerat_ausgeben(g, self.person, ausgefuehrt_von=self.admin)
+        gerate_person = services.gerate_der_person(self.person)
+        self.assertEqual(len(gerate_person), 1)
+        gerate_ort = services.gerate_am_ort(self.ort)
+        self.assertEqual(len(gerate_ort), 0)
+
+    # --- F-63: Bedarf -------------------------------------------------------------
+
+    def test_bedarf_zeigt_fehlende(self):
+        abgleich = services.bedarf_uebersicht([self.ort])
+        self.assertIn(self.kat_monitor, abgleich["summe"])
+        self.assertEqual(abgleich["summe"][self.kat_monitor], 2)
+        self.assertIn(self.kat_docking, abgleich["summe"])
+        self.assertEqual(abgleich["summe"][self.kat_docking], 1)
+
+    def test_bedarf_mit_lagerbestand(self):
+        g = self._gerat(self.kat_monitor, ort=self.lager)
+        services.gerat_umziehen(g, self.lager, ausgefuehrt_von=self.admin)
+        abgleich = services.bedarf_uebersicht([self.ort])
+        self.assertEqual(abgleich["lagerbestand"][self.kat_monitor], 1)
+        self.assertEqual(abgleich["summe"][self.kat_monitor], 2)
+
+    def test_bedarf_ohne_orte(self):
+        abgleich = services.bedarf_uebersicht([])
+        self.assertEqual(abgleich["summe"], {})
+
+    # --- F-89: Erstinventur Fortschritt -------------------------------------------
+
+    def test_fortschritt_je_ort(self):
+        g = self._gerat(self.kat_monitor, ort=self.ort)
+        services.gerat_umziehen(g, self.ort, ausgefuehrt_von=self.admin)
+        zeilen = services.fortschritt_je_ort([self.ort])
+        self.assertEqual(len(zeilen), 1)
+        self.assertEqual(zeilen[0]["geprueft"], 0)
+        self.assertEqual(zeilen[0]["alle"], 1)
+        self.assertFalse(zeilen[0]["vollstaendig"])
+
+    def test_fortschritt_nach_pruefen(self):
+        g = self._gerat(self.kat_monitor, ort=self.ort)
+        services.gerat_umziehen(g, self.ort, ausgefuehrt_von=self.admin)
+        services.gerat_pruefen(g, self.admin)
+        zeilen = services.fortschritt_je_ort([self.ort])
+        self.assertEqual(zeilen[0]["geprueft"], 1)
+        self.assertEqual(zeilen[0]["alle"], 1)
+        self.assertTrue(zeilen[0]["vollstaendig"])
+
+    def test_ort_pruefen_view(self):
+        self.client.login(email="m4.admin@wamocon.de", password="test-passwort-123")
+        response = self.client.post(f"/geraete/arbeitsplaetze/{self.ort.pk}/pruefen/")
+        self.assertEqual(response.status_code, 302)
+        self.ort.refresh_from_db()
+        self.assertIsNotNone(self.ort.aktualisiert_am)

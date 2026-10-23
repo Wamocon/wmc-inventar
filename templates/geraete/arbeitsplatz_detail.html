@@ -1,0 +1,102 @@
+{% extends "basis.html" %}
+{% block titel %}{{ ort.kennung }} · Arbeitsplätze · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div>
+    <h1 data-test="ort-kennung">{{ ort.kennung }}</h1>
+    <p class="muted lead">Arbeitsplatz mit Soll-Ist-Abgleich (F-62, F-64).</p>
+  </div>
+  <div class="actions">
+    <a class="btn" href="/geraete/arbeitsplaetze/" data-test="zurueck">Zur Liste</a>
+    {% if user.ist_admin or user.ist_mitarbeiter %}
+    <form method="post" action="/geraete/arbeitsplaetze/{{ ort.pk }}/pruefen/" data-test="pruefen-formular">
+      {% csrf_token %}
+      <button type="submit" class="btn" data-test="pruefen">Ort als geprüft markieren</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="abschnitt">
+  <h2>Abgleich</h2>
+  <p data-test="abgleich-ergebnis">
+    {% if abgleich.ergebnis == "vollstaendig" %}
+      <span class="chip-status in-benutzung">vollständig</span>
+    {% elif abgleich.ergebnis == "unvollstaendig" %}
+      <span class="chip-status ausgemustert">unvollständig</span>
+    {% else %}
+      <span class="chip-status in-reparatur">mehr als Soll</span>
+    {% endif %}
+    {% if ort.profil %} · Profil: {{ ort.profil.name }}{% endif %}
+    {% if ort.feste_person %} · Feste Person: {{ ort.feste_person.voller_name }}{% endif %}
+  </p>
+</div>
+
+{% if abgleich.fehlend %}
+<div class="abschnitt">
+  <h2>Fehlt</h2>
+  <div class="liste" data-test="fehlliste">
+    {% for kategorie, anzahl in abgleich.fehlend %}
+    <div class="zeile">
+      <span data-test="fehlend-kategorie">{{ kategorie.name }}</span>
+      <span data-test="fehlend-anzahl">{{ anzahl }} fehlt</span>
+      <a class="btn sm" href="/geraete/?kategorie={{ kategorie.pk }}&status=auf-lager" data-test="lager-link">Auf Lager suchen</a>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if abgleich.zuviel %}
+<div class="abschnitt">
+  <h2>Mehr als Soll</h2>
+  <div class="liste" data-test="mehrliste">
+    {% for kategorie, anzahl in abgleich.zuviel %}
+    <div class="zeile">
+      <span data-test="zuviel-kategorie">{{ kategorie.name }}</span>
+      <span data-test="zuviel-anzahl">{{ anzahl }} zusätzlich</span>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<div class="abschnitt">
+  <h2>Geräte am Ort</h2>
+  <div class="liste" data-test="geraete-liste">
+    {% for g in gerate %}
+    <div class="zeile">
+      <span class="inv num">{{ g.inventarnummer }}</span>
+      <span data-test="zeile-name">{{ g.geraetename|default:g.modell }} · {{ g.kategorie.name }}</span>
+      <span class="chip-status {{ g.status }}">{{ g.status_anzeige }}</span>
+      <a class="btn sm" href="/geraete/{{ g.inventarnummer }}/" data-test="detail-link">Ansehen</a>
+    </div>
+    {% empty %}
+    <div class="zeile muted">Keine Geräte an diesem Ort.</div>
+    {% endfor %}
+  </div>
+</div>
+
+{% if personen_gerate %}
+<div class="abschnitt">
+  <h2>Geräte der festen Person</h2>
+  <div class="liste" data-test="personen-geraete">
+    {% for g in personen_gerate %}
+    <div class="zeile">
+      <span class="inv num">{{ g.inventarnummer }}</span>
+      <span data-test="zeile-name">{{ g.geraetename|default:g.modell }} · {{ g.kategorie.name }}</span>
+      <span class="chip-status {{ g.status }}">{{ g.status_anzeige }}</span>
+      <a class="btn sm" href="/geraete/{{ g.inventarnummer }}/" data-test="detail-link">Ansehen</a>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if ort.aktualisiert_am %}
+<div class="abschnitt">
+  <h2>Zuletzt geprüft</h2>
+  <p data-test="zuletzt-geprueft">{{ ort.aktualisiert_am|date:"d.m.Y H:i" }}</p>
+</div>
+{% endif %}
+{% endblock %}

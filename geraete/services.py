@@ -17,7 +17,7 @@ from django.db.models import Max
 from django.utils import timezone
 
 from konten.models import Konto
-from stammdaten.models import Kategorie, Ort, Person
+from stammdaten.models import Ausstattungsprofil, Kategorie, Ort, Person
 
 from .models import Gerat, GeratKonflikt, Vorgang
 
@@ -461,10 +461,22 @@ def statuswechsel(
 
 @transaction.atomic
 def gerat_pruefen(gerat: Gerat, geprueft_von: Konto) -> Gerat:
-    """Prüfung abhaken: Datum und Kontext (F-16)."""
+    """Prüfung abhaken: Datum und Kontext (F-16).
+
+    Schreibt auch den Vorgang „Geprüft“ (F-89, AUFTRAG M4), damit
+    „Zuletzt geprüft“ Datum und Konto trägt.
+    """
     gerat.zuletzt_geprueft_am = timezone.now()
     gerat.zuletzt_geprueft_von = geprueft_von
     gerat.save()
+    Vorgang.objects.create(
+        gerat=gerat,
+        typ=Vorgang.TYP_AENDERUNG,
+        zeitpunkt=timezone.now(),
+        erzeugt_von=geprueft_von,
+        notiz="Geprüft bei der Erstinventur (F-89).",
+        abschliesst=True,
+    )
     return gerat
 
 
@@ -508,3 +520,152 @@ def unvollstaendige_geraete() -> list[Gerat]:
     )
     auswahl = list(Gerat.objects.all())
     return [g for g in auswahl if g.ist_unvollstaendig() or g.pk in ids]
+
+
+# --- M4 Arbeitsplätze (F-62 bis F-64, F-89) -----------------------------------
+
+# F-62: Geräte in diesen Statuses zählen zur Ist-Ausstattung.
+# Ausgemusterte und in Reparatur (außer Haus) sind nicht am Platz.
+# Verliehen zählt: das Gerät ist physisch da (bei der Person am Platz).
+_ERFASST = (
+    Gerat.STATUS_IN_BENUTZUNG,
+    Gerat.STATUS_VERLIEHEN,
+    Gerat.STATUS_AUF_LAGER,
+)
+
+
+def gerate_am_ort(ort: Ort) -> list[Gerat]:
+    """Alle erfassten Geräte an einem Ort (F-62, F-66).
+
+    Ausgemusterte und in Reparatur stehende Geräte sind nicht am Platz.
+    """
+    return list(
+        Gerat.objects.filter(ort=ort, status__in=_ERFASST)
+        .select_related("kategorie")
+        .order_by("kategorie__name", "inventarnummer")
+    )
+
+
+def gerate_der_person(person: Person) -> list[Gerat]:
+    """Geräte, die eine Person nutzt (F-66: getrennt unter dem Platz)."""
+    return list(
+        Gerat.objects.filter(person=person, status__in=_ERFASST)
+        .select_related("kategorie")
+        .order_by("kategorie__name", "inventarnummer")
+    )
+
+
+def soll_zahlen(ort: Ort) -> list[tuple[Kategorie, int]]:
+    """Soll-Ausstattung eines Ortes als Liste (Kategorie, Anzahl) (F-62).
+
+    Ohne Profil ist das Soll leer; dann ist jeder erfasste Eintrag
+    „mehr als Soll“ und nichts fehlt.
+    """
+    if ort.typ != Ort.TYP_ARBEITSPLATZ or ort.profil is None:
+        return []
+    return [
+        (pos.kategorie, pos.anzahl)
+        for pos in ort.profil.positionen.select_related("kategorie")
+        .order_by("kategorie__name")
+    ]
+
+
+def soll_ist_abgleich(ort: Ort) -> dict:
+    """Soll-Ist-Abgleich je Arbeitsplatz (F-62).
+
+    Ergebnis: „vollstaendig“, „unvollstaendig“ oder „mehr-als-soll“,
+    jeweils mit Fehlliste („fehlt: n x Kategorie“) und Mehrliste
+    („mehr: n x Kategorie“).
+    """
+    soll = dict((k, a) for k, a in soll_zahlen(ort))
+    ist: dict[Kategorie, int] = {}
+    for gerat in gerate_am_ort(ort):
+        ist[gerat.kategorie] = ist.get(gerat.kategorie, 0) + 1
+
+    fehlend: list[tuple[Kategorie, int]] = []
+    zuviel: list[tuple[Kategorie, int]] = []
+    for kategorie, anzahl in soll.items():
+        hat = ist.get(kategorie, 0)
+        if hat < anzahl:
+            fehlend.append((kategorie, anzahl - hat))
+        elif hat > anzahl:
+            zuviel.append((kategorie, hat - anzahl))
+    for kategorie, hat in ist.items():
+        if kategorie not in soll and hat > 0:
+            zuviel.append((kategorie, hat))
+    fehlend.sort(key=lambda x: x[0].name)
+    zuviel.sort(key=lambda x: x[0].name)
+
+    if fehlend:
+        ergebnis = "unvollstaendig"
+    elif zuviel:
+        ergebnis = "mehr-als-soll"
+    else:
+        ergebnis = "vollstaendig"
+
+    return {
+        "ergebnis": ergebnis,
+        "fehlend": fehlend,
+        "zuviel": zuviel,
+        "soll": soll,
+        "ist": ist,
+    }
+
+
+def bedarf_uebersicht(orte: list[Ort] | None = None) -> dict:
+    """Bedarf: fehlende Ausstattung je Kategorie mit Lagerbestand (F-63).
+
+    Ergebnis: Zeilen je Kategorie mit Summe „fehlt“ und Lagerbestand
+    („Auf Lager“ an einem Lagerort), sortiert nach Kategorie.
+    """
+    if orte is None:
+        orte = list(
+            Ort.objects.filter(typ=Ort.TYP_ARBEITSPLATZ).order_by("kennung")
+        )
+    summe: dict[Kategorie, int] = {}
+    for ort in orte:
+        if ort.typ != Ort.TYP_ARBEITSPLATZ:
+            continue
+        abgleich = soll_ist_abgleich(ort)
+        for kategorie, mangelt in abgleich["fehlend"]:
+            summe[kategorie] = summe.get(kategorie, 0) + mangelt
+    summe = dict(sorted(summe.items(), key=lambda x: x[0].name))
+
+    lager_orte = Ort.objects.filter(typ=Ort.TYP_LAGER)
+    lagerbestand: dict[Kategorie, int] = {}
+    for kategorie in summe:
+        lagerbestand[kategorie] = (
+            Gerat.objects.filter(
+                kategorie=kategorie,
+                status=Gerat.STATUS_AUF_LAGER,
+                ort__in=lager_orte,
+            ).count()
+        )
+    return {"summe": summe, "lagerbestand": lagerbestand}
+
+
+# --- Erstinventur (F-89, AUFTRAG M4) ------------------------------------------
+
+def fortschritt_je_ort(orte: list[Ort] | None = None) -> list[dict]:
+    """Fortschritt: geprüfte Geräte / alle Geräte, auch je Ort (F-89).
+
+    Geprüft = „Zuletzt geprüft“ gesetzt und das Gerät ist erfasst
+    (nicht ausgemustert, nicht in Reparatur).
+    """
+    if orte is None:
+        orte = list(
+            Ort.objects.filter(typ=Ort.TYP_ARBEITSPLATZ).order_by("kennung")
+        )
+    zeilen: list[dict] = []
+    for ort in orte:
+        alle = list(Gerat.objects.filter(ort=ort, status__in=_ERFASST))
+        geprueft = [g for g in alle if g.zuletzt_geprueft_am is not None]
+        zeilen.append(
+            {
+                "ort": ort,
+                "geprueft": len(geprueft),
+                "alle": len(alle),
+                "vollstaendig": bool(alle) and len(geprueft) == len(alle),
+            }
+        )
+    return zeilen
