@@ -11,6 +11,10 @@ from __future__ import annotations
 
 from django.db import models
 from django.utils import timezone
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from stammdaten.models import Ort
 
 
 class Gerat(models.Model):
@@ -98,6 +102,44 @@ class Gerat(models.Model):
 
     def __str__(self):
         return self.inventarnummer
+
+    # --- M3 Lebenszyklus -----------------------------------------------------
+
+    def vorgaenge(self) -> list["Vorgang"]:
+        """Historie: alle Vorgänge des Geräts, neueste zuerst (F-56)."""
+        return list(Vorgang.objects.filter(gerat=self).order_by("-zeitpunkt"))
+
+    def offene_vorgaenge(self) -> list["Vorgang"]:
+        """Offene Vorgänge (noch nicht abgeschlossen) (F-56)."""
+        return [v for v in self.vorgaenge() if not v.abschliesst]
+
+    def letzte_aenderung(self) -> "Vorgang | None":
+        """Letzter Vorgang im Gerätedetail (F-56)."""
+        v = self.vorgaenge()
+        return v[0] if v else None
+
+    def offener_vorgang_von_typ(self, typ: str) -> "Vorgang | None":
+        """Offener Vorgang eines bestimmten Typs (F-51, F-53, F-55, F-57)."""
+        for v in self.vorgaenge():
+            if v.typ == typ and not v.abschliesst:
+                return v
+        return None
+
+    @property
+    def ist_verliehen(self) -> bool:
+        return self.status == self.STATUS_VERLIEHEN
+
+    @property
+    def ist_in_reparatur(self) -> bool:
+        return self.status == self.STATUS_IN_REPARATUR
+
+    @property
+    def ist_ausgemustert(self) -> bool:
+        return self.status == self.STATUS_AUSGEMUSTERT
+
+    def aktiver_ort(self) -> "Ort | None":
+        """Aktueller Verbleib: Ort (F-50, F-56)."""
+        return self.ort if self.ort else None
 
     # --- Status und Anzeige -------------------------------------------------
     @property
@@ -202,3 +244,91 @@ class Importlauf(models.Model):
 
     def __str__(self):
         return f"{self.dateiname} ({self.blatt or '-'})"
+
+
+# --- M3 Lebenszyklus (Kapitel 3.2, F-50 bis F-58) -----------------------------
+
+class Vorgang(models.Model):
+    """Ein Lebenszyklus-Ereignis eines Geräts (Kapitel 3.2).
+
+    Ein Vorgang ist eine Zeile in der Historie: Leihen, Rückgabe,
+    Reparatur, Instandhaltung, Ausmusterung, Rückstellung, Umzug
+    (F-50 bis F-58). Ein Vorgang ist abgeschlossen, wenn ``abschliesst``
+    gesetzt ist; sonst ist er offen und der dazugehörige Status ist aktiv.
+    """
+
+    TYP_LEIHEN = "leihen"
+    TYP_RUECKGABE = "rueckgabe"
+    TYP_REPARATUR = "reparatur"
+    TYP_INSTANDHALTUNG = "instandhaltung"
+    TYP_AUSMUSTERUNG = "ausmusterung"
+    TYP_RUECKSTELLUNG = "rueckstellung"
+    TYP_UMZUG = "umzug"
+    TYP_AENDERUNG = "aenderung"
+    TYPEN = [
+        (TYP_LEIHEN, "Verliehen"),
+        (TYP_RUECKGABE, "Rückgabe"),
+        (TYP_REPARATUR, "In Reparatur"),
+        (TYP_INSTANDHALTUNG, "Instandhaltung"),
+        (TYP_AUSMUSTERUNG, "Ausgemustert"),
+        (TYP_RUECKSTELLUNG, "Rückstellung"),
+        (TYP_UMZUG, "Umzug"),
+        (TYP_AENDERUNG, "Änderung"),
+    ]
+
+    gerat = models.ForeignKey(
+        Gerat, on_delete=models.CASCADE, related_name="vorgaenge"
+    )
+    typ = models.CharField("Typ", max_length=24, choices=TYPEN)
+    zeitpunkt = models.DateTimeField("Zeitpunkt", default=timezone.now)
+    erzeugt_von = models.ForeignKey(
+        "konten.Konto", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="erzeugte_vorgaenge", verbose_name="Erzeugt von",
+    )
+    # --- Leihen (F-50, F-51, F-57) -------------------------------------------
+    leihgabe_an = models.ForeignKey(
+        "stammdaten.Person", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="geliehene_geraete", verbose_name="Leihgabe an",
+    )
+    zurueck_am = models.DateField("Zurück am", null=True, blank=True)
+    # --- Reparatur (F-53, F-56) ----------------------------------------------
+    reperatur_anleitung = models.TextField("Reparaturanleitung", blank=True, default="")
+    reparatur_kosten = models.DecimalField(
+        "Reparaturkosten (EUR)", max_digits=10, decimal_places=2, null=True, blank=True
+    )
+    reparatur_beleg = models.CharField("Reparaturbeleg", max_length=320, blank=True, default="")
+    # --- Instandhaltung (F-54, F-56) ------------------------------------------
+    instandhaltung_art = models.CharField("Art", max_length=240, blank=True, default="")
+    instandhaltung_kosten = models.DecimalField(
+        "Kosten (EUR)", max_digits=10, decimal_places=2, null=True, blank=True
+    )
+    # --- Ausmusterung (F-58) --------------------------------------------------
+    ausmusterung_grund = models.CharField("Grund", max_length=240, blank=True, default="")
+    ausmusterung_datum = models.DateField("Datum", null=True, blank=True)
+    ausmusterung_disposition = models.CharField("Disposition", max_length=240, blank=True, default="")
+    # --- Rückstellung (F-57) --------------------------------------------------
+    rueckstellung_zu = models.CharField("Rückstellung zu", max_length=160, blank=True, default="")
+    # --- Umzug (F-52) ---------------------------------------------------------
+    umzug_ziel_ort = models.ForeignKey(
+        "stammdaten.Ort", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="umzugsziele", verbose_name="Zielort",
+    )
+    # --- Änderung (F-43, F-44) -------------------------------------------------
+    aenderung_feld = models.CharField("Feld", max_length=64, blank=True, default="")
+    aenderung_alter_wert = models.TextField("Alter Wert", blank=True, default="")
+    aenderung_neuer_wert = models.TextField("Neuer Wert", blank=True, default="")
+    # --- Abschließend ---------------------------------------------------------
+    abschliesst = models.BooleanField("Abschließend", default=False)
+    notiz = models.TextField("Notiz", blank=True, default="")
+
+    class Meta:
+        verbose_name = "Vorgang"
+        verbose_name_plural = "Vorgänge"
+        ordering = ["-zeitpunkt"]
+
+    def __str__(self):
+        return f"{self.gerat.inventarnummer}: {dict(self.TYPEN).get(self.typ, self.typ)}"
+
+    @property
+    def ist_offen(self) -> bool:
+        return not self.abschliesst

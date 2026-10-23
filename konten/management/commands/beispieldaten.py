@@ -17,6 +17,8 @@ from django.db import transaction
 
 from konten.models import Konto
 from stammdaten.models import Ausstattungsprofil, Kategorie, Ort, Person, Profilposition
+from geraete import services
+from geraete.models import Gerat
 
 
 # Kategorien nach Kapitel 3.2 der Anforderungen (TESTSCHNITTSTELLE 2)
@@ -103,6 +105,15 @@ RAEUME = [
 # Lagerort (TESTSCHNITTSTELLE 2)
 LAGERORT = ("LAGER-EG", "IT-Lager")
 
+# Geräte je Arbeitsplatz (TESTSCHNITTSTELLE 2, F-45)
+GERATEJE_PLATZ = [
+    ("Notebook", "Lenovo", "ThinkPad X1 Carbon"),
+    ("Display", "Dell", "U2723QE"),
+    ("Headset", "Logitech", "Zone 2"),
+    ("Dokumenten-Scanner", "Epson", "DS-770 II"),
+    ("WLAN-USB-Stick", "Intel", "AX200"),
+]
+
 
 def _vorname(nachname_vorname: str) -> str:
     return nachname_vorname.split()[0] if nachname_vorname else ""
@@ -150,6 +161,7 @@ class Command(BaseCommand):
             self._anlegen_orte()
             self._anlegen_personen()
             self._anlegen_konten()
+            self._anlegen_geraete()
             self._anlegen_einstellungen()
 
         self.stdout.write(self.style.SUCCESS("Beispieldaten angelegt."))
@@ -295,6 +307,35 @@ class Command(BaseCommand):
             konto.set_password(passwort)
             konto.save(update_fields=["password"])
         self.stdout.write(f"  {len(KONTEN)} Konten")
+
+    def _anlegen_geraete(self):
+        """Geräte je Arbeitsplatz (TESTSCHNITTSTELLE 2, F-45).
+
+        Feste Zuordnung: jede Person, die einen festen Platz hat, bekommt
+        die Geräte des Platzes. Die Inventarnummer wird fortlaufend vergeben.
+        """
+        for kennung, _raum, person_name, _profil, _x, _y in ARBEITSPLAETZE:
+            if not person_name:
+                continue
+            person = Person.objects.filter(
+                vorname=_vorname(person_name), nachname=_nachname(person_name)
+            ).first()
+            if person is None:
+                continue
+            ort = Ort.objects.get(kennung=kennung)
+            for kat_name, hersteller, modell in GERATEJE_PLATZ:
+                kategorie = Kategorie.objects.filter(name=kat_name).first()
+                if kategorie is None:
+                    continue
+                gerat = services.gerat_anlegen(
+                    kategorie=kategorie,
+                    hersteller=hersteller,
+                    modell=modell,
+                    seriennummer=f"SN-{kennung}-{kat_name[:3].upper()}",
+                    person=person,
+                    erzeugt_von=Konto.objects.filter(rolle=Konto.ROLLE_ADMIN).first(),
+                )
+        self.stdout.write(f"  {Gerat.objects.count()} Geräte")
 
     def _anlegen_einstellungen(self):
         # F-122: Einstellungen (TESTSCHNITTSTELLE 2)

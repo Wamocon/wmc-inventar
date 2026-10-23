@@ -1,0 +1,26 @@
+{% extends "basis.html" %}
+{% block titel %}Reparatur abschließen · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div>
+    <h1>Reparatur abschließen</h1>
+    <p class="muted lead">{{ gerat.inventarnummer }} · {{ gerat.geraetename|default:gerat.modell }} (F-42)</p>
+  </div>
+</div>
+<form method="post" data-test="reparatur-fertig-formular">
+  {% csrf_token %}
+  <div class="meldungen">
+    {% if form.non_field_errors %}<div class="meldung error" data-test="formular-fehler">{% for e in form.non_field_errors %}{{ e }}{% endfor %}</div>{% endif %}
+  </div>
+  <div class="form-grid">
+    <div class="field"><label for="id_zustand">Zustand nach Reparatur</label>{{ form.zustand }}{% if form.zustand.errors %}<div class="meldung error">{% for e in form.zustand.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+    <div class="field"><label for="id_ziel">Ziel</label>{{ form.ziel }}{% if form.ziel.errors %}<div class="meldung error">{% for e in form.ziel.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+    <div class="field"><label for="id_kosten">Kosten (EUR)</label>{{ form.kosten }}{% if form.kosten.errors %}<div class="meldung error">{% for e in form.kosten.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+    <div class="field"><label for="id_beleg">Beleg</label>{{ form.beleg }}{% if form.beleg.errors %}<div class="meldung error">{% for e in form.beleg.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+  </div>
+  <div class="actions">
+    <button type="submit" class="btn primary" data-test="reparatur-fertig-speichern">Reparatur abschließen</button>
+    <a class="btn link" href="/geraete/{{ gerat.inventarnummer }}/">Abbrechen</a>
+  </div>
+</form>
+{% endblock %}

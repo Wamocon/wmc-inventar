@@ -117,4 +117,33 @@
   Altbestand ohne Protokoll (Import).
 </div>
 {% endif %}
+
+{% if koennen_aendern and gerat.status == "verfuegbar" %}
+<div class="abschnitt" data-test="lebenszyklus">
+  <h2>Lebenszyklus</h2>
+  <p class="muted">Gerät ausgeben, umziehen, reparieren oder ausmustern.</p>
+  <div class="liste">
+    <div class="zeile">
+      <strong>Ausgeben</strong>
+      <a href="/geraete/{{ gerat.inventarnummer }}/ausgeben/" class="btn" data-test="ausgeben">Ausgeben</a>
+    </div>
+    <div class="zeile">
+      <strong>Reparatur starten</strong>
+      <a href="/geraete/{{ gerat.inventarnummer }}/reparatur-starten/" class="btn" data-test="reparatur-starten">Reparatur starten</a>
+    </div>
+    <div class="zeile">
+      <strong>Ausmustern</strong>
+      <a href="/geraete/{{ gerat.inventarnummer }}/ausmustern/" class="btn" data-test="ausmustern">Ausmustern</a>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if gerat.status == "in_reparatur" and koennen_aendern %}
+<div class="abschnitt" data-test="reparatur-fertig">
+  <h2>Reparatur</h2>
+  <p>Reparatur fertigstellen:</p>
+  <a href="/geraete/{{ gerat.inventarnummer }}/reparatur-fertigstellen/" class="btn" data-test="reparatur-fertigstellen">Reparatur fertigstellen</a>
+</div>
+{% endif %}
 {% endblock %}

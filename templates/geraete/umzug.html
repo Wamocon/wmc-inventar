@@ -1,0 +1,23 @@
+{% extends "basis.html" %}
+{% block titel %}Gerät umziehen · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div>
+    <h1>Gerät umziehen</h1>
+    <p class="muted lead">{{ gerat.inventarnummer }} · {{ gerat.geraetename|default:gerat.modell }} (F-41)</p>
+  </div>
+</div>
+<form method="post" data-test="umzug-formular">
+  {% csrf_token %}
+  <div class="meldungen">
+    {% if form.non_field_errors %}<div class="meldung error" data-test="formular-fehler">{% for e in form.non_field_errors %}{{ e }}{% endfor %}</div>{% endif %}
+  </div>
+  <div class="form-grid">
+    <div class="field"><label for="id_ziel_ort">Zielort</label>{{ form.ziel_ort }}{% if form.ziel_ort.errors %}<div class="meldung error">{% for e in form.ziel_ort.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+  </div>
+  <div class="actions">
+    <button type="submit" class="btn primary" data-test="umzug-speichern">Umziehen</button>
+    <a class="btn link" href="/geraete/{{ gerat.inventarnummer }}/">Abbrechen</a>
+  </div>
+</form>
+{% endblock %}
