@@ -7,7 +7,10 @@ import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-ROOT_DIR = BASE_DIR.parent
+# TESTSCHNITTSTELLE 1: Relative Pfade gelten ab dem Wurzelverzeichnis des Repos
+# (wo manage.py liegt). Damit liegen Datenbank, Dateiablage und Testsiegel
+# im Repository, nicht außerhalb.
+ROOT_DIR = BASE_DIR
 
 # --- Entwicklungsmodus ------------------------------------------------------
 DEBUG = os.environ.get("INVENTAR_DEBUG", "0") == "1"
@@ -46,6 +49,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "konten",
     "stammdaten",
+    "geraete",
 ]
 
 MIDDLEWARE = [

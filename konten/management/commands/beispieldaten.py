@@ -156,12 +156,20 @@ class Command(BaseCommand):
 
     def _leeren(self):
         from django.db import connection
-        connection.cursor().execute("DELETE FROM konten_konto")
-        connection.cursor().execute("DELETE FROM stammdaten_person")
-        connection.cursor().execute("DELETE FROM stammdaten_kategorie")
-        connection.cursor().execute("DELETE FROM stammdaten_ort")
-        connection.cursor().execute("DELETE FROM stammdaten_ausstattungsprofil")
-        connection.cursor().execute("DELETE FROM stammdaten_profilposition")
+        # Tabellen in der Reihenfolge der Fremdschlüssel leeren (Werkbank 23.10.):
+        # zuerst die Tabellen, die auf andere verweisen, dann die Referenzierten.
+        for tabelle in (
+            "geraete_geratkonflikt",   # FK → geraete_gerat
+            "geraete_gerat",          # FK → konten_konto, stammdaten_*
+            "geraete_importlauf",     # FK → konten_konto
+            "konten_konto",          # FK → stammdaten_person
+            "stammdaten_profilposition",  # FK → stammdaten_ausstattungsprofil, stammdaten_kategorie
+            "stammdaten_ort",        # FK → stammdaten_person, stammdaten_ausstattungsprofil
+            "stammdaten_person",
+            "stammdaten_ausstattungsprofil",
+            "stammdaten_kategorie",
+        ):
+            connection.cursor().execute(f"DELETE FROM {tabelle}")
 
         for var in ("DATEIABLAGE", "MAIL_ABLAGE"):
             p = getattr(settings, var, "")
@@ -175,7 +183,7 @@ class Command(BaseCommand):
                         else:
                             kind.unlink()
 
-        jetzt_pfad = Path(settings.BASE_DIR).parent / "var" / "jetzt.txt"
+        jetzt_pfad = Path(settings.ROOT_DIR) / "var" / "jetzt.txt"
         if jetzt_pfad.exists():
             jetzt_pfad.unlink()
 
@@ -210,8 +218,8 @@ class Command(BaseCommand):
                 raum=raum,
                 profil=profil,
                 feste_person=fest_person,
-                x_pos=x,
-                y_pos=y,
+                position_x=x,
+                position_y=y,
             )
         for kennung, name, raum, x, y in RAEUME:
             Ort.objects.create(
@@ -220,8 +228,8 @@ class Command(BaseCommand):
                 name=name,
                 standort="Eschborn",
                 raum=raum,
-                x_pos=x,
-                y_pos=y,
+                position_x=x,
+                position_y=y,
             )
         kennung, name = LAGERORT
         Ort.objects.create(
@@ -248,7 +256,7 @@ class Command(BaseCommand):
                 email=email_person,
                 abteilung=abteilung,
                 eintritt=eintritt,
-                anschrift="Beispielweg 3, 65760 Eschborn" if vorname == "Anna" else None,
+                anschrift="Beispielweg 3, 65760 Eschborn" if vorname == "Anna" else "",
             )
         # Personen ohne Konto
         for name, abteilung, _ in PERSONEN_OHNE_KONTO:

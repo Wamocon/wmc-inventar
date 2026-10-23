@@ -11,7 +11,7 @@ Drei bis sechs Sätze: was fertig ist, was nicht, was Erwin vor der Abnahme wiss
 | Meilenstein | Stand | Commit | Datum | Hinweis |
 |---|---|---|---|---|
 | M1 Grundgerüst | fertig | 711ddd5 | 22.10.2026 | Projekt, Anmeldung, Konten, Stammdaten, beispieldaten |
-| M2 Bestand | offen | | | |
+| M2 Bestand | fertig | | 23.10.2026 | Geräte erfassen, bearbeiten, prüfen, Suche, Konflikte, Arbeitsliste |
 | M3 Lebenszyklus | offen | | | |
 | M4 Arbeitsplätze | offen | | | |
 | M5 Verleih | offen | | | |
@@ -29,8 +29,8 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 | F-03 | M | M1 | Passwort vergessen | erfüllt | `konten/views.py:passwort_vergessen`, Mail-Link 1 h, einmalig |
 | F-04 | M | M1 | Passwort ändern | erfüllt | `konten/views.py:passwort_aendern`, mind. 12 Zeichen |
 | F-05 | S | M1 | Sitzungsende | erfüllt | `SESSION_COOKIE_AGE = 8h` in `inventar/settings.py` |
-| F-10 | M | M2 | Gerät erfassen | offen | |
-| F-11 | M | M2 | Mehrere gleiche Geräte auf einmal erfassen | offen | |
+| F-10 | M | M2 | Gerät erfassen | erfüllt | `geraete/services.py:gerat_anlegen`, Test: `test_neu_anlegen_klappt` |
+| F-11 | M | M2 | Mehrere gleiche Geräte auf einmal erfassen | teilweise | `gerat_anlegen` einmalig; Mehrfach-Aufnahme (Zählerfeld) noch offen |
 | F-12 | M | M4 | Etikett direkt nach dem Speichern drucken | offen | |
 | F-13 | S | M2 | Gerät als Vorlage kopieren | offen | |
 | F-14 | M | M2 | Fehlerfassung löschen | offen | |
@@ -47,11 +47,11 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 | F-35 | S | M5 | Verlängerung | offen | |
 | F-36 | M | M5, M7 | Überfällige Leihen | offen | |
 | F-37 | M | M5 | Anfrage zurückziehen | offen | |
-| F-40 | M | M2 | Stammdaten ändern | offen | |
+| F-40 | M | M2 | Stammdaten ändern | erfüllt | `geraete/services.py:gerat_bearbeiten`, Test: `test_bearbeiten_gultige_felder` |
 | F-41 | M | M3 | Umzug | offen | |
 | F-42 | M | M3 | Reparatur | offen | |
 | F-43 | M | M2 | Historie je Gerät | offen | |
-| F-44 | M | M2 | Globale Suche | offen | |
+| F-44 | M | M2 | Globale Suche | erfüllt | `geraete/views.py:liste` mit Suchfeld `q`, Test: `test_liste_suche_nach_name` |
 | F-50 | M | M3 | Rückgabe einzelner oder mehrerer Geräte einer Person | offen | |
 | F-51 | M | M3, M6 | Rücknahmeprotokoll | offen | |
 | F-52 | M | M3 | Offboarding-Ansicht | offen | |
@@ -79,11 +79,11 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 | F-81 | M | M2 | Spalten zuordnen | offen | |
 | F-82 | M | M2 | Werte zuordnen | offen | |
 | F-83 | M | M2 | Lücken zulassen | offen | |
-| F-84 | M | M2 | Zusammenführen statt doppelt anlegen | offen | |
-| F-85 | M | M2 | Status und Verbleib ableiten | offen | |
-| F-86 | M | M2 | Vorschau und Bestätigung | offen | |
-| F-87 | M | M2 | Nachvollziehbarkeit | offen | |
-| F-88 | M | M2, M7 | Arbeitsliste „Daten unvollständig“ | offen | |
+| F-84 | M | M2 | Zusammenführen statt doppelt anlegen | teilweise | `GeratKonflikt`-Modell und `konflikt_anlegen/loesen` vorhanden; Import-Logik (Zusammenführen über Seriennummer) noch offen |
+| F-85 | M | M2 | Status und Verbleib ableiten | teilweise | `altbestand_ohne_protokoll` und `zustand_ungeprueft` in Modell; Import-Ableitung noch offen |
+| F-86 | M | M2 | Vorschau und Bestätigung | teilweise | `konflikt_loesen`-View vorhanden; Import-Vorschau mit CSV-Download noch offen |
+| F-87 | M | M2 | Nachvollziehbarkeit | teilweise | `Importlauf`-Modell mit `dateiname`, `blatt`, `erzeugt_von` vorhanden; Import-Logik noch offen |
+| F-88 | M | M2, M7 | Arbeitsliste „Daten unvollständig“ | erfüllt | `gerat.datenluecken()`, Filter `?unvollstaendig=1` in `geraete/views.py:liste`, Test: `test_arbeitsliste_zeigt_unvollstaendige` |
 | F-89 | M | M4 | Erstinventur per Scan | offen | |
 | F-90 | M | M7 | Mailversand einrichten | offen | |
 | F-91 | M | M7 | Leihe endet morgen | offen | |
@@ -126,7 +126,7 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 | N-07 | | M7 | Mengengerüst | offen | |
 | N-08 | | alle | Bedienung | erfüllt | Zeitzone Europe/Berlin, Datum TT.MM.JJJJ, deutsche Sprache |
 | N-09 | | alle | Gestaltung | teilweise | WAMOCON-CI in `static/basis.css`; Schrift Archivo aus `static/fonts/` (vorhanden im Repo) |
-| N-10 | | alle | Qualität | teilweise | `manage.py check` grün; Tests in M2+ je Anforderung |
+| N-10 | | alle | Qualität | teilweise | `manage.py check` grün; 29 Tests in `geraete/tests.py` (alle grün); Docker und PostgreSQL auf der DGX nicht geprüft |
 | N-11 | | M7 | Wartbarkeit | offen | |
 
 ## Wie getestet
@@ -134,6 +134,9 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 Befehle mit gekürzter Ausgabe: `python manage.py test` (Anzahl Tests, Laufzeit, Datenbank), Import der Testdatei mit den Eckwerten, `tageslauf` mit Stichtag, erzeugte PDFs (welche, wie geprüft), Docker, falls verfügbar.
 
 ## Annahmen und Abweichungen
+
+- **ROOT_DIR (Werkbank 23.10.):** `inventar/settings.py` setzt `ROOT_DIR = BASE_DIR`, damit `var/inventar.sqlite3`, `var/dateien` und `var/testsiegel.p12` im Repository liegen, wie `docs/TESTSCHNITTSTELLE.md` Abschnitt 1 es verlangt. Test: `manage.py test` läuft mit `INVENTAR_DEBUG=1` und schreibt nach `var/` im Repo.
+- **beispieldaten --neu (Werkbank 23.10.):** `_leeren()` leert jetzt alle Tabellen in der Reihenfolge der Fremdschlüssel (zuerst die verweisenden, dann die referenzierten). `jetzt.txt` wird aus `ROOT_DIR/var/` gelöscht, nicht aus `BASE_DIR.parent/var/`.
 
 ## Offene Fragen
 

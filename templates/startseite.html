@@ -8,8 +8,8 @@
   <h2>Loslegen</h2>
   <div class="actions">
     {% if user.ist_admin or user.ist_leser %}
-      <a class="btn" href="/geraete/" data-test="nav-geraete">Zu den Geräten</a>
-      <a class="btn" href="/personen/" data-test="nav-personen">Zu den Personen</a>
+      <a class="btn" href="/geraete/" data-test="nav-geraete">Geräte</a>
+      <a class="btn" href="/personen/" data-test="nav-personen">Personen</a>
     {% endif %}
     {% if user.ist_admin or user.ist_mitarbeiter %}
       <a class="btn" href="/meine-geraete/" data-test="nav-meine-geraete">Meine Geräte</a>

@@ -1,0 +1,36 @@
+{% extends "basis.html" %}
+{% block titel %}Gerät anlegen · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div><h1>Gerät anlegen</h1><p class="muted lead">Neues Gerät mit automatischer Inventarnummer (F-11 bis F-14).</p></div>
+</div>
+<form method="post" action="/geraete/speichern/" data-test="geraet-formular">
+  {% csrf_token %}
+  <div class="meldungen">
+    {% if form.non_field_errors %}<div class="meldung error" data-test="formular-fehler">{% for e in form.non_field_errors %}{{ e }}{% endfor %}</div>{% endif %}
+  </div>
+  <div class="form-grid">
+    <div class="field"><label class="req" for="id_kategorie">Kategorie</label>{{ form.kategorie }}{% if form.kategorie.errors %}<div class="meldung error" data-test="fehler-kategorie">{% for e in form.kategorie.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+    <div class="field"><label class="req" for="id_hersteller">Hersteller</label>{{ form.hersteller }}{% if form.hersteller.errors %}<div class="meldung error">{% for e in form.hersteller.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+    <div class="field"><label class="req" for="id_modell">Modell</label>{{ form.modell }}{% if form.modell.errors %}<div class="meldung error">{% for e in form.modell.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+    <div class="field"><label for="id_seriennummer">Seriennummer</label>{{ form.seriennummer }}{% if form.seriennummer.errors %}<div class="meldung error" data-test="fehler-seriennummer">{% for e in form.seriennummer.errors %}{{ e }}{% endfor %}</div>{% endif %}<small class="help">Pflicht je Kategorie (F-14).</small></div>
+    <div class="field"><label for="id_zustand">Zustand</label>{{ form.zustand }}</div>
+    <div class="field"><label class="check"><input type="checkbox" name="leihpool" id="id_leihpool" value="on" {% if form.leihpool.value %}checked{% endif %} data-test="leihpool"> Leihpool</label></div>
+    <div class="field"><label for="id_person">Person (optional)</label>{{ form.person }}<small class="help">Person aus dem Verzeichnis oder später beim Verliehen.</small></div>
+    <div class="field"><label for="id_ort">Ort (optional)</label>{{ form.ort }}</div>
+    <div class="field full"><label for="id_geraetename">Gerätename (optional)</label>{{ form.geraetename }}</div>
+    <div class="field full"><label for="id_standardzuehoer">Standardzubehör</label>{{ form.standardzuehoer }}<small class="help">Eintrag pro Zeile (F-17).</small></div>
+    <div class="field full"><label for="id_technische_daten">Technische Daten</label>{{ form.technische_daten }}</div>
+    <div class="field"><label for="id_kaufdatum">Kaufdatum</label>{{ form.kaufdatum }}</div>
+    <div class="field"><label for="id_kaufpreis_netto">Kaufpreis netto (EUR)</label>{{ form.kaufpreis_netto }}</div>
+    <div class="field"><label for="id_lieferant">Lieferant</label>{{ form.lieferant }}</div>
+    <div class="field"><label for="id_rechnungsnummer">Rechnungsnummer</label>{{ form.rechnungsnummer }}</div>
+    <div class="field"><label for="id_garantie_bis">Garantie bis</label>{{ form.garantie_bis }}</div>
+    <div class="field full"><label for="id_notiz">Notiz</label>{{ form.notiz }}</div>
+  </div>
+  <div class="actions">
+    <button type="submit" class="btn primary" data-test="speichern">Anlegen</button>
+    <a class="btn link" href="/geraete/">Abbrechen</a>
+  </div>
+</form>
+{% endblock %}

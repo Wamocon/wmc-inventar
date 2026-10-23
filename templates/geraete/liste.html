@@ -1,0 +1,55 @@
+{% extends "basis.html" %}
+{% block titel %}Geräte · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div><h1>Geräte</h1><p class="muted lead">Alle Geräte des Bestands (F-41).</p></div>
+  {% if koennen_aendern %}<div class="actions"><a class="btn primary" href="/geraete/neu/" data-test="geraet-anlegen">Gerät anlegen</a></div>{% endif %}
+</div>
+
+<div class="filter-bar">
+  <form method="get" action="/geraete/" data-test="suche-formular">
+    <input type="search" name="q" value="{{ suche }}" placeholder="Inventarnummer, Name, Seriennummer, Kategorie, Person, Ort …" data-test="suche" aria-label="Suche">
+    <select name="status" data-test="filter-status">
+      <option value="">Status: alle</option>
+      {% for code, label in statuser %}
+      <option value="{{ code }}" {% if status_filter == code %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <select name="ort" data-test="filter-ort">
+      <option value="">Ort: alle</option>
+      {% for o in orte %}
+      <option value="{{ o.pk }}" {% if ort_filter == o.pk|stringformat:"s" %}selected{% endif %}>{{ o.kennung }}</option>
+      {% endfor %}
+    </select>
+    <select name="kategorie" data-test="filter-kategorie">
+      <option value="">Kategorie: alle</option>
+      {% for k in kategorien %}
+      <option value="{{ k.pk }}" {% if kategorie_filter == k.pk|stringformat:"s" %}selected{% endif %}>{{ k.name }}</option>
+      {% endfor %}
+    </select>
+    <select name="person" data-test="filter-person">
+      <option value="">Person: alle</option>
+      {% for p in personen %}
+      <option value="{{ p.pk }}" {% if person_filter == p.pk|stringformat:"s" %}selected{% endif %}>{{ p.voller_name }}</option>
+      {% endfor %}
+    </select>
+    <label class="check"><input type="checkbox" name="unvollstaendig" value="1" {% if unvollstaendig %}checked{% endif %} data-test="filter-unvollstaendig"> nur unvollständige</label>
+    <button type="submit" class="btn sm">Anwenden</button>
+  </form>
+</div>
+
+<p class="anzahl" data-test="anzahl">{{ anzahl }} {% if anzahl == 1 %}Gerät{% else %}Geräte{% endif %}</p>
+
+<div class="liste" data-test="geraete-liste">
+  {% for g in geraete %}
+  <div class="zeile">
+    <span class="inv num" data-test="inventarnummer">{{ g.inventarnummer }}</span>
+    <span data-test="zeile-name">{{ g.geraetename|default:g.modell }} · {{ g.kategorie.name }}{% if g.ort %} · {{ g.ort.kennung }}{% elif g.person %} · {{ g.person.voller_name }}{% endif %}</span>
+    <span class="chip-status {{ g.status }}" data-test="status">{{ g.status_anzeige }}</span>
+    <a class="btn sm" href="/geraete/{{ g.inventarnummer }}/" data-test="detail-link">Ansehen</a>
+  </div>
+  {% empty %}
+  <div class="zeile muted">Keine Geräte gefunden.</div>
+  {% endfor %}
+</div>
+{% endblock %}

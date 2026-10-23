@@ -1,0 +1,120 @@
+{% extends "basis.html" %}
+{% block titel %}{{ gerat.inventarnummer }} · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div>
+    <h1 data-test="inventarnummer">{{ gerat.inventarnummer }}</h1>
+    <p class="muted lead">{{ gerat.geraetename|default:gerat.modell }} · {{ gerat.kategorie.name }}</p>
+  </div>
+  <div class="actions">
+    {% if koennen_aendern %}
+      <a class="btn" href="/geraete/{{ gerat.inventarnummer }}/aendern/" data-test="aendern">Ändern</a>
+      <form method="post" action="/geraete/{{ gerat.inventarnummer }}/pruefen/" data-test="pruefen-formular">
+        {% csrf_token %}
+        <button type="submit" class="btn" data-test="pruefen">Prüfung abhaken</button>
+      </form>
+    {% endif %}
+  </div>
+</div>
+
+{% if offene_konflikte %}
+<div class="meldung warning" data-test="konflikt-warndung">
+  <strong>{{ offene_konflikte|length }} offener Importkonflikt{{ offene_konflikte|length|pluralize }}.</strong>
+  Bitte entscheiden je Konflikt, ob der alte oder der neue Wert gilt.
+</div>
+{% endif %}
+
+{% if doppelte_namen %}
+<div class="meldung info" data-test="hinweis-doppelter-name">
+  Gleichnamige Geräte im Bestand:
+  {% for g in doppelte_namen %}<a href="/geraete/{{ g.inventarnummer }}/" data-test="doppelter-name">{{ g.inventarnummer }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}
+</div>
+{% endif %}
+
+{% if doppelte_serien %}
+<div class="meldung info" data-test="hinweis-doppelte-seriennummer">
+  Gleichlautende Seriennummer auch bei:
+  {% for g in doppelte_serien %}<a href="/geraete/{{ g.inventarnummer }}/" data-test="doppelte-serien">{{ g.inventarnummer }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}
+</div>
+{% endif %}
+
+<div class="abschnitt">
+  <h2>Status</h2>
+  <p><span class="chip-status {{ gerat.status }}" data-test="status">{{ gerat.status_anzeige }}</span>
+  {% if gerat.person %} · zuweisende Person: {{ gerat.person.voller_name }}{% endif %}
+  {% if gerat.ort %} · Ort: {{ gerat.ort.kennung }}{% endif %}
+  {% if gerat.leihpool %} · Leihpool{% endif %}</p>
+</div>
+
+<div class="abschnitt">
+  <h2>Daten</h2>
+  <dl class="detail-grid">
+    <dt>Kategorie</dt><dd data-test="kategorie">{{ gerat.kategorie.name }}</dd>
+    <dt>Hersteller</dt><dd data-test="hersteller">{{ gerat.hersteller }}</dd>
+    <dt>Modell</dt><dd data-test="modell">{{ gerat.modell }}</dd>
+    <dt>Seriennummer</dt><dd data-test="seriennummer">{{ gerat.seriennummer|default:"–" }}</dd>
+    <dt>Zustand</dt><dd data-test="zustand">{{ gerat.get_zustand_display }}</dd>
+    <dt>Gerätename</dt><dd data-test="geraetename">{{ gerat.geraetename|default:"–" }}</dd>
+    <dt>Standardzubehör</dt><dd data-test="zubehoer">{{ gerat.standardzuehoer|default:"–" }}</dd>
+    <dt>Technische Daten</dt><dd data-test="technische-daten">{{ gerat.technische_daten|default:"–" }}</dd>
+    <dt>Kaufdatum</dt><dd data-test="kaufdatum">{{ gerat.kaufdatum|default:"–" }}</dd>
+    <dt>Kaufpreis netto</dt><dd data-test="kaufpreis">{% if gerat.kaufpreis_netto is not None %}{{ gerat.kaufpreis_netto }} EUR{% else %}–{% endif %}</dd>
+    <dt>Lieferant</dt><dd data-test="lieferant">{{ gerat.lieferant|default:"–" }}</dd>
+    <dt>Rechnungsnummer</dt><dd data-test="rechnung">{{ gerat.rechnungsnummer|default:"–" }}</dd>
+    <dt>Garantie bis</dt><dd data-test="garantie">{{ gerat.garantie_bis|default:"–" }}</dd>
+    <dt>Notiz</dt><dd data-test="notiz">{{ gerat.notiz|default:"–" }}</dd>
+  </dl>
+</div>
+
+<div class="abschnitt">
+  <h2>Prüfung</h2>
+  {% if gerat.zuletzt_geprueft_am %}
+    <p>Zuletzt geprüft: {{ gerat.zuletzt_geprueft_am|date:"d.m.Y H:i" }}{% if gerat.zuletzt_geprueft_von %} · von {{ gerat.zuletzt_geprueft_von.name }}{% endif %}</p>
+  {% else %}
+    <p class="muted">Noch nicht geprüft.</p>
+  {% endif %}
+</div>
+
+{% if datenluecken %}
+<div class="abschnitt">
+  <h2>Datenlücken</h2>
+  <p data-test="datenluecken">
+    {% for l in datenluecken %}<span class="chip-status ausgemustert">{{ l }}</span>{% if not forloop.last %} {% endif %}{% endfor %}
+  </p>
+</div>
+{% endif %}
+
+{% if offene_konflikte %}
+<div class="abschnitt">
+  <h2>Offene Konflikte</h2>
+  <div class="liste" data-test="konflikt-liste">
+    {% for k in offene_konflikte %}
+    <div class="zeile">
+      <span data-test="konflikt-feld">{{ k.feld }}</span>
+      <span data-test="konflikt-werte">alt: {{ k.alter_wert|default:"–" }} · neu: {{ k.neuer_wert|default:"–" }}{% if k.herkunft %} · {{ k.herkunft }}{% endif %}</span>
+      {% if koennen_aendern %}
+      <form method="post" action="/geraete/{{ gerat.inventarnummer }}/konflikt/{{ k.pk }}/loesen/" class="actions">
+        {% csrf_token %}
+        <button type="submit" name="nehmen" value="alt" class="btn sm" data-test="konflikt-alt">Alt behalten</button>
+        <button type="submit" name="nehmen" value="neu" class="btn sm" data-test="konflikt-neu">Neu übernehmen</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if gerat.erstellt_am %}
+<div class="abschnitt">
+  <h2>Erstellt</h2>
+  <p>{{ gerat.erstellt_am|date:"d.m.Y H:i" }}{% if gerat.erstellt_von %} · von {{ gerat.erstellt_von.name }}{% endif %}</p>
+</div>
+{% endif %}
+
+{% if gerat.altbestand_ohne_protokoll %}
+<div class="meldung info" data-test="altbestand-hinweis">
+  Altbestand ohne Protokoll (Import).
+</div>
+{% endif %}
+{% endblock %}
