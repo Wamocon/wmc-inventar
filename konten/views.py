@@ -177,7 +177,7 @@ def passwort_setzen(request, token):
         # Token ungültig machen (einmalig, F-03)
         konto.fehlversuche = 0
         konto.gesperrt_bis = None
-        konto.save(update_fields=["fehlersuche", "gesperrt_bis"])
+        konto.save(update_fields=["fehlversuche", "gesperrt_bis"])
         messages.success(request, "Das Passwort wurde gesetzt. Bitte melden Sie sich an.")
         return redirect(reverse("konten:anmelden"))
 

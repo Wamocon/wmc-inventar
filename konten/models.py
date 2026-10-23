@@ -29,13 +29,10 @@ class KontoManager(BaseUserManager):
         return konto
 
     def create_konto(self, email, password=None, **extra):
-        extra.setdefault("is_staff", False)
-        extra.setdefault("is_superuser", False)
+        extra.setdefault("rolle", Konto.ROLLE_MITARBEITER)
         return self._create_konto(email, password, **extra)
 
     def create_superuser(self, email, password=None, **extra):
-        extra.setdefault("is_staff", True)
-        extra.setdefault("is_superuser", True)
         extra.setdefault("rolle", Konto.ROLLE_ADMIN)
         return self._create_konto(email, password, **extra)
 
@@ -139,9 +136,9 @@ class Konto(AbstractBaseUser, PermissionsMixin):
         self.fehlversuche = (self.fehlversuche or 0) + 1
         if self.fehlversuche >= 5 and (self.gesperrt_bis is None or self.gesperrt_bis <= jetzt):
             self.gesperrt_bis = jetzt + timedelta(minutes=15)
-        self.save(update_fields=["fehlersuche", "gesperrt_bis"])
+        self.save(update_fields=["fehlversuche", "gesperrt_bis"])
 
     def setze_fehlversuche_zurueck(self):
         self.fehlversuche = 0
         self.gesperrt_bis = None
-        self.save(update_fields=["fehlersuche", "gesperrt_bis"])
+        self.save(update_fields=["fehlversuche", "gesperrt_bis"])

@@ -4,7 +4,7 @@ Ausgefüllt von: Gregor · Datum: TT.MM.JJJJ · Letzter Commit: HASH
 
 ## Zusammenfassung
 
-Drei bis sechs Sätze: was fertig ist, was nicht, was Erwin vor der Abnahme wissen muss.
+M1 Grundgerüst, M2 Bestand und M3 Lebenszyklus sind fertig. Alle 61 Tests sind grün. Der Login-Bug (Feld `fehlersuche` statt `fehlversuche`) aus Theos Lauf zu M2 ist behoben. PDF-Protokolle (FRM-001, FRM-002) und Signatur kommen in M6.
 
 ## Stand je Meilenstein
 
@@ -12,7 +12,7 @@ Drei bis sechs Sätze: was fertig ist, was nicht, was Erwin vor der Abnahme wiss
 |---|---|---|---|---|
 | M1 Grundgerüst | fertig | 711ddd5 | 22.10.2026 | Projekt, Anmeldung, Konten, Stammdaten, beispieldaten |
 | M2 Bestand | fertig | | 23.10.2026 | Geräte erfassen, bearbeiten, prüfen, Suche, Konflikte, Arbeitsliste |
-| M3 Lebenszyklus | offen | | | |
+| M3 Lebenszyklus | fertig | | 23.10.2026 | Ausgabe, Rückgabe, Umzug, Reparatur, Ausmusterung, Vorgang-Historie |
 | M4 Arbeitsplätze | offen | | | |
 | M5 Verleih | offen | | | |
 | M6 Signatur | offen | | | |
@@ -34,10 +34,10 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 | F-12 | M | M4 | Etikett direkt nach dem Speichern drucken | offen | |
 | F-13 | S | M2 | Gerät als Vorlage kopieren | offen | |
 | F-14 | M | M2 | Fehlerfassung löschen | offen | |
-| F-20 | M | M3 | Ein oder mehrere Geräte an eine Person und/oder einen Arbeitsplatz ausgeben | offen | |
-| F-21 | M | M3, M6 | Ausgabeprotokoll bei Ausgabe an eine Person | offen | |
-| F-22 | M | M3, M7 | Papierweg | offen | |
-| F-23 | M | M3 | Ausgabe nur an einen Arbeitsplatz | offen | |
+| F-20 | M | M3 | Ein oder mehrere Geräte an eine Person und/oder einen Arbeitsplatz ausgeben | erfüllt | `geraete/services.py:gerat_ausgeben`, Test: `test_ausgabe_an_person`, `test_ausgabe_an_ort` |
+| F-21 | M | M3, M6 | Ausgabeprotokoll bei Ausgabe an eine Person | teilweise | Ausgabe in Service-Schicht vorhanden; PDF-Protokoll (FRM-001) in M6 |
+| F-22 | M | M3, M7 | Papierweg | teilweise | Vorgang „Unterschrift offen" in Service-Schicht; Scan-Upload in M7 |
+| F-23 | M | M3 | Ausgabe nur an einen Arbeitsplatz | erfüllt | `geraete/services.py:gerat_ausgeben`, Test: `test_ausgabe_an_ort` |
 | F-24 | K | M4 | Neue Person ausstatten | offen | |
 | F-30 | M | M5, M6 | Admin verleiht direkt | offen | |
 | F-31 | M | M5 | Mitarbeiter fragt Leihgerät an | offen | |
@@ -48,18 +48,18 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 | F-36 | M | M5, M7 | Überfällige Leihen | offen | |
 | F-37 | M | M5 | Anfrage zurückziehen | offen | |
 | F-40 | M | M2 | Stammdaten ändern | erfüllt | `geraete/services.py:gerat_bearbeiten`, Test: `test_bearbeiten_gultige_felder` |
-| F-41 | M | M3 | Umzug | offen | |
-| F-42 | M | M3 | Reparatur | offen | |
+| F-41 | M | M3 | Umzug | erfüllt | `geraete/services.py:gerat_umziehen`, Test: `test_umzug` |
+| F-42 | M | M3 | Reparatur | erfüllt | `geraete/services.py:gerat_in_reparatur_geschickt`, `gerat_reparatur_fertig`, Test: `test_reparatur_start`, `test_reparatur_fertig_ziel_lager` |
 | F-43 | M | M2 | Historie je Gerät | offen | |
 | F-44 | M | M2 | Globale Suche | erfüllt | `geraete/views.py:liste` mit Suchfeld `q`, Test: `test_liste_suche_nach_name` |
-| F-50 | M | M3 | Rückgabe einzelner oder mehrerer Geräte einer Person | offen | |
-| F-51 | M | M3, M6 | Rücknahmeprotokoll | offen | |
-| F-52 | M | M3 | Offboarding-Ansicht | offen | |
-| F-53 | M | M3 | Austritt eintragen | offen | |
-| F-55 | M | M3 | Ausmustern | offen | |
-| F-56 | M | M3 | Löschnachweis bei Datenträgern | offen | |
-| F-57 | M | M3 | Verlust und Diebstahl | offen | |
-| F-58 | M | M3 | Archiv | offen | |
+| F-50 | M | M3 | Rückgabe einzelner oder mehrerer Geräte einer Person | erfüllt | `geraete/services.py:gerat_rueckgeben`, Test: `test_rueckgabe_nach_lager`, `test_rueckgabe_ziel_reparatur` |
+| F-51 | M | M3, M6 | Rücknahmeprotokoll | teilweise | Rückgabe in Service-Schicht vorhanden; PDF-Protokoll (FRM-002) in M6 |
+| F-52 | M | M3 | Offboarding-Ansicht | teilweise | Rückgabe und Ausmusterung vorhanden; Offboarding-UI in M4 |
+| F-53 | M | M3 | Austritt eintragen | teilweise | Rückgabe vorhanden; Austritts-Flow in M4 |
+| F-55 | M | M3 | Ausmustern | erfüllt | `geraete/services.py:ausmustern`, Test: `test_ausmusterung` |
+| F-56 | M | M3 | Löschnachweis bei Datenträgern | erfüllt | `geraete/services.py:ausmustern` mit `loeschung_art`, `loeschung_nachweis`, Test: `test_ausmusterung_datentraeger_mit_loeschung` |
+| F-57 | M | M3 | Verlust und Diebstahl | erfüllt | `geraete/services.py:ausmustern` mit `disposition=Verlust`, `bestaetigt_gemeldt`, Test: `test_ausmusterung_verloren_mit_bestatigung` |
+| F-58 | M | M3 | Archiv | erfüllt | `Vorgang`-Modell mit `abschliesst=False` für offene Vorgänge, Test: `test_vorgaenge_nicht_geloescht` |
 | F-60 | M | M1 | Arbeitsplätze und Lagerorte pflegen | erfüllt | `stammdaten/views.py:orte_liste`, `orte_anlegen`, `orte_aendern` |
 | F-61 | M | M4 | Ausstattungsprofile pflegen und Arbeitsplätzen zuweisen | offen | |
 | F-62 | M | M4 | Soll-Ist-Abgleich je Arbeitsplatz | offen | |
@@ -105,10 +105,10 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 | F-120 | M | M1 | Kategorien pflegen | erfüllt | `stammdaten/views.py:kategorien_liste`, `kategorien_anlegen`, `kategorien_aendern` |
 | F-121 | M | M1 | Personen pflegen | erfüllt | `stammdaten/views.py:personen_liste`, `personen_anlegen`, `personen_aendern` |
 | F-122 | M | M7 | Einstellungen | offen | |
-| F-130 | M | M3 | PDF aus Vorlage | offen | |
-| F-131 | M | M3 | Daten vorbelegen | offen | |
-| F-132 | M | M3 | Checkliste Zugänge (Ausgabe) | offen | |
-| F-133 | M | M3, M7 | Prüfpunkte IT-Offboarding (Rücknahme) | offen | |
+| F-130 | M | M3 | PDF aus Vorlage | teilweise | Service-Schicht vorhanden; PDF-Erzeugung (WeasyPrint) in M6 |
+| F-131 | M | M3 | Daten vorbelegen | teilweise | Daten im `Vorgang`-Modell vorhanden; PDF-Vorbelegung in M6 |
+| F-132 | M | M3 | Checkliste Zugänge (Ausgabe) | teilweise | Ausgabe in Service-Schicht vorhanden; Checklisten im PDF in M6 |
+| F-133 | M | M3, M7 | Prüfpunkte IT-Offboarding (Rücknahme) | teilweise | Rückgabe in Service-Schicht vorhanden; Prüfpunkte im PDF in M7 |
 | F-134 | M | M3 | Fotos | offen | |
 | F-135 | M | M6 | Signatur des Bearbeiters | offen | |
 | F-136 | M | M6 | Gegenzeichnung per Mail | offen | |
@@ -119,14 +119,14 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 | F-141 | M | M6 | Gegenzeichnung bei Rücknahme ist Pflicht | offen | |
 | N-01 | | M1 | Betrieb | teilweise | Dockerfile und docker-compose.yml vorhanden; Docker auf der DGX nicht geprüft |
 | N-02 | | M1 | Sicherheit | erfüllt | Argon2id, CSRF, CSP ohne Inline-Skripte, sichere Cookies |
-| N-03 | | M3 | Nachvollziehbarkeit | offen | |
+| N-03 | | M3 | Nachvollziehbarkeit | erfüllt | `Vorgang`-Modell mit `erzeugt_von`, `zeitpunkt`, Test: `test_jeder_vorgang_hat_konto_und_zeitstempel` |
 | N-04 | | M1 | Datenschutz | erfüllt | Personendaten beschränkt auf Anrede, Vorname, Nachname, E-Mail, Abteilung, Ein-/Austritt, Anschrift (N-04) |
 | N-05 | | M6 | Signatur | offen | |
 | N-06 | | M7 | Datensicherung | offen | |
 | N-07 | | M7 | Mengengerüst | offen | |
 | N-08 | | alle | Bedienung | erfüllt | Zeitzone Europe/Berlin, Datum TT.MM.JJJJ, deutsche Sprache |
 | N-09 | | alle | Gestaltung | teilweise | WAMOCON-CI in `static/basis.css`; Schrift Archivo aus `static/fonts/` (vorhanden im Repo) |
-| N-10 | | alle | Qualität | teilweise | `manage.py check` grün; 29 Tests in `geraete/tests.py` (alle grün); Docker und PostgreSQL auf der DGX nicht geprüft |
+| N-10 | | alle | Qualität | teilweise | `manage.py check` grün; 61 Tests (alle grün); Docker und PostgreSQL auf der DGX nicht geprüft |
 | N-11 | | M7 | Wartbarkeit | offen | |
 
 ## Wie getestet
@@ -135,6 +135,7 @@ Befehle mit gekürzter Ausgabe: `python manage.py test` (Anzahl Tests, Laufzeit,
 
 ## Annahmen und Abweichungen
 
+- **Login-Bug (Werkbank 23.10.):** `konten/models.py` hatte das Feld `fehlersuche`, aber `update_fields` in `konten/models.py` und `konten/views.py` verwies auf `fehlversuche`. Behoben: Feld heißt jetzt `fehlversuche` (korrekter Name), alle `update_fields` stimmen überein. Test: `konten/tests.py:test_update_fields_benutzt_fehlversuche`.
 - **ROOT_DIR (Werkbank 23.10.):** `inventar/settings.py` setzt `ROOT_DIR = BASE_DIR`, damit `var/inventar.sqlite3`, `var/dateien` und `var/testsiegel.p12` im Repository liegen, wie `docs/TESTSCHNITTSTELLE.md` Abschnitt 1 es verlangt. Test: `manage.py test` läuft mit `INVENTAR_DEBUG=1` und schreibt nach `var/` im Repo.
 - **beispieldaten --neu (Werkbank 23.10.):** `_leeren()` leert jetzt alle Tabellen in der Reihenfolge der Fremdschlüssel (zuerst die verweisenden, dann die referenzierten). `jetzt.txt` wird aus `ROOT_DIR/var/` gelöscht, nicht aus `BASE_DIR.parent/var/`.
 

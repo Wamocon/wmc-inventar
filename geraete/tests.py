@@ -17,7 +17,7 @@ from konten.models import Konto
 from stammdaten.models import Kategorie, Ort, Person
 
 from . import services
-from .models import Gerat, GeratKonflikt, Importlauf
+from .models import Gerat, GeratKonflikt, Importlauf, Vorgang
 
 
 # --- Konten-Helfer -----------------------------------------------------------
@@ -331,3 +331,313 @@ class OhneDebugTests(TestCase):
         antwort = client.get("/geraete/")
         self.assertEqual(antwort.status_code, 200)
         self.assertIn("WMC-", antwort.content.decode())
+
+
+# --- M3 Lebenszyklus (Kapitel 4, F-50 bis F-58) ---------------------------------
+
+class M3LebenszyklusTests(TestCase):
+    """Alle Übergänge aus Kapitel 4, jeder mit Test, auch die verbotenen (AUFTRAG M3)."""
+
+    def setUp(self):
+        self.admin = konto_erstellen("m3.admin")
+        self.kat = Kategorie.objects.create(name="Notebook")
+        self.person = Person.objects.create(
+            anrede=Person.ANREDE_FRAU, vorname="Erika", nachname="Muster",
+            email="e.muster@wamocon.de",
+        )
+        self.ort = Ort.objects.create(
+            typ=Ort.TYP_LAGER, kennung="M3-LAG", name="M3-Lager"
+        )
+        self.gerat = services.gerat_anlegen(
+            kategorie=self.kat, hersteller="Lenovo", modell="T14",
+            seriennummer="SN-M3-001", erzeugt_von=self.admin,
+        )
+
+    # --- F-20 bis F-23: Ausgabe ---------------------------------------------------
+
+    def test_ausgabe_an_person(self):
+        services.gerat_ausgeben(self.gerat, self.person, ausgefuehrt_von=self.admin)
+        self.gerat.refresh_from_db()
+        self.assertEqual(self.gerat.status, Gerat.STATUS_IN_BENUTZUNG)
+        self.assertEqual(self.gerat.person, self.person)
+        v = Vorgang.objects.filter(gerat=self.gerat).order_by('-zeitpunkt').first()
+        self.assertTrue(v.abschliesst)
+
+    def test_ausgabe_an_ort(self):
+        services.gerat_ausgeben(self.gerat, self.ort, ausgefuehrt_von=self.admin)
+        self.gerat.refresh_from_db()
+        self.assertEqual(self.gerat.status, Gerat.STATUS_IN_BENUTZUNG)
+        self.assertEqual(self.gerat.ort, self.ort)
+
+    def test_ausgabe_verweigert_aus_ausgemustert(self):
+        from datetime import date
+        services.ausmustern(
+            self.gerat, grund="veraltet", datum=date(2026, 1, 1),
+            disposition="Schrotten", ausgefuehrt_von=self.admin,
+        )
+        self.gerat.refresh_from_db()
+        with self.assertRaises(services.GeratFehler):
+            services.gerat_ausgeben(self.gerat, self.person, ausgefuehrt_von=self.admin)
+
+    def test_ausgabe_verweigert_aus_reparatur(self):
+        services.gerat_in_reparatur_geschickt(
+            self.gerat, dienstleister="FixIT", vorgangsnummer="VR-001",
+            notiz="Defekt", ausgefuehrt_von=self.admin,
+        )
+        self.gerat.refresh_from_db()
+        with self.assertRaises(services.GeratFehler):
+            services.gerat_ausgeben(self.gerat, self.person, ausgefuehrt_von=self.admin)
+
+    # --- F-50: Rückgabe ----------------------------------------------------------
+
+    def test_rueckgabe_nach_lager(self):
+        services.gerat_ausgeben(self.gerat, self.person, ausgefuehrt_von=self.admin)
+        self.gerat.refresh_from_db()
+        services.gerat_rueckgeben(
+            self.gerat, zustand_rueckgabe=2, maengel="Display rissig",
+            ausgefuehrt_von=self.admin,
+        )
+        self.gerat.refresh_from_db()
+        self.assertEqual(self.gerat.status, Gerat.STATUS_AUF_LAGER)
+        self.assertIsNone(self.gerat.person)
+        self.assertEqual(self.gerat.zustand, 2)
+        v = Vorgang.objects.filter(gerat=self.gerat).order_by('-zeitpunkt').first()
+        self.assertEqual(v.typ, Vorgang.TYP_RUECKGABE)
+        self.assertTrue(v.abschliesst)
+
+    def test_rueckgabe_ziel_reparatur(self):
+        services.gerat_ausgeben(self.gerat, self.person, ausgefuehrt_von=self.admin)
+        self.gerat.refresh_from_db()
+        services.gerat_rueckgeben(
+            self.gerat, zustand_rueckgabe=3, ziel="reparatur",
+            ausgefuehrt_von=self.admin,
+        )
+        self.gerat.refresh_from_db()
+        self.assertEqual(self.gerat.status, Gerat.STATUS_IN_REPARATUR)
+
+    def test_rueckgabe_fehlend_startet_ausmusterung(self):
+        services.gerat_ausgeben(self.gerat, self.person, ausgefuehrt_von=self.admin)
+        self.gerat.refresh_from_db()
+        services.gerat_rueckgeben(
+            self.gerat, zustand_rueckgabe=1, fehlend=True,
+            ausgefuehrt_von=self.admin,
+        )
+        self.gerat.refresh_from_db()
+        self.assertEqual(self.gerat.status, Gerat.STATUS_AUSGEMUSTERT)
+
+    def test_rueckgabe_verweigert_auf_lager(self):
+        """F-50: Nur In Benutzung oder Verliehen kann zurückgegeben werden."""
+        self.gerat.refresh_from_db()
+        self.assertEqual(self.gerat.status, Gerat.STATUS_AUF_LAGER)
+        with self.assertRaises(services.GeratFehler):
+            services.gerat_rueckgeben(
+                self.gerat, zustand_rueckgabe=1, ausgefuehrt_von=self.admin
+            )
+
+    # --- F-41: Umzug -------------------------------------------------------------
+
+    def test_umzug(self):
+        ort2 = Ort.objects.create(typ=Ort.TYP_LAGER, kennung="M3-LAG2", name="M3-Lager2")
+        services.gerat_ausgeben(self.gerat, self.ort, ausgefuehrt_von=self.admin)
+        self.gerat.refresh_from_db()
+        services.gerat_umziehen(self.gerat, ort2, ausgefuehrt_von=self.admin)
+        self.gerat.refresh_from_db()
+        self.assertEqual(self.gerat.ort, ort2)
+        v = Vorgang.objects.filter(gerat=self.gerat).order_by('-zeitpunkt').first()
+        self.assertEqual(v.typ, Vorgang.TYP_UMZUG)
+        self.assertTrue(v.abschliesst)
+
+    def test_umzug_verweigert_aus_reparatur(self):
+        services.gerat_in_reparatur_geschickt(
+            self.gerat, dienstleister="FixIT", vorgangsnummer="VR-002",
+            notiz="Defekt", ausgefuehrt_von=self.admin,
+        )
+        self.gerat.refresh_from_db()
+        ort2 = Ort.objects.create(typ=Ort.TYP_LAGER, kennung="M3-LAG2", name="M3-Lager2")
+        with self.assertRaises(services.GeratFehler):
+            services.gerat_umziehen(self.gerat, ort2, ausgefuehrt_von=self.admin)
+
+    def test_umzug_verweigert_aus_ausgemustert(self):
+        from datetime import date
+        services.ausmustern(
+            self.gerat, grund="veraltet", datum=date(2026, 1, 1),
+            disposition="Schrotten", ausgefuehrt_von=self.admin,
+        )
+        self.gerat.refresh_from_db()
+        ort2 = Ort.objects.create(typ=Ort.TYP_LAGER, kennung="M3-LAG2", name="M3-Lager2")
+        with self.assertRaises(services.GeratFehler):
+            services.gerat_umziehen(self.gerat, ort2, ausgefuehrt_von=self.admin)
+
+    # --- F-42: Reparatur ---------------------------------------------------------
+
+    def test_reparatur_start(self):
+        services.gerat_in_reparatur_geschickt(
+            self.gerat, dienstleister="FixIT", vorgangsnummer="VR-003",
+            notiz="Display defekt", ausgefuehrt_von=self.admin,
+        )
+        self.gerat.refresh_from_db()
+        self.assertEqual(self.gerat.status, Gerat.STATUS_IN_REPARATUR)
+        v = Vorgang.objects.filter(gerat=self.gerat).order_by('-zeitpunkt').first()
+        self.assertEqual(v.typ, Vorgang.TYP_REPARATUR)
+        self.assertFalse(v.abschliesst)
+
+    def test_reparatur_fertig_ziel_zuordnung(self):
+        services.gerat_ausgeben(self.gerat, self.person, ausgefuehrt_von=self.admin)
+        self.gerat.refresh_from_db()
+        services.gerat_in_reparatur_geschickt(
+            self.gerat, dienstleister="FixIT", vorgangsnummer="VR-004",
+            notiz="Taste defekt", ausgefuehrt_von=self.admin,
+        )
+        self.gerat.refresh_from_db()
+        services.gerat_reparatur_fertig(
+            self.gerat, zustand=2, ziel="zuordnung",
+            kosten=150.0, beleg="RB-2026-001", ausgefuehrt_von=self.admin,
+        )
+        self.gerat.refresh_from_db()
+        self.assertEqual(self.gerat.status, Gerat.STATUS_IN_BENUTZUNG)
+        self.assertEqual(self.gerat.zustand, 2)
+
+    def test_reparatur_fertig_ziel_lager(self):
+        services.gerat_ausgeben(self.gerat, self.person, ausgefuehrt_von=self.admin)
+        self.gerat.refresh_from_db()
+        services.gerat_in_reparatur_geschickt(
+            self.gerat, dienstleister="FixIT", vorgangsnummer="VR-005",
+            notiz="Mauspad", ausgefuehrt_von=self.admin,
+        )
+        self.gerat.refresh_from_db()
+        services.gerat_reparatur_fertig(
+            self.gerat, zustand=3, ziel="lager", ausgefuehrt_von=self.admin,
+        )
+        self.gerat.refresh_from_db()
+        self.assertEqual(self.gerat.status, Gerat.STATUS_AUF_LAGER)
+        self.assertIsNone(self.gerat.person)
+
+    def test_reparatur_start_verweigert_aus_ausgemustert(self):
+        from datetime import date
+        services.ausmustern(
+            self.gerat, grund="veraltet", datum=date(2026, 1, 1),
+            disposition="Schrotten", ausgefuehrt_von=self.admin,
+        )
+        self.gerat.refresh_from_db()
+        with self.assertRaises(services.GeratFehler):
+            services.gerat_in_reparatur_geschickt(
+                self.gerat, dienstleister="FixIT", vorgangsnummer="VR-006",
+                notiz="X", ausgefuehrt_von=self.admin,
+            )
+
+    def test_reparatur_fertig_verweigert_ohne_reparatur(self):
+        with self.assertRaises(services.GeratFehler):
+            services.gerat_reparatur_fertig(
+                self.gerat, zustand=2, ziel="lager", ausgefuehrt_von=self.admin
+            )
+
+    # --- F-55 bis F-58: Ausmusterung ---------------------------------------------
+
+    def test_ausmusterung(self):
+        from datetime import date
+        services.ausmustern(
+            self.gerat, grund="veraltet", datum=date(2026, 1, 1),
+            disposition="Recycling", ausgefuehrt_von=self.admin,
+        )
+        self.gerat.refresh_from_db()
+        self.assertEqual(self.gerat.status, Gerat.STATUS_AUSGEMUSTERT)
+        self.assertIsNone(self.gerat.person)
+        v = Vorgang.objects.filter(gerat=self.gerat).order_by('-zeitpunkt').first()
+        self.assertEqual(v.typ, Vorgang.TYP_AUSMUSTERUNG)
+        self.assertTrue(v.abschliesst)
+
+    def test_ausmusterung_verweigert_wenn_bereits_ausgemustert(self):
+        from datetime import date
+        services.ausmustern(
+            self.gerat, grund="veraltet", datum=date(2026, 1, 1),
+            disposition="Schrotten", ausgefuehrt_von=self.admin,
+        )
+        self.gerat.refresh_from_db()
+        with self.assertRaises(services.GeratFehler):
+            services.ausmustern(
+                self.gerat, grund="defekt", datum=date(2026, 2, 1),
+                disposition="Schrotten", ausgefuehrt_von=self.admin,
+            )
+
+    def test_ausmusterung_verloren_ohne_bestatigung(self):
+        from datetime import date
+        with self.assertRaises(services.GeratFehler):
+            services.ausmustern(
+                self.gerat, grund="verloren", datum=date(2026, 1, 1),
+                disposition="Verlust", bestaetigt_gemeldt=False,
+                ausgefuehrt_von=self.admin,
+            )
+
+    def test_ausmusterung_verloren_mit_bestatigung(self):
+        from datetime import date
+        services.ausmustern(
+            self.gerat, grund="verloren", datum=date(2026, 1, 1),
+            disposition="Verlust", bestaetigt_gemeldt=True,
+            ausgefuehrt_von=self.admin,
+        )
+        self.gerat.refresh_from_db()
+        self.assertEqual(self.gerat.status, Gerat.STATUS_AUSGEMUSTERT)
+
+    def test_ausmusterung_datentraeger_ohne_loeschung(self):
+        kat_dd = Kategorie.objects.create(name="Notebook DD", hat_datentraeger=True)
+        g = services.gerat_anlegen(kategorie=kat_dd, hersteller="Lenovo", modell="T14")
+        with self.assertRaises(services.GeratFehler):
+            services.ausmustern(
+                g, grund="defekt", datum=date(2026, 1, 1),
+                disposition="Schrotten", ausgefuehrt_von=self.admin,
+            )
+
+    def test_ausmusterung_datentraeger_mit_loeschung(self):
+        kat_dd = Kategorie.objects.create(name="Notebook DD", hat_datentraeger=True)
+        g = services.gerat_anlegen(kategorie=kat_dd, hersteller="Lenovo", modell="T14")
+        services.ausmustern(
+            g, grund="defekt", datum=date(2026, 1, 1),
+            disposition="Recycling",
+            loeschung_art="physisch", loeschung_nachweis="Zertifikat XYZ",
+            ausgefuehrt_von=self.admin,
+        )
+        g.refresh_from_db()
+        self.assertEqual(g.status, Gerat.STATUS_AUSGEMUSTERT)
+
+    # --- N-03: Nachvollziehbarkeit -------------------------------------------------
+
+    def test_vorgaenge_nicht_geloescht(self):
+        services.gerat_ausgeben(self.gerat, self.person, ausgefuehrt_von=self.admin)
+        self.gerat.refresh_from_db()
+        services.gerat_rueckgeben(self.gerat, zustand_rueckgabe=1, ausgefuehrt_von=self.admin)
+        anzahl = Vorgang.objects.filter(gerat=self.gerat).count()
+        self.assertEqual(anzahl, 2)
+
+    def test_jeder_vorgang_hat_konto_und_zeitstempel(self):
+        services.gerat_ausgeben(self.gerat, self.person, ausgefuehrt_von=self.admin)
+        v = Vorgang.objects.filter(gerat=self.gerat).order_by('-zeitpunkt').first()
+        self.assertIsNotNone(v.erzeugt_von)
+        self.assertIsNotNone(v.zeitpunkt)
+
+    def test_vorgangshistorie_neueste_zuerst(self):
+        services.gerat_ausgeben(self.gerat, self.person, ausgefuehrt_von=self.admin)
+        self.gerat.refresh_from_db()
+        services.gerat_rueckgeben(self.gerat, zustand_rueckgabe=1, ausgefuehrt_von=self.admin)
+        hist = list(Vorgang.objects.filter(gerat=self.gerat).order_by('-zeitpunkt'))
+        self.assertEqual(hist[0].typ, Vorgang.TYP_RUECKGABE)
+        self.assertEqual(hist[1].typ, Vorgang.TYP_AENDERUNG)
+
+    def test_nach_ausmusterung_keine_weiteren_vorgaenge(self):
+        from datetime import date
+        services.ausmustern(
+            self.gerat, grund="veraltet", datum=date(2026, 1, 1),
+            disposition="Schrotten", ausgefuehrt_von=self.admin,
+        )
+        self.gerat.refresh_from_db()
+        with self.assertRaises(services.GeratFehler):
+            services.gerat_ausgeben(self.gerat, self.person, ausgefuehrt_von=self.admin)
+        with self.assertRaises(services.GeratFehler):
+            services.gerat_rueckgeben(self.gerat, zustand_rueckgabe=1, ausgefuehrt_von=self.admin)
+        ort2 = Ort.objects.create(typ=Ort.TYP_LAGER, kennung="M3-LAG3", name="M3-Lager3")
+        with self.assertRaises(services.GeratFehler):
+            services.gerat_umziehen(self.gerat, ort2, ausgefuehrt_von=self.admin)
+        with self.assertRaises(services.GeratFehler):
+            services.gerat_in_reparatur_geschickt(
+                self.gerat, dienstleister="FixIT", vorgangsnummer="VR-999",
+                notiz="X", ausgefuehrt_von=self.admin,
+            )
