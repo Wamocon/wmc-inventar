@@ -23,7 +23,7 @@ from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from .models import Konto
-from .zeit import entwicklungsmodus_aktiv, jetzt_wie_im_entwicklungsmodus
+from .zeit import jetzt_wie_im_entwicklungsmodus
 from .forms import (
     AnmeldeForm,
     KontoForm,
@@ -291,6 +291,25 @@ def konto_aendern(request, pk):
         messages.success(request, f"Konto {konto.email} geändert.")
         return redirect(reverse("konten:konten-liste"))
     return render(request, "konten/konto_aendern.html", {"form": form, "konto": konto})
+
+
+# ---------------------------------------------------------------------------
+# Übersicht (TESTSCHNITTSTELLE 3: "/" für Admin und Leser)
+# ---------------------------------------------------------------------------
+
+def uebersicht(request):
+    """Übersicht: die Startseite nach der Anmeldung (TESTSCHNITTSTELLE 3).
+
+    Für Admin und Leser antwortet "/" mit 200 und zeigt die
+    Überschrift und die Hauptnavigation.
+    Für Mitarbeiter wird auf "/meine-geraete/" weitergeleitet
+    (F-110, M5; die Seite mit Kennzahlen kommt mit M7).
+    """
+    if not request.user.is_authenticated:
+        return redirect(reverse("konten:anmelden"))
+    if request.user.ist_mitarbeiter:
+        return redirect("/meine-geraete/")
+    return render(request, "startseite.html")
 
 
 # ---------------------------------------------------------------------------

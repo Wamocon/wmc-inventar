@@ -1,7 +1,9 @@
-"""Tests für die Login-Funktion (F-01).
+"""Tests für die Login-Funktion (F-01) und die Übersicht (TESTSCHNITTSTELLE 3).
 
 Sicherstellen, dass die Anmeldung funktioniert und der
 fehlerhafte Feldname "fehlersuche" nicht mehr vorkommt.
+Zusätzlich: "/" antwortet nach der Anmeldung für Admin mit 200
+und für Mitarbeiter mit einer Weiterleitung nach "/meine-geraete/".
 """
 from __future__ import annotations
 
@@ -9,6 +11,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from konten.models import Konto
+from stammdaten.models import Person
 
 
 class LoginTests(TestCase):
@@ -92,3 +95,51 @@ class LoginTests(TestCase):
         self.konto.save(update_fields=["fehlversuche", "gesperrt_bis"])
         self.konto.refresh_from_db()
         self.assertEqual(self.konto.fehlversuche, 1)
+
+
+class UebersichtTests(TestCase):
+    """TESTSCHNITTSTELLE 3: "/" antwortet je nach Rolle."""
+
+    def setUp(self):
+        # Admin (TESTSCHNITTSTELLE 2)
+        self.konto_admin = Konto.objects.create_konto(
+            email="it-admin@beispiel.test",
+            password="Beispiel-Passwort-2026",
+            rolle=Konto.ROLLE_ADMIN,
+        )
+        # Mitarbeiter (TESTSCHNITTSTELLE 2)
+        self.person = Person.objects.create(
+            anrede=Person.ANREDE_FRAU,
+            vorname="Anna",
+            nachname="Becker",
+            email="anna.becker@beispiel.test",
+        )
+        self.konto_mitarbeiter = Konto.objects.create_konto(
+            email="anna.becker@beispiel.test",
+            password="Beispiel-Passwort-2026",
+            rolle=Konto.ROLLE_MITARBEITER,
+            person=self.person,
+        )
+
+    def test_uebersicht_fuer_admin_200(self):
+        """TESTSCHNITTSTELLE 3: "/" für Admin antwortet mit 200."""
+        self.client.login(
+            username="it-admin@beispiel.test",
+            password="Beispiel-Passwort-2026",
+        )
+        antwort = self.client.get("/")
+        self.assertEqual(antwort.status_code, 200)
+        # Die Seite zeigt die Überschrift "Übersicht" und die Navigation
+        text = antwort.content.decode()
+        self.assertIn("Übersicht", text)
+        self.assertIn('data-test="hauptnavigation"', text)
+
+    def test_uebersicht_fuer_mitarbeiter_redirect(self):
+        """TESTSCHNITTSTELLE 3: "/" für Mitarbeiter weiterleitet nach /meine-geraete/."""
+        self.client.login(
+            username="anna.becker@beispiel.test",
+            password="Beispiel-Passwort-2026",
+        )
+        antwort = self.client.get("/")
+        self.assertEqual(antwort.status_code, 302)
+        self.assertEqual(antwort["Location"], "/meine-geraete/")

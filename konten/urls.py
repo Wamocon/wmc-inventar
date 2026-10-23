@@ -5,6 +5,7 @@ from . import views
 app_name = "konten"
 
 urlpatterns = [
+    path("", views.uebersicht, name="uebersicht"),
     path("anmelden/", views.anmelden, name="anmelden"),
     path("abmelden/", views.abmelden, name="abmelden"),
     path("passwort-vergessen/", views.passwort_vergessen, name="passwort-vergessen"),
