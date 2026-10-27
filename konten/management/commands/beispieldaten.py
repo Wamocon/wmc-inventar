@@ -172,6 +172,7 @@ class Command(BaseCommand):
         # zuerst die Tabellen, die auf andere verweisen, dann die Referenzierten.
         for tabelle in (
             "geraete_geratkonflikt",   # FK → geraete_gerat
+            "geraete_vorgang",         # FK → geraete_gerat, konten_konto, stammdaten_person
             "geraete_gerat",          # FK → konten_konto, stammdaten_*
             "geraete_importlauf",     # FK → konten_konto
             "konten_konto",          # FK → stammdaten_person

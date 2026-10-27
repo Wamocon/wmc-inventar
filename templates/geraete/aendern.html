@@ -1,36 +1,34 @@
 {% extends "basis.html" %}
-{% block titel %}{{ gerat.inventarnummer }} ändern · WMC Inventar{% endblock %}
+{% block titel %}Stammdaten bearbeiten · WMC Inventar{% endblock %}
 {% block inhalt %}
 <div class="page-head">
-  <div><h1>{{ gerat.inventarnummer }} ändern</h1><p class="muted lead">Stammdaten ändern. Inventarnummer bleibt unverändert (F-15, F-12).</p></div>
+  <div>
+    <h1>Stammdaten bearbeiten</h1>
+    <p class="muted lead">{{ gerat.inventarnummer }} · {{ gerat.geraetename|default:gerat.modell }} (F-15)</p>
+  </div>
 </div>
-<form method="post" data-test="aender-formular">
-  {% csrf_token %}
-  <div class="meldungen">
-    {% if form.non_field_errors %}<div class="meldung error" data-test="formular-fehler">{% for e in form.non_field_errors %}{{ e }}{% endfor %}</div>{% endif %}
-  </div>
-  <div class="form-grid">
-    <div class="field"><label class="req" for="id_kategorie">Kategorie</label>{{ form.kategorie }}</div>
-    <div class="field"><label class="req" for="id_hersteller">Hersteller</label>{{ form.hersteller }}</div>
-    <div class="field"><label class="req" for="id_modell">Modell</label>{{ form.modell }}</div>
-    <div class="field"><label for="id_seriennummer">Seriennummer</label>{{ form.seriennummer }}</div>
-    <div class="field"><label for="id_zustand">Zustand</label>{{ form.zustand }}</div>
-    <div class="field"><label class="check"><input type="checkbox" name="leihpool" id="id_leihpool" value="on" {% if form.leihpool.value %}checked{% endif %}> Leihpool</label></div>
-    <div class="field"><label for="id_person">Person</label>{{ form.person }}</div>
-    <div class="field"><label for="id_ort">Ort</label>{{ form.ort }}</div>
-    <div class="field full"><label for="id_geraetename">Gerätename</label>{{ form.geraetename }}</div>
-    <div class="field full"><label for="id_standardzuehoer">Standardzubehör</label>{{ form.standardzuehoer }}</div>
-    <div class="field full"><label for="id_technische_daten">Technische Daten</label>{{ form.technische_daten }}</div>
-    <div class="field"><label for="id_kaufdatum">Kaufdatum</label>{{ form.kaufdatum }}</div>
-    <div class="field"><label for="id_kaufpreis_netto">Kaufpreis netto (EUR)</label>{{ form.kaufpreis_netto }}</div>
-    <div class="field"><label for="id_lieferant">Lieferant</label>{{ form.lieferant }}</div>
-    <div class="field"><label for="id_rechnungsnummer">Rechnungsnummer</label>{{ form.rechnungsnummer }}</div>
-    <div class="field"><label for="id_garantie_bis">Garantie bis</label>{{ form.garantie_bis }}</div>
-    <div class="field full"><label for="id_notiz">Notiz</label>{{ form.notiz }}</div>
-  </div>
-  <div class="actions">
-    <button type="submit" class="btn primary" data-test="aendern-speichern">Speichern</button>
-    <a class="btn link" href="/geraete/{{ gerat.inventarnummer }}/">Abbrechen</a>
-  </div>
-</form>
+<div data-test="dialog" data-name="bearbeiten">
+  <form method="post" data-test="aendern-formular">
+    {% csrf_token %}
+    <div class="meldungen">
+      {% if form.non_field_errors %}<div class="meldung error" data-test="fehler">{% for e in form.non_field_errors %}{{ e }}{% endfor %}</div>{% endif %}
+    </div>
+    <div class="form-grid">
+      {% for field in form %}
+        {% if field.name != "status" %}
+        <div class="field {% if field.field.widget.input_type == "textarea" %}full{% endif %}">
+          <label for="id_{{ field.html_name }}">{{ field.label }}</label>
+          {{ field }}
+          {% if field.errors %}<div class="meldung error">{% for e in field.errors %}{{ e }}{% endfor %}</div>{% endif %}
+        </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+    <p class="muted small">Inventarnummer und Status ändern sich nur über Vorgänge.</p>
+    <div class="actions">
+      <button type="submit" class="btn primary" data-test="speichern">Speichern</button>
+      <a class="btn link" href="/geraete/{{ gerat.inventarnummer }}/" data-test="abbrechen">Abbrechen</a>
+    </div>
+  </form>
+</div>
 {% endblock %}

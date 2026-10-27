@@ -109,13 +109,13 @@ class GeratAusgabeForm(forms.Form):
     ziel_person = forms.ModelChoiceField(
         queryset=Person.objects.all(),
         required=False,
-        label="An Person",
+        label="Person",
         widget=forms.Select(attrs={"data-test": "ausgabe-person"}),
     )
     ziel_ort = forms.ModelChoiceField(
         queryset=None,  # Wird in __init__ gesetzt
         required=False,
-        label="An Ort",
+        label="Arbeitsplatz",
         widget=forms.Select(attrs={"data-test": "ausgabe-ort"}),
     )
     zurueck_am = forms.DateField(
@@ -125,7 +125,7 @@ class GeratAusgabeForm(forms.Form):
     )
     anmerkung = forms.CharField(
         required=False,
-        label="Anmerkung",
+        label="Bemerkung zum Vorgang",
         widget=forms.Textarea(attrs={"rows": 2, "data-test": "anmerkung"}),
     )
 
@@ -159,13 +159,13 @@ class GeratRueckgabeForm(forms.Form):
     )
     maengel = forms.CharField(
         required=False,
-        label="Mängel",
+        label="Bemerkung, Mängel",
         widget=forms.Textarea(attrs={"rows": 2, "data-test": "maengel"}),
     )
     ziel = forms.ChoiceField(
         choices=[("lager", "Lager"), ("reparatur", "Reparatur")],
         required=True,
-        label="Ziel",
+        label="Danach",
         widget=forms.Select(attrs={"data-test": "ziel"}),
     )
     fehlend = forms.BooleanField(
@@ -181,7 +181,7 @@ class GeratUmzugForm(forms.Form):
     ziel_ort = forms.ModelChoiceField(
         queryset=None,  # Wird in __init__ gesetzt
         required=True,
-        label="Zielort",
+        label="Neuer Arbeitsplatz",
         widget=forms.Select(attrs={"data-test": "umzug-ort"}),
     )
 
@@ -205,8 +205,8 @@ class GeratReparaturStartForm(forms.Form):
         widget=forms.TextInput(attrs={"data-test": "vorgangsnummer"}),
     )
     notiz = forms.CharField(
-        required=False,
-        label="Notiz",
+        required=True,
+        label="Fehlerbeschreibung",
         widget=forms.Textarea(attrs={"rows": 2, "data-test": "reparatur-notiz"}),
     )
 
@@ -217,7 +217,7 @@ class GeratReparaturFertigForm(forms.Form):
     zustand = forms.ChoiceField(
         choices=Gerat.ZUSTAENDE,
         required=True,
-        label="Zustand nach Reparatur",
+        label="Zustand jetzt",
         widget=forms.Select(attrs={"data-test": "reparatur-zustand"}),
     )
     ziel = forms.ChoiceField(

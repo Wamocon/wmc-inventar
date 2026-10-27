@@ -784,6 +784,239 @@ class DetailAktionenTests(TestCase):
         antwort = self.client.get(f"/geraete/{g.inventarnummer}/aendern/")
         self.assertEqual(antwort.status_code, 200)
 
+    # --- A-0075: Dialoge (Testschnittstelle Kapitel 4) ---------------------------
+
+    def test_dialog_ausgabe_oeffnet_mit_speichern(self):
+        """Testschnittstelle Zeile 210: Nach Klick auf Aktion ist data-test=dialog
+        mit data-name=ausgabe sichtbar, darin data-test=speichern."""
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get(f"/geraete/{g.inventarnummer}/ausgeben/")
+        self.assertEqual(antwort.status_code, 200)
+        text = antwort.content.decode()
+        self.assertIn('data-test="dialog"', text)
+        self.assertIn('data-name="ausgabe"', text)
+        self.assertIn('data-test="speichern"', text)
+
+    def test_dialog_ausgabe_speichern_zeigt_meldung(self):
+        """Nach dem Speichern zeigt /geraete/<nr>/ die Meldung (data-test=meldung)."""
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.post(
+            f"/geraete/{g.inventarnummer}/ausgeben/",
+            {"ziel_person": self.person.pk},
+        )
+        self.assertEqual(antwort.status_code, 302)
+        self.assertEqual(antwort.headers["Location"], f"/geraete/{g.inventarnummer}/")
+        detail = self.client.get(f"/geraete/{g.inventarnummer}/")
+        self.assertEqual(detail.status_code, 200)
+        self.assertIn('data-test="meldung"', detail.content.decode())
+
+    def test_dialog_rueckgabe_oeffnet_mit_speichern(self):
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        services.gerat_ausgeben(g, self.person, ausgefuehrt_von=self.admin)
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get(f"/geraete/{g.inventarnummer}/rueckgeben/")
+        self.assertEqual(antwort.status_code, 200)
+        text = antwort.content.decode()
+        self.assertIn('data-test="dialog"', text)
+        self.assertIn('data-name="rueckgabe"', text)
+        self.assertIn('data-test="speichern"', text)
+
+    def test_dialog_rueckgabe_speichern_zeigt_meldung(self):
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        services.gerat_ausgeben(g, self.person, ausgefuehrt_von=self.admin)
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.post(
+            f"/geraete/{g.inventarnummer}/rueckgeben/",
+            {"zustand_rueckgabe": "2", "zubehoer_komplett": "on", "ziel": "lager"},
+        )
+        self.assertEqual(antwort.status_code, 302)
+        detail = self.client.get(f"/geraete/{g.inventarnummer}/")
+        self.assertEqual(detail.status_code, 200)
+        self.assertIn('data-test="meldung"', detail.content.decode())
+        self.assertIn('data-test="status"', detail.content.decode())
+
+    def test_dialog_umzug_oeffnet_mit_speichern(self):
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get(f"/geraete/{g.inventarnummer}/umziehen/")
+        self.assertEqual(antwort.status_code, 200)
+        text = antwort.content.decode()
+        self.assertIn('data-test="dialog"', text)
+        self.assertIn('data-name="umzug"', text)
+        self.assertIn('data-test="speichern"', text)
+
+    def test_dialog_umzug_speichern_zeigt_meldung(self):
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.post(
+            f"/geraete/{g.inventarnummer}/umziehen/",
+            {"ziel_ort": self.ort.pk},
+        )
+        self.assertEqual(antwort.status_code, 302)
+        detail = self.client.get(f"/geraete/{g.inventarnummer}/")
+        self.assertEqual(detail.status_code, 200)
+        self.assertIn('data-test="meldung"', detail.content.decode())
+
+    def test_dialog_reparatur_oeffnet_mit_speichern(self):
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get(f"/geraete/{g.inventarnummer}/reparatur/start/")
+        self.assertEqual(antwort.status_code, 200)
+        text = antwort.content.decode()
+        self.assertIn('data-test="dialog"', text)
+        self.assertIn('data-name="reparatur"', text)
+        self.assertIn('data-test="speichern"', text)
+
+    def test_dialog_reparatur_speichern_zeigt_meldung(self):
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.post(
+            f"/geraete/{g.inventarnummer}/reparatur/start/",
+            {
+                "dienstleister": "FixIT",
+                "vorgangsnummer": "VR-001",
+                "notiz": "Display rissig",
+            },
+        )
+        self.assertEqual(antwort.status_code, 302)
+        detail = self.client.get(f"/geraete/{g.inventarnummer}/")
+        self.assertEqual(detail.status_code, 200)
+        self.assertIn('data-test="meldung"', detail.content.decode())
+        g.refresh_from_db()
+        self.assertEqual(g.status, Gerat.STATUS_IN_REPARATUR)
+
+    def test_dialog_reparatur_abschliessen_oeffnet_mit_speichern(self):
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        services.gerat_in_reparatur_geschickt(
+            g, dienstleister="FixIT", vorgangsnummer="VR-001",
+            notiz="Defekt", ausgefuehrt_von=self.admin,
+        )
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get(f"/geraete/{g.inventarnummer}/reparatur/fertig/")
+        self.assertEqual(antwort.status_code, 200)
+        text = antwort.content.decode()
+        self.assertIn('data-test="dialog"', text)
+        self.assertIn('data-name="reparatur-abschliessen"', text)
+        self.assertIn('data-test="speichern"', text)
+
+    def test_dialog_reparatur_abschliessen_speichern_zeigt_meldung(self):
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        services.gerat_in_reparatur_geschickt(
+            g, dienstleister="FixIT", vorgangsnummer="VR-001",
+            notiz="Defekt", ausgefuehrt_von=self.admin,
+        )
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.post(
+            f"/geraete/{g.inventarnummer}/reparatur/fertig/",
+            {"zustand": "2", "ziel": "lager"},
+        )
+        self.assertEqual(antwort.status_code, 302)
+        detail = self.client.get(f"/geraete/{g.inventarnummer}/")
+        self.assertEqual(detail.status_code, 200)
+        self.assertIn('data-test="meldung"', detail.content.decode())
+        g.refresh_from_db()
+        self.assertEqual(g.status, Gerat.STATUS_AUF_LAGER)
+
+    def test_dialog_ausmustern_oeffnet_mit_speichern(self):
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get(f"/geraete/{g.inventarnummer}/ausmustern/")
+        self.assertEqual(antwort.status_code, 200)
+        text = antwort.content.decode()
+        self.assertIn('data-test="dialog"', text)
+        self.assertIn('data-name="ausmustern"', text)
+        self.assertIn('data-test="speichern"', text)
+
+    def test_dialog_ausmustern_speichern_zeigt_meldung(self):
+        from datetime import date
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.post(
+            f"/geraete/{g.inventarnummer}/ausmustern/",
+            {
+                "grund": "veraltet",
+                "datum": "2026-10-01",
+                "disposition": "Schrotten",
+            },
+        )
+        self.assertEqual(antwort.status_code, 302)
+        detail = self.client.get(f"/geraete/{g.inventarnummer}/")
+        self.assertEqual(detail.status_code, 200)
+        self.assertIn('data-test="meldung"', detail.content.decode())
+        g.refresh_from_db()
+        self.assertEqual(g.status, Gerat.STATUS_AUSGEMUSTERT)
+
+    def test_dialog_bearbeiten_oeffnet_mit_speichern(self):
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get(f"/geraete/{g.inventarnummer}/aendern/")
+        self.assertEqual(antwort.status_code, 200)
+        text = antwort.content.decode()
+        self.assertIn('data-test="dialog"', text)
+        self.assertIn('data-name="bearbeiten"', text)
+        self.assertIn('data-test="speichern"', text)
+
+    def test_dialog_bearbeiten_speichern_zeigt_meldung(self):
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.post(
+            f"/geraete/{g.inventarnummer}/aendern/",
+            {
+                "kategorie": self.kat.pk,
+                "hersteller": "HP",
+                "modell": "ZBook",
+                "seriennummer": "",
+                "zustand": "2",
+                "geraetename": "",
+                "standardzuehoer": "",
+                "technische_daten": "",
+                "kaufdatum": "2026-01-01",
+                "kaufpreis_netto": "",
+                "lieferant": "",
+                "rechnungsnummer": "",
+                "garantie_bis": "",
+                "notiz": "",
+                "person": "",
+                "ort": "",
+                "leihpool": "",
+            },
+        )
+        self.assertEqual(antwort.status_code, 302)
+        detail = self.client.get(f"/geraete/{g.inventarnummer}/")
+        self.assertEqual(detail.status_code, 200)
+        self.assertIn('data-test="meldung"', detail.content.decode())
+
+    def test_dialog_feuer_fehler_bei_ungueltigem_formular(self):
+        """Bei ungültigem Formular zeigt das Element data-test=fehler."""
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.post(
+            f"/geraete/{g.inventarnummer}/ausgeben/",
+            {"ziel_person": "", "ziel_ort": ""},
+        )
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn('data-test="fehler"', antwort.content.decode())
+
+    def test_detail_verbleib_zeigt_person(self):
+        """Gerätedetail zeigt die Markierung verbleib (Testschnittstelle Kapitel 4)."""
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        services.gerat_ausgeben(g, self.person, ausgefuehrt_von=self.admin)
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get(f"/geraete/{g.inventarnummer}/")
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn('data-test="verbleib"', antwort.content.decode())
+
+    def test_detail_data_typ_am_vorgang(self):
+        """data-typ steht auf dem Element data-test=vorgang, nicht auf der Zeile."""
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get(f"/geraete/{g.inventarnummer}/")
+        self.assertEqual(antwort.status_code, 200)
+        text = antwort.content.decode()
+        self.assertIn('data-test="vorgang" data-typ="Aufnahme"', text)
+
 
 # --- M4 Arbeitsplätze (F-62 bis F-64, F-89) -----------------------------------
 

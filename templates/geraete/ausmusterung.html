@@ -7,22 +7,25 @@
     <p class="muted lead">{{ gerat.inventarnummer }} · {{ gerat.geraetename|default:gerat.modell }} (F-55 bis F-58)</p>
   </div>
 </div>
-<form method="post" data-test="ausmusterung-formular">
-  {% csrf_token %}
-  <div class="meldungen">
-    {% if form.non_field_errors %}<div class="meldung error" data-test="formular-fehler">{% for e in form.non_field_errors %}{{ e }}{% endfor %}</div>{% endif %}
-  </div>
-  <div class="form-grid">
-    <div class="field"><label for="id_grund">Grund</label>{{ form.grund }}{% if form.grund.errors %}<div class="meldung error">{% for e in form.grund.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
-    <div class="field"><label for="id_datum">Datum</label>{{ form.datum }}{% if form.datum.errors %}<div class="meldung error">{% for e in form.datum.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
-    <div class="field full"><label for="id_disposition">Verbleib</label>{{ form.disposition }}{% if form.disposition.errors %}<div class="meldung error">{% for e in form.disposition.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
-    <div class="field"><label for="id_loeschung_art">Art der Löschung (bei Datenträgern)</label>{{ form.loeschung_art }}{% if form.loeschung_art.errors %}<div class="meldung error">{% for e in form.loeschung_art.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
-    <div class="field"><label for="id_loeschung_nachweis">Nachweis der Löschung</label>{{ form.loeschung_nachweis }}{% if form.loeschung_nachweis.errors %}<div class="meldung error">{% for e in form.loeschung_nachweis.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
-    <div class="field"><label class="check"><input type="checkbox" name="bestaetigt_gemeldt" id="id_bestaetigt_gemeldt" value="on" {% if form.bestaetigt_gemeldt.value %}checked{% endif %} data-test="bestaetigt-gemeldet"> Vorfall gemeldet (Pflicht bei Verlust/Diebstahl)</label></div>
-  </div>
-  <div class="actions">
-    <button type="submit" class="btn primary" data-test="ausmusterung-speichern">Ausmustern</button>
-    <a class="btn link" href="/geraete/{{ gerat.inventarnummer }}/">Abbrechen</a>
-  </div>
-</form>
+<div data-test="dialog" data-name="ausmustern">
+  <form method="post" data-test="ausmusterung-formular">
+    {% csrf_token %}
+    <div class="meldungen">
+      {% if form.non_field_errors %}<div class="meldung error" data-test="fehler">{% for e in form.non_field_errors %}{{ e }}{% endfor %}</div>{% endif %}
+    </div>
+    <div class="form-grid">
+      <div class="field"><label for="id_grund">Grund</label>{{ form.grund }}{% if form.grund.errors %}<div class="meldung error">{% for e in form.grund.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+      <div class="field"><label for="id_datum">Datum</label>{{ form.datum }}{% if form.datum.errors %}<div class="meldung error">{% for e in form.datum.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+      <div class="field full"><label for="id_disposition">Verbleib</label>{{ form.disposition }}{% if form.disposition.errors %}<div class="meldung error">{% for e in form.disposition.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+      <div class="field"><label for="id_loeschung_art">Art der Löschung (bei Datenträgern, optional)</label>{{ form.loeschung_art }}{% if form.loeschung_art.errors %}<div class="meldung error">{% for e in form.loeschung_art.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+      <div class="field"><label for="id_loeschung_nachweis">Nachweis der Löschung (optional)</label>{{ form.loeschung_nachweis }}{% if form.loeschung_nachweis.errors %}<div class="meldung error">{% for e in form.loeschung_nachweis.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+      <div class="field"><label class="check"><input type="checkbox" name="bestaetigt_gemeldt" id="id_bestaetigt_gemeldt" value="on" {% if form.bestaetigt_gemeldt.value %}checked{% endif %} data-test="bestaetigt-gemeldet"> Der Vorfall ist an Datenschutz bzw. Informationssicherheit gemeldet.</label></div>
+    </div>
+    <p class="muted small">Ausgemusterte Geräte bleiben im Archiv lesbar, lassen sich aber nicht mehr ändern.</p>
+    <div class="actions">
+      <button type="submit" class="btn primary" data-test="speichern">Endgültig ausmustern</button>
+      <a class="btn link" href="/geraete/{{ gerat.inventarnummer }}/" data-test="abbrechen">Abbrechen</a>
+    </div>
+  </form>
+</div>
 {% endblock %}

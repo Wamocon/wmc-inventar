@@ -1,10 +1,10 @@
 # Übergabe WMCNL-2755
 
-Ausgefüllt von: Gregor · Datum: 27.10.2026 · Letzter Commit: (in Arbeit)
+Ausgefüllt von: Gregor · Datum: 27.10.2026 · Letzter Commit: 4935093 (A-0074), A-0075 in Arbeit
 
 ## Zusammenfassung
 
-M1 Grundgerüst, M2 Bestand, M3 Lebenszyklus und M4 Arbeitsplätze sind fertig. Alle 89 Tests sind grün. M3 Nachbesserung (A-0074): Gerätedetail zeigt jetzt Aktionen je Status und Recht (Auf Lager: Ausgabe, Umzug, Reparatur, Ausmustern, Ändern; In Benutzung: Rückgabe, Umzug; In Reparatur: Abschließen). `status` trägt `data-wert`, `historie` trägt `data-typ` je Vorgang (Aufnahme, Ausgabe, Import). Fehler im Formular tragen `data-test="fehler"`. M4 bringt Soll-Ist-Abgleich je Arbeitsplatz (F-62), Bedarf mit Lagerbestand (F-63), Geräte der festen Person getrennt (F-64) und Erstinventur-Fortschritt je Ort (F-89). Offene M4-Anforderungen: Raumplan (F-65, F-67, F-68, F-69), Pop-up je Arbeitsplatz (F-66), QR-Code (F-70), Etiketten (F-71–F-73), Mobile Gerätedetailseite (F-74), Etikett nach Speichern (F-12), Neue Person ausstatten (F-24).
+M1 Grundgerüst, M2 Bestand, M3 Lebenszyklus und M4 Arbeitsplätze sind fertig. Alle 98 Tests sind grün. M3 Nachbesserung (A-0074): Gerätedetail zeigt jetzt Aktionen je Status und Recht (Auf Lager: Ausgabe, Umzug, Reparatur, Ausmustern, Ändern; In Benutzung: Rückgabe, Umzug; In Reparatur: Abschließen). `status` trägt `data-wert`, `historie` trägt `data-typ` je Vorgang (Aufnahme, Ausgabe, Import). Fehler im Formular tragen `data-test="fehler"`. M3 Nachbesserung (A-0075): Alle sieben Vorgänge (Ausgabe, Rückgabe, Umzug, Reparatur, Reparatur abschließen, Ausmustern, Bearbeiten) öffnen sich jetzt als Dialoge mit `data-test="dialog"` und `data-name`, die Schaltfläche `data-test="speichern"` schließt ab, nach dem Speichern erscheint `data-test="meldung"` und das Gerätedetail zeigt den neuen Status. Beschriftungen stimmen mit dem Prototyp überein: Ausgabe "Person" und "Arbeitsplatz", Reparatur starten "Fehlerbeschreibung" (Pflicht), Umzug "Neuer Arbeitsplatz", Reparatur abschließen "Zustand jetzt", Rückgabe "Bemerkung, Mängel" und "Danach". Das Gerätedetail trägt `data-test="verbleib"`, `data-typ` steht auf dem Element `data-test="vorgang"`. Beispieldaten: `_leeren()` leert jetzt auch `geraete_vorgang` vor `geraete_gerat`. M4 bringt Soll-Ist-Abgleich je Arbeitsplatz (F-62), Bedarf mit Lagerbestand (F-63), Geräte der festen Person getrennt (F-64) und Erstinventur-Fortschritt je Ort (F-89). Offene M4-Anforderungen: Raumplan (F-65, F-67, F-68, F-69), Pop-up je Arbeitsplatz (F-66), QR-Code (F-70), Etiketten (F-71–F-73), Mobile Gerätedetailseite (F-74), Etikett nach Speichern (F-12), Neue Person ausstatten (F-24).
 
 ## Stand je Meilenstein
 
@@ -12,7 +12,7 @@ M1 Grundgerüst, M2 Bestand, M3 Lebenszyklus und M4 Arbeitsplätze sind fertig. 
 |---|---|---|---|---|
 | M1 Grundgerüst | fertig | 711ddd5 | 22.10.2026 | Projekt, Anmeldung, Konten, Stammdaten, beispieldaten |
 | M2 Bestand | fertig | | 23.10.2026 | Geräte erfassen, bearbeiten, prüfen, Suche, Konflikte, Arbeitsliste |
-| M3 Lebenszyklus | fertig | | 27.10.2026 | Ausgabe, Rückgabe, Umzug, Reparatur, Ausmusterung, Vorgang-Historie, Gerätedetail-Aktionen (A-0074) |
+| M3 Lebenszyklus | fertig | | 27.10.2026 | Ausgabe, Rückgabe, Umzug, Reparatur, Ausmusterung, Vorgang-Historie, Gerätedetail-Aktionen (A-0074), Vorgänge als Dialoge (A-0075) |
 | M4 Arbeitsplätze | teilweise | 099303b | 23.10.2026 | Soll-Ist-Abgleich (F-62), Bedarf (F-63), Feste Person (F-64), Erstinventur (F-89); offen: Raumplan, QR-Code, Etiketten, Mobile |
 | M5 Verleih | offen | | | |
 | M6 Signatur | offen | | | |
@@ -131,13 +131,17 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 
 ## Wie getestet
 
-Befehle mit gekürzter Ausgabe: `python manage.py test` (Anzahl Tests, Laufzeit, Datenbank), Import der Testdatei mit den Eckwerten, `tageslauf` mit Stichtag, erzeugte PDFs (welche, wie geprüft), Docker, falls verfügbar.
+Befehle mit gekürzter Ausgabe: `python manage.py test` (98 Tests, alle grün), Import der Testfilei mit den Eckwerten, `tageslauf` mit Stichtag, erzeugte PDFs (welche, wie geprüft), Docker, falls verfügbar.
 
 ## Annahmen und Abweichungen
 
 - **Login-Bug (Werkbank 23.10.):** `konten/models.py` hatte das Feld `fehlersuche`, aber `update_fields` in `konten/models.py` und `konten/views.py` verwies auf `fehlversuche`. Behoben: Feld heißt jetzt `fehlversuche` (korrekter Name), alle `update_fields` stimmen überein. Test: `konten/tests.py:test_update_fields_benutzt_fehlversuche`.
 - **ROOT_DIR (Werkbank 23.10.):** `inventar/settings.py` setzt `ROOT_DIR = BASE_DIR`, damit `var/inventar.sqlite3`, `var/dateien` und `var/testsiegel.p12` im Repository liegen, wie `docs/TESTSCHNITTSTELLE.md` Abschnitt 1 es verlangt. Test: `manage.py test` läuft mit `INVENTAR_DEBUG=1` und schreibt nach `var/` im Repo.
 - **beispieldaten --neu (Werkbank 23.10.):** `_leeren()` leert jetzt alle Tabellen in der Reihenfolge der Fremdschlüssel (zuerst die verweisenden, dann die referenzierten). `jetzt.txt` wird aus `ROOT_DIR/var/` gelöscht, nicht aus `BASE_DIR.parent/var/`.
+- **beispieldaten --neu (A-0075, 27.10.):** `_leeren()` leert jetzt auch `geraete_vorgang` vor `geraete_gerat`, weil `Vorgang` einen Fremdschlüssel auf `Gerat` trägt. Ohne diese Zeile schlägt `DELETE FROM geraete_gerat` mit FOREIGN KEY constraint failed an.
+- **Vorgangstypen leihen, instandhaltung, rueckstellung (A-0075, 27.10.):** In Teil 1 (A-0074) entfernt, weil `docs/anforderungen.md` M3 diese Typen nicht verlangt. M5 (Verleih) bringt `leihen` und `rueckstellung`, M6/M7 bringen `instandhaltung`. Die Felder `leihgabe_an`, `leihgabe_seit`, `instandhaltung_frist`, `instandhaltung_von` bleiben im Modell, sie werden in M5/M6/M7 aktiv.
+- **Dialog-Implementierung (A-0075, 27.10.):** Der Dialog ist die Formularseite mit dem Rahmen `data-test="dialog"` und `data-name`, kein Fenster auf dem Gerätedetail. Beide Varianten erfüllen die Testschnittstelle; die Formularseite ist der einfachere Weg, weil die Views schon existieren.
+- **Nicht gebaut (A-0075, 27.10.):** Protokoll und Signatur stehen im Prototyp in den Dialogen, sind aber in M3 nicht verlangt (M6). Sie fehlen deshalb in den Dialogen.
 
 ## Offene Fragen
 

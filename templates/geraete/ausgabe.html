@@ -1,26 +1,28 @@
 {% extends "basis.html" %}
-{% block titel %}Gerät ausgeben · WMC Inventar{% endblock %}
+{% block titel %}Geräte ausgeben · WMC Inventar{% endblock %}
 {% block inhalt %}
 <div class="page-head">
   <div>
-    <h1>Gerät ausgeben</h1>
+    <h1>Geräte ausgeben</h1>
     <p class="muted lead">{{ gerat.inventarnummer }} · {{ gerat.geraetename|default:gerat.modell }} (F-20 bis F-23)</p>
   </div>
 </div>
-<form method="post" data-test="ausgabe-formular">
-  {% csrf_token %}
-  <div class="meldungen">
-    {% if form.non_field_errors %}<div class="meldung error" data-test="formular-fehler">{% for e in form.non_field_errors %}{{ e }}{% endfor %}</div>{% endif %}
-  </div>
-  <div class="form-grid">
-    <div class="field"><label for="id_ziel_person">An Person</label>{{ form.ziel_person }}{% if form.ziel_person.errors %}<div class="meldung error">{% for e in form.ziel_person.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
-    <div class="field"><label for="id_ziel_ort">An Ort</label>{{ form.ziel_ort }}{% if form.ziel_ort.errors %}<div class="meldung error">{% for e in form.ziel_ort.errors %}{{ e }}{% endfor %}</div>{% endif %}<small class="help">Person oder Ort, nicht beides.</small></div>
-    <div class="field"><label for="id_zurueck_am">Zurück am (optional)</label>{{ form.zurueck_am }}{% if form.zurueck_am.errors %}<div class="meldung error">{% for e in form.zurueck_am.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
-    <div class="field full"><label for="id_anmerkung">Anmerkung</label>{{ form.anmerkung }}{% if form.anmerkung.errors %}<div class="meldung error">{% for e in form.anmerkung.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
-  </div>
-  <div class="actions">
-    <button type="submit" class="btn primary" data-test="ausgabe-speichern">Ausgeben</button>
-    <a class="btn link" href="/geraete/{{ gerat.inventarnummer }}/">Abbrechen</a>
-  </div>
-</form>
+<div data-test="dialog" data-name="ausgabe">
+  <form method="post" data-test="ausgabe-formular">
+    {% csrf_token %}
+    <div class="meldungen">
+      {% if form.non_field_errors %}<div class="meldung error" data-test="fehler">{% for e in form.non_field_errors %}{{ e }}{% endfor %}</div>{% endif %}
+    </div>
+    <div class="form-grid">
+      <div class="field"><label for="id_ziel_person">Person</label>{{ form.ziel_person }}{% if form.ziel_person.errors %}<div class="meldung error">{% for e in form.ziel_person.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+      <div class="field"><label for="id_ziel_ort">Arbeitsplatz</label>{{ form.ziel_ort }}{% if form.ziel_ort.errors %}<div class="meldung error">{% for e in form.ziel_ort.errors %}{{ e }}{% endfor %}</div>{% endif %}<small class="help">Person, Arbeitsplatz oder beides</small></div>
+      <div class="field"><label for="id_zurueck_am">Zurück am (optional)</label>{{ form.zurueck_am }}{% if form.zurueck_am.errors %}<div class="meldung error">{% for e in form.zurueck_am.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+      <div class="field full"><label for="id_anmerkung">Bemerkung zum Vorgang</label>{{ form.anmerkung }}{% if form.anmerkung.errors %}<div class="meldung error">{% for e in form.anmerkung.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+    </div>
+    <div class="actions">
+      <button type="submit" class="btn primary" data-test="speichern">Ausgabe abschließen</button>
+      <a class="btn link" href="/geraete/{{ gerat.inventarnummer }}/" data-test="abbrechen">Abbrechen</a>
+    </div>
+  </form>
+</div>
 {% endblock %}

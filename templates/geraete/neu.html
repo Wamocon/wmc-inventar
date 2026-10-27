@@ -7,7 +7,7 @@
 <form method="post" action="/geraete/speichern/" data-test="geraet-formular">
   {% csrf_token %}
   <div class="meldungen">
-    {% if form.non_field_errors %}<div class="meldung error" data-test="formular-fehler">{% for e in form.non_field_errors %}{{ e }}{% endfor %}</div>{% endif %}
+    {% if form.non_field_errors %}<div class="meldung error" data-test="fehler">{% for e in form.non_field_errors %}{{ e }}{% endfor %}</div>{% endif %}
   </div>
   <div class="form-grid">
     <div class="field"><label class="req" for="id_kategorie">Kategorie</label>{{ form.kategorie }}{% if form.kategorie.errors %}<div class="meldung error" data-test="fehler-kategorie">{% for e in form.kategorie.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>

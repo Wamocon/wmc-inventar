@@ -44,6 +44,9 @@
   {% if gerat.person %} · zuweisende Person: {{ gerat.person.voller_name }}{% endif %}
   {% if gerat.ort %} · Ort: {{ gerat.ort.kennung }}{% endif %}
   {% if gerat.leihpool %} · Leihpool{% endif %}</p>
+  <p data-test="verbleib">
+    {% if gerat.person %}Bei {{ gerat.person.voller_name }}{% elif gerat.ort %}An {{ gerat.ort.kennung }}{% else %}Lager{% endif %}
+  </p>
 </div>
 
 <div class="abschnitt">
@@ -125,7 +128,7 @@
     <p class="muted">Gerät ausgeben, umziehen, reparieren oder ausmustern.</p>
     <div class="liste">
       <div class="zeile">
-        <strong>Ausgeben</strong>
+        <strong>Ausgabe</strong>
         <a href="/geraete/{{ gerat.inventarnummer }}/ausgeben/" class="btn" data-test="aktion-ausgabe">Ausgeben</a>
       </div>
       <div class="zeile">
@@ -176,8 +179,8 @@
   {% if gerat.vorgaenge.exists %}
   <div class="liste" data-test="historie">
     {% for v in gerat.vorgaenge.all %}
-    <div class="zeile" data-typ="{{ v.get_typ_display }}">
-      <span data-test="vorgang">{{ v.get_typ_display }}</span>
+    <div class="zeile">
+      <span data-test="vorgang" data-typ="{{ v.get_typ_display }}">{{ v.get_typ_display }}</span>
       <span data-test="zeitpunkt">{{ v.zeitpunkt|date:"d.m.Y H:i" }}</span>
       {% if v.erzeugt_von %}<span data-test="erzeugt-von">{{ v.erzeugt_von.name }}</span>{% endif %}
       {% if v.notiz %}<span data-test="notiz-vorgang">{{ v.notiz }}</span>{% endif %}

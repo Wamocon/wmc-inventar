@@ -1,27 +1,29 @@
 {% extends "basis.html" %}
-{% block titel %}Gerät zurückgeben · WMC Inventar{% endblock %}
+{% block titel %}Gerät zurücknehmen · WMC Inventar{% endblock %}
 {% block inhalt %}
 <div class="page-head">
   <div>
-    <h1>Gerät zurückgeben</h1>
+    <h1>Gerät zurücknehmen</h1>
     <p class="muted lead">{{ gerat.inventarnummer }} · {{ gerat.geraetename|default:gerat.modell }} (F-50)</p>
   </div>
 </div>
-<form method="post" data-test="rueckgabe-formular">
-  {% csrf_token %}
-  <div class="meldungen">
-    {% if form.non_field_errors %}<div class="meldung error" data-test="formular-fehler">{% for e in form.non_field_errors %}{{ e }}{% endfor %}</div>{% endif %}
-  </div>
-  <div class="form-grid">
-    <div class="field"><label for="id_zustand_rueckgabe">Zustand bei Rückgabe</label>{{ form.zustand_rueckgabe }}{% if form.zustand_rueckgabe.errors %}<div class="meldung error">{% for e in form.zustand_rueckgabe.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
-    <div class="field"><label class="check"><input type="checkbox" name="zubehoer_komplett" id="id_zubehoer_komplett" value="on" {% if form.zubehoer_komplett.value %}checked{% endif %} data-test="zubehoer-komplett"> Zubehör komplett</label></div>
-    <div class="field full"><label for="id_maengel">Mängel</label>{{ form.maengel }}{% if form.maengel.errors %}<div class="meldung error">{% for e in form.maengel.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
-    <div class="field"><label for="id_ziel">Ziel</label>{{ form.ziel }}{% if form.ziel.errors %}<div class="meldung error">{% for e in form.ziel.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
-    <div class="field"><label class="check"><input type="checkbox" name="fehlend" id="id_fehlend" value="on" {% if form.fehlend.value %}checked{% endif %} data-test="fehlend"> Fehlt (startet Ausmusterung)</label></div>
-  </div>
-  <div class="actions">
-    <button type="submit" class="btn primary" data-test="rueckgabe-speichern">Zurückgeben</button>
-    <a class="btn link" href="/geraete/{{ gerat.inventarnummer }}/">Abbrechen</a>
-  </div>
-</form>
+<div data-test="dialog" data-name="rueckgabe">
+  <form method="post" data-test="rueckgabe-formular">
+    {% csrf_token %}
+    <div class="meldungen">
+      {% if form.non_field_errors %}<div class="meldung error" data-test="fehler">{% for e in form.non_field_errors %}{{ e }}{% endfor %}</div>{% endif %}
+    </div>
+    <div class="form-grid">
+      <div class="field"><label for="id_zustand_rueckgabe">Zustand bei Rückgabe</label>{{ form.zustand_rueckgabe }}{% if form.zustand_rueckgabe.errors %}<div class="meldung error">{% for e in form.zustand_rueckgabe.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+      <div class="field"><label class="check"><input type="checkbox" name="zubehoer_komplett" id="id_zubehoer_komplett" value="on" {% if form.zubehoer_komplett.value %}checked{% endif %} data-test="zubehoer-komplett"> Zubehör komplett</label></div>
+      <div class="field full"><label for="id_maengel">Bemerkung, Mängel</label>{{ form.maengel }}{% if form.maengel.errors %}<div class="meldung error">{% for e in form.maengel.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+      <div class="field"><label for="id_ziel">Danach</label>{{ form.ziel }}{% if form.ziel.errors %}<div class="meldung error">{% for e in form.ziel.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+      <div class="field"><label class="check"><input type="checkbox" name="fehlend" id="id_fehlend" value="on" {% if form.fehlend.value %}checked{% endif %} data-test="fehlend"> Fehlt (startet Ausmusterung)</label></div>
+    </div>
+    <div class="actions">
+      <button type="submit" class="btn primary" data-test="speichern">Rückgabe abschließen</button>
+      <a class="btn link" href="/geraete/{{ gerat.inventarnummer }}/" data-test="abbrechen">Abbrechen</a>
+    </div>
+  </form>
+</div>
 {% endblock %}

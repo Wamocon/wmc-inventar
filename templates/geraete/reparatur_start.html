@@ -7,19 +7,22 @@
     <p class="muted lead">{{ gerat.inventarnummer }} · {{ gerat.geraetename|default:gerat.modell }} (F-42)</p>
   </div>
 </div>
-<form method="post" data-test="reparatur-start-formular">
-  {% csrf_token %}
-  <div class="meldungen">
-    {% if form.non_field_errors %}<div class="meldung error" data-test="formular-fehler">{% for e in form.non_field_errors %}{{ e }}{% endfor %}</div>{% endif %}
-  </div>
-  <div class="form-grid">
-    <div class="field"><label for="id_dienstleister">Dienstleister</label>{{ form.dienstleister }}{% if form.dienstleister.errors %}<div class="meldung error">{% for e in form.dienstleister.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
-    <div class="field"><label for="id_vorgangsnummer">Vorgangsnummer</label>{{ form.vorgangsnummer }}{% if form.vorgangsnummer.errors %}<div class="meldung error">{% for e in form.vorgangsnummer.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
-    <div class="field full"><label for="id_notiz">Notiz</label>{{ form.notiz }}{% if form.notiz.errors %}<div class="meldung error">{% for e in form.notiz.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
-  </div>
-  <div class="actions">
-    <button type="submit" class="btn primary" data-test="reparatur-start-speichern">Reparatur starten</button>
-    <a class="btn link" href="/geraete/{{ gerat.inventarnummer }}/">Abbrechen</a>
-  </div>
-</form>
+<div data-test="dialog" data-name="reparatur">
+  <form method="post" data-test="reparatur-start-formular">
+    {% csrf_token %}
+    <div class="meldungen">
+      {% if form.non_field_errors %}<div class="meldung error" data-test="fehler">{% for e in form.non_field_errors %}{{ e }}{% endfor %}</div>{% endif %}
+    </div>
+    <div class="form-grid">
+      <div class="field"><label for="id_dienstleister">Dienstleister</label>{{ form.dienstleister }}{% if form.dienstleister.errors %}<div class="meldung error">{% for e in form.dienstleister.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+      <div class="field"><label for="id_vorgangsnummer">Vorgangsnummer</label>{{ form.vorgangsnummer }}{% if form.vorgangsnummer.errors %}<div class="meldung error">{% for e in form.vorgangsnummer.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+      <div class="field full"><label for="id_notiz">Fehlerbeschreibung</label>{{ form.notiz }}{% if form.notiz.errors %}<div class="meldung error">{% for e in form.notiz.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+    </div>
+    <p class="muted small">Die bisherige Zuordnung wird gemerkt. Nach der Reparatur geht das Gerät dorthin zurück oder ins Lager.</p>
+    <div class="actions">
+      <button type="submit" class="btn primary" data-test="speichern">Reparatur starten</button>
+      <a class="btn link" href="/geraete/{{ gerat.inventarnummer }}/" data-test="abbrechen">Abbrechen</a>
+    </div>
+  </form>
+</div>
 {% endblock %}
