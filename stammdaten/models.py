@@ -29,6 +29,31 @@ class Kategorie(models.Model):
         return self.name
 
 
+class Plan(models.Model):
+    """Grundriss eines Standorts und einer Etage (F-65, F-67).
+
+    Positionen der Plätze und Räume (``Ort``) stehen in Prozent von Breite
+    und Höhe dieses Grundrisses, gemessen am Mittelpunkt
+    (TESTSCHNITTSTELLE 2). Der Grundriss selbst ist eine SVG-Datei, die bei
+    ``beispieldaten`` aus ``docs/vorlagen/`` in die DATEIABLAGE kopiert wird.
+    """
+
+    standort = models.CharField("Standort", max_length=120)
+    etage = models.CharField("Etage", max_length=40)
+    grundriss = models.CharField(
+        "Grundriss (Pfad in der DATEIABLAGE)", max_length=320, blank=True, default=""
+    )
+    erzeugt_am = models.DateTimeField("Erzeugt am", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Plan"
+        verbose_name_plural = "Pläne"
+        ordering = ["standort", "etage"]
+
+    def __str__(self):
+        return f"{self.standort}, {self.etage}"
+
+
 class Person(models.Model):
     """Person (F-121, Kapitel 3.2).
 

@@ -3,13 +3,13 @@
 {% block inhalt %}
 <div class="page-head">
   <div><h1>Bedarf</h1><p class="muted lead">Fehlende Ausstattung je Kategorie mit Lagerbestand (F-63).</p></div>
-  <div class="actions"><a class="btn" href="/geraete/arbeitsplaetze/" data-test="zurueck">Zurück</a></div>
+  <div class="actions"><a class="btn" href="/arbeitsplaetze/liste/" data-test="zurueck">Zurück</a></div>
 </div>
 
 {% if uebersicht.summe %}
 <div class="liste" data-test="bedarf-liste">
   {% for kategorie, anzahl in uebersicht.summe.items %}
-  <div class="zeile">
+  <div class="zeile" data-test="bedarfsliste" data-id="{{ kategorie.name }}">
     <span data-test="kategorie">{{ kategorie.name }}</span>
     <span data-test="fehlt">{{ anzahl }} fehlt</span>
     <span data-test="lager">{{ uebersicht.lagerbestand.get(kategorie)|default:0 }} auf Lager</span>

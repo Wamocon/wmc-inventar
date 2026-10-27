@@ -1162,7 +1162,9 @@ class M4ArbeitsplatzTests(TestCase):
 
     def test_ort_pruefen_view(self):
         self.client.login(email="m4.admin@wamocon.de", password="test-passwort-123")
-        response = self.client.post(f"/geraete/arbeitsplaetze/{self.ort.pk}/pruefen/")
+        # A-0076: Die Seiten der Arbeitsplätze liegen unter /arbeitsplaetze/,
+        # die Detailseite und Prüfen nehmen die Kennung (TESTSCHNITTSTELLE Kap. 3).
+        response = self.client.post("/arbeitsplaetze/M4-AP-01/pruefen/")
         self.assertEqual(response.status_code, 302)
         self.ort.refresh_from_db()
         self.assertIsNotNone(self.ort.aktualisiert_am)

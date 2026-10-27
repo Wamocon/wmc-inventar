@@ -1,0 +1,93 @@
+<div class="popup-inhalt" data-test="platz-popup-inhalt" role="dialog" aria-modal="true">
+  <div class="popup-kopf">
+    <h2 data-test="popup-kennung">{{ ort.kennung }}</h2>
+    <button type="button" class="btn sm" data-test="popup-schliessen" aria-label="Schließen">✕</button>
+  </div>
+
+  <div class="popup-daten">
+    <p data-test="popup-raum">{{ ort.name }}{% if ort.standort %} · {{ ort.standort }}{% if ort.etage %}, {{ ort.etage }}{% endif %}{% endif %}</p>
+    <p data-test="popup-person">Feste Person: {% if ort.feste_person %}{{ ort.feste_person.voller_name }}{% else %}—{% endif %}</p>
+    <p data-test="popup-profil">Profil: {% if ort.profil %}{{ ort.profil.name }}{% else %}—{% endif %}</p>
+  </div>
+
+  {% if abgleich %}
+  <div class="popup-abgleich">
+    <h3 data-test="popup-abgleich-ergebnis">
+      {% if abgleich.ergebnis == "vollstaendig" %}✓ vollständig
+      {% elif abgleich.ergebnis == "unvollstaendig" %}✗ unvollständig
+      {% else %}+ mehr als Soll{% endif %}
+    </h3>
+    {% if abgleich.fehlend %}
+    <div class="liste" data-test="popup-fehlliste">
+      {% for kategorie, anzahl in abgleich.fehlend %}
+      <div class="zeile">
+        <span>{{ kategorie.name }}</span>
+        <span>{{ anzahl }} fehlt</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if abgleich.zuviel %}
+    <div class="liste" data-test="popup-mehrliste">
+      {% for kategorie, anzahl in abgleich.zuviel %}
+      <div class="zeile">
+        <span>{{ kategorie.name }}</span>
+        <span>{{ anzahl }} zusätzlich</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if koennen_aendern and abgleich.fehlend %}
+    <div class="popup-aktionen" data-test="popup-aktionen">
+      <a class="btn sm primary"
+         href="/arbeitsplaetze/{{ ort.kennung }}/ausgeben/"
+         data-test="popup-ausgeben">Fehlendes vom Lager ausgeben</a>
+      <a class="btn sm"
+         href="/arbeitsplaetze/{{ ort.kennung }}/etiketten/"
+         data-test="popup-etiketten">Etiketten für den Platz</a>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <div class="popup-geraete">
+    <h3>Geräte am Platz</h3>
+    <div class="liste" data-test="popup-geraete-am-platz">
+      {% for g in gerate %}
+      <div class="zeile">
+        <span class="inv num" data-test="popup-inventarnummer">{{ g.inventarnummer }}</span>
+        <span data-test="popup-zeile">
+          {{ g.kategorie.name }} · {{ g.modell }}
+          {% if g.seriennummer %} · SN {{ g.seriennummer }}{% endif %} · {{ g.get_zustand_display }}
+        </span>
+        <a class="btn sm" href="/geraete/{{ g.inventarnummer }}/" data-test="popup-gerat-link">Ansehen</a>
+      </div>
+      {% empty %}
+      <div class="zeile muted">Keine Geräte an diesem Ort.</div>
+      {% endfor %}
+    </div>
+  </div>
+
+  {% if personen_gerate %}
+  <div class="popup-personen-geraete">
+    <h3>Geräte der festen Person</h3>
+    <div class="liste" data-test="popup-geraete-der-person">
+      {% for g in personen_gerate %}
+      <div class="zeile">
+        <span class="inv num" data-test="popup-inventarnummer">{{ g.inventarnummer }}</span>
+        <span data-test="popup-zeile">
+          {{ g.kategorie.name }} · {{ g.modell }}
+          {% if g.seriennummer %} · SN {{ g.seriennummer }}{% endif %} · {{ g.get_zustand_display }}
+        </span>
+        <a class="btn sm" href="/geraete/{{ g.inventarnummer }}/" data-test="popup-gerat-link">Ansehen</a>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="popup-fuss">
+    <a class="btn sm" href="/arbeitsplaetze/{{ ort.kennung }}/" data-test="popup-arbeitsplatz-link">Zum Arbeitsplatz</a>
+    <button type="button" class="btn sm" data-test="popup-schliessen">Schließen</button>
+  </div>
+</div>

@@ -7,9 +7,10 @@
     <p class="muted lead">Arbeitsplatz mit Soll-Ist-Abgleich (F-62, F-64).</p>
   </div>
   <div class="actions">
-    <a class="btn" href="/geraete/arbeitsplaetze/" data-test="zurueck">Zur Liste</a>
+    <a class="btn" href="/arbeitsplaetze/liste/" data-test="zurueck">Zur Liste</a>
+    <a class="btn" href="/arbeitsplaetze/?hervorheben={{ ort.standort|urlencode }}|{{ ort.kennung }}" data-test="im-raumplan">Im Raumplan zeigen</a>
     {% if user.ist_admin or user.ist_mitarbeiter %}
-    <form method="post" action="/geraete/arbeitsplaetze/{{ ort.pk }}/pruefen/" data-test="pruefen-formular">
+    <form method="post" action="/arbeitsplaetze/{{ ort.kennung }}/pruefen/" data-test="pruefen-formular">
       {% csrf_token %}
       <button type="submit" class="btn" data-test="pruefen">Ort als geprüft markieren</button>
     </form>
@@ -21,11 +22,11 @@
   <h2>Abgleich</h2>
   <p data-test="abgleich-ergebnis">
     {% if abgleich.ergebnis == "vollstaendig" %}
-      <span class="chip-status in-benutzung">vollständig</span>
+      <span class="chip-status in-benutzung">✓ vollständig</span>
     {% elif abgleich.ergebnis == "unvollstaendig" %}
-      <span class="chip-status ausgemustert">unvollständig</span>
+      <span class="chip-status ausgemustert">✗ unvollständig</span>
     {% else %}
-      <span class="chip-status in-reparatur">mehr als Soll</span>
+      <span class="chip-status in-reparatur">+ mehr als Soll</span>
     {% endif %}
     {% if ort.profil %} · Profil: {{ ort.profil.name }}{% endif %}
     {% if ort.feste_person %} · Feste Person: {{ ort.feste_person.voller_name }}{% endif %}
@@ -37,7 +38,7 @@
   <h2>Fehlt</h2>
   <div class="liste" data-test="fehlliste">
     {% for kategorie, anzahl in abgleich.fehlend %}
-    <div class="zeile">
+    <div class="zeile" data-test="bedarfsliste" data-id="{{ kategorie.name }}">
       <span data-test="fehlend-kategorie">{{ kategorie.name }}</span>
       <span data-test="fehlend-anzahl">{{ anzahl }} fehlt</span>
       <a class="btn sm" href="/geraete/?kategorie={{ kategorie.pk }}&status=auf-lager" data-test="lager-link">Auf Lager suchen</a>

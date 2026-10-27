@@ -4,8 +4,9 @@
 <div class="page-head">
   <div><h1>Arbeitsplätze</h1><p class="muted lead">Soll-Ist-Abgleich je Arbeitsplatz (F-62).</p></div>
   <div class="actions">
-    <a class="btn" href="/geraete/arbeitsplaetze/bedarf/" data-test="bedarf-link">Bedarf</a>
-    <a class="btn" href="/geraete/erstinventur/" data-test="erstinventur-link">Erstinventur</a>
+    <a class="btn" href="/arbeitsplaetze/" data-test="raumplan-link">Raumplan</a>
+    <a class="btn" href="/arbeitsplaetze/bedarf/" data-test="bedarf-link">Bedarf</a>
+    <a class="btn" href="/arbeitsplaetze/pruefen/" data-test="erstinventur-link">Erstinventur</a>
   </div>
 </div>
 
@@ -17,11 +18,11 @@
     <span data-test="ort-kennung">{{ z.ort.kennung }}</span>
     <span data-test="abgleich-ergebnis">
       {% if z.abgleich.ergebnis == "vollstaendig" %}
-        <span class="chip-status in-benutzung">vollständig</span>
+        <span class="chip-status in-benutzung">✓ vollständig</span>
       {% elif z.abgleich.ergebnis == "unvollstaendig" %}
-        <span class="chip-status ausgemustert">unvollständig</span>
+        <span class="chip-status ausgemustert">✗ unvollständig</span>
       {% else %}
-        <span class="chip-status in-reparatur">mehr als Soll</span>
+        <span class="chip-status in-reparatur">+ mehr als Soll</span>
       {% endif %}
     </span>
     <span data-test="fehlliste">
@@ -34,7 +35,7 @@
         <span class="chip-status in-reparatur">{{ anzahl }} × {{ kategorie.name }}</span>
       {% endfor %}
     </span>
-    <a class="btn sm" href="/geraete/arbeitsplaetze/{{ z.ort.pk }}/" data-test="detail-link">Ansehen</a>
+    <a class="btn sm" href="/arbeitsplaetze/{{ z.ort.kennung }}/" data-test="detail-link">Ansehen</a>
   </div>
   {% empty %}
   <div class="zeile muted">Keine Arbeitsplätze gefunden.</div>

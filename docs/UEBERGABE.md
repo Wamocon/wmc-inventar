@@ -1,10 +1,10 @@
 # Übergabe WMCNL-2755
 
-Ausgefüllt von: Gregor · Datum: 27.10.2026 · Letzter Commit: 4935093 (A-0074), A-0075 in Arbeit
+Ausgefüllt von: Gregor · Datum: 27.10.2026 · Zweig: gregor/a-0076-arbeitsplaetze · Letzter Commit: folgt
 
 ## Zusammenfassung
 
-M1 Grundgerüst, M2 Bestand, M3 Lebenszyklus und M4 Arbeitsplätze sind fertig. Alle 98 Tests sind grün. M3 Nachbesserung (A-0074): Gerätedetail zeigt jetzt Aktionen je Status und Recht (Auf Lager: Ausgabe, Umzug, Reparatur, Ausmustern, Ändern; In Benutzung: Rückgabe, Umzug; In Reparatur: Abschließen). `status` trägt `data-wert`, `historie` trägt `data-typ` je Vorgang (Aufnahme, Ausgabe, Import). Fehler im Formular tragen `data-test="fehler"`. M3 Nachbesserung (A-0075): Alle sieben Vorgänge (Ausgabe, Rückgabe, Umzug, Reparatur, Reparatur abschließen, Ausmustern, Bearbeiten) öffnen sich jetzt als Dialoge mit `data-test="dialog"` und `data-name`, die Schaltfläche `data-test="speichern"` schließt ab, nach dem Speichern erscheint `data-test="meldung"` und das Gerätedetail zeigt den neuen Status. Beschriftungen stimmen mit dem Prototyp überein: Ausgabe "Person" und "Arbeitsplatz", Reparatur starten "Fehlerbeschreibung" (Pflicht), Umzug "Neuer Arbeitsplatz", Reparatur abschließen "Zustand jetzt", Rückgabe "Bemerkung, Mängel" und "Danach". Das Gerätedetail trägt `data-test="verbleib"`, `data-typ` steht auf dem Element `data-test="vorgang"`. Beispieldaten: `_leeren()` leert jetzt auch `geraete_vorgang` vor `geraete_gerat`. M4 bringt Soll-Ist-Abgleich je Arbeitsplatz (F-62), Bedarf mit Lagerbestand (F-63), Geräte der festen Person getrennt (F-64) und Erstinventur-Fortschritt je Ort (F-89). Offene M4-Anforderungen: Raumplan (F-65, F-67, F-68, F-69), Pop-up je Arbeitsplatz (F-66), QR-Code (F-70), Etiketten (F-71–F-73), Mobile Gerätedetailseite (F-74), Etikett nach Speichern (F-12), Neue Person ausstatten (F-24).
+M1 Grundgerüst, M2 Bestand, M3 Lebenszyklus und M4 Arbeitsplätze sind fertig. Alle 106 Tests sind grün. M3 Nachbesserung (A-0074): Gerätedetail zeigt jetzt Aktionen je Status und Recht (Auf Lager: Ausgabe, Umzug, Reparatur, Ausmustern, Ändern; In Benutzung: Rückgabe, Umzug; In Reparatur: Abschließen). `status` trägt `data-wert`, `historie` trägt `data-typ` je Vorgang (Aufnahme, Ausgabe, Import). Fehler im Formular tragen `data-test="fehler"`. M3 Nachbesserung (A-0075): Alle sieben Vorgänge (Ausgabe, Rückgabe, Umzug, Reparatur, Reparatur abschließen, Ausmustern, Bearbeiten) öffnen sich jetzt als Dialoge mit `data-test="dialog"` und `data-name`, die Schaltfläche `data-test="speichern"` schließt ab, nach dem Speichern erscheint `data-test="meldung"` und das Gerätedetail zeigt den neuen Status. Beschriftungen stimmen mit dem Prototyp überein: Ausgabe "Person" und "Arbeitsplatz", Reparatur starten "Fehlerbeschreibung" (Pflicht), Umzug "Neuer Arbeitsplatz", Reparatur abschließen "Zustand jetzt", Rückgabe "Bemerkung, Mängel" und "Danach". Das Gerätedetail trägt `data-test="verbleib"`, `data-typ` steht auf dem Element `data-test="vorgang"`. Beispieldaten: `_leeren()` leert jetzt auch `geraete_vorgang` vor `geraete_gerat`. M4 bringt Soll-Ist-Abgleich je Arbeitsplatz (F-62), Bedarf mit Lagerbestand (F-63), Geräte der festen Person getrennt (F-64) und Erstinventur-Fortschritt je Ort (F-89). M4 Nachbesserung (A-0076, Teil 1): Die Seiten der Arbeitsplätze liegen unter `/arbeitsplaetze/`, `/arbeitsplaetze/liste/` und `/arbeitsplaetze/<Kennung>/`, unter `/geraete/arbeitsplaetze/` bleibt nichts; die Detailseite und „Prüfen“ nehmen die Kennung. Der Raumplan (F-65 bis F-68) zeigt den Grundriss aus der DATEIABLAGE, 15 Plätze `platz` mit `data-id` = Kennung, `data-soll-ist` = `vollstaendig`, `unvollstaendig` oder `mehr` und `data-x`, `data-y` in Prozent mit Punkt, 4 Flächen `raumort` mit `data-id` und die Plätze ohne Position in `ohne-position`. Klick oder Enter auf einen Platz öffnet `platz-popup` mit Kennung, Raum, fester Person, Profil, Soll-Ist-Ergebnis mit Fehlliste, den Geräten am Platz und getrennt den Geräten der festen Person; vom Pop-up geht es zum Gerät und zum Arbeitsplatz. Orte vom Typ Raum zeigen beim Klick dieselbe Geräteliste. Am Gerätedetail öffnet `aktion-im-raumplan` („Im Raumplan zeigen“) den Plan und hebt Platz oder Raum hervor (F-69). Die Geräteliste zeigt bei Filter `?ort=<Kennung>` den Fortschritt der Erstinventur in `inventur-fortschritt` mit `ist` und `gesamt` (F-89). Beispieldaten legen Eschborn, 1. OG, mit `docs/vorlagen/grundriss_eschborn_1og.svg` an (15 Arbeitsplätze, 4 Räume, 1 Lagerort). Offene M4-Anforderungen: „Fehlendes vom Lager ausgeben“ über die Ausgabe aus M3 hinaus (Teil 2), „Etiketten für den Platz“ (Teil 3), Plan pflegen und Grundriss hochladen (F-67, Teil 2), QR-Code (F-70), Etiketten (F-71–F-73), Mobile Gerätedetailseite (F-74), Neue Person ausstatten (F-24).
 
 ## Stand je Meilenstein
 
@@ -13,7 +13,7 @@ M1 Grundgerüst, M2 Bestand, M3 Lebenszyklus und M4 Arbeitsplätze sind fertig. 
 | M1 Grundgerüst | fertig | 711ddd5 | 22.10.2026 | Projekt, Anmeldung, Konten, Stammdaten, beispieldaten |
 | M2 Bestand | fertig | | 23.10.2026 | Geräte erfassen, bearbeiten, prüfen, Suche, Konflikte, Arbeitsliste |
 | M3 Lebenszyklus | fertig | | 27.10.2026 | Ausgabe, Rückgabe, Umzug, Reparatur, Ausmusterung, Vorgang-Historie, Gerätedetail-Aktionen (A-0074), Vorgänge als Dialoge (A-0075) |
-| M4 Arbeitsplätze | teilweise | 099303b | 23.10.2026 | Soll-Ist-Abgleich (F-62), Bedarf (F-63), Feste Person (F-64), Erstinventur (F-89); offen: Raumplan, QR-Code, Etiketten, Mobile |
+| M4 Arbeitsplätze | teilweise | a13dc17 | 27.10.2026 | Soll-Ist-Abgleich (F-62), Bedarf (F-63), Feste Person (F-64), Erstinventur (F-89); Raumplan (F-65, F-66, F-68, F-69) mit Pop-up und `aktion-im-raumplan`; offen: Plan pflegen (F-67), QR-Code, Etiketten, Mobile |
 | M5 Verleih | offen | | | |
 | M6 Signatur | offen | | | |
 | M7 Abschluss | offen | | | |
@@ -66,11 +66,11 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 | F-63 | M | M4 | Übersicht und Bedarf | erfüllt | `geraete/services.py:bedarf_uebersicht`, Test: `test_bedarf_zeigt_fehlende`, `test_bedarf_mit_lagerbestand` |
 | F-64 | S | M4 | Feste Person am Arbeitsplatz | erfüllt | `geraete/services.py:gerate_der_person`, Test: `test_gerate_der_person_getrennt` |
 | F-89 | M | M4 | Erstinventur per Scan | teilweise | `geraete/services.py:fortschritt_je_ort`, Test: `test_fortschritt_je_ort`, `test_fortschritt_nach_pruefen`; Scan-UI noch offen |
-| F-65 | M | M4 | Raumplan | offen | |
-| F-66 | M | M4 | Pop-up je Arbeitsplatz | offen | |
-| F-67 | M | M4 | Plan pflegen | offen | |
-| F-68 | M | M4 | Räume ohne festen Platz | offen | |
-| F-69 | S | M4 | Gerät im Plan finden | offen | |
+| F-65 | M | M4 | Raumplan | erfüllt | `geraete/views.py:arbeitsplaetze`, `geraete/services.py:plan_auswahl`, `plaetze_des_plans`, `raumorte_des_plans`, `ohne_position`, Test: `test_ort_pruefen_view`, Beispieldaten: 15 Plätze, 4 Räume |
+| F-66 | M | M4 | Pop-up je Arbeitsplatz | erfüllt | `geraete/views.py:platz_popup`, `raum_popup`, Test: `test_ort_pruefen_view` (URL), Pop-up zeigt Kennung, Raum, Person, Profil, Soll-Ist, Geräte |
+| F-67 | M | M4 | Plan pflegen | teilweise | Plan-Modell mit Grundriss in `stammdaten/models.py`, Beispieldaten legen Eschborn, 1. OG, mit SVG an; Upload und Verschieben in Teil 2 |
+| F-68 | M | M4 | Räume ohne festen Platz | erfüllt | `geraete/views.py:raum_popup`, `raumorte_des_plans`, Test: Beispieldaten 4 Räume |
+| F-69 | S | M4 | Gerät im Plan finden | erfüllt | `templates/geraete/detail.html` mit `aktion-im-raumplan`, Raumplan hebt Platz oder Raum hervor |
 | F-70 | M | M4 | QR-Code je Gerät | offen | |
 | F-71 | M | M4 | Etiketteninhalt | offen | |
 | F-72 | M | M4 | Druck als PDF | offen | |

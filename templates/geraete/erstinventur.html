@@ -3,7 +3,10 @@
 {% block inhalt %}
 <div class="page-head">
   <div><h1>Erstinventur</h1><p class="muted lead">Fortschritt je Ort: geprüft / alle Geräte (F-89, AUFTRAG M4).</p></div>
-  <div class="actions"><a class="btn" href="/geraete/arbeitsplaetze/" data-test="zurueck">Zurück</a></div>
+  <div class="actions">
+    <a class="btn" href="/arbeitsplaetze/liste/" data-test="zurueck">Zurück</a>
+    <a class="btn" href="/arbeitsplaetze/" data-test="raumplan-link">Raumplan</a>
+  </div>
 </div>
 
 <div class="abschnitt">
@@ -15,11 +18,12 @@
   {% for z in zeilen %}
   <div class="zeile">
     <span data-test="ort-kennung">{{ z.ort.kennung }}</span>
-    <span data-test="fortschritt">{{ z.geprueft }} / {{ z.alle }} geprüft</span>
+    <span data-test="fortschritt" data-ist="{{ z.geprueft }}" data-gesamt="{{ z.alle }}">{{ z.geprueft }} / {{ z.alle }} geprüft</span>
     {% if z.vollstaendig %}
-    <span class="chip-status in-benutzung" data-test="vollstaendig">vollständig</span>
+    <span class="chip-status in-benutzung" data-test="vollstaendig">✓ vollständig</span>
     {% endif %}
-    <a class="btn sm" href="/geraete/arbeitsplaetze/{{ z.ort.pk }}/" data-test="detail-link">Ansehen</a>
+    <a class="btn sm" href="/geraete/?ort={{ z.ort.kennung }}" data-test="liste-link">In der Liste</a>
+    <a class="btn sm" href="/arbeitsplaetze/{{ z.ort.kennung }}/" data-test="detail-link">Ansehen</a>
   </div>
   {% empty %}
   <div class="zeile muted">Keine Arbeitsplätze gefunden.</div>

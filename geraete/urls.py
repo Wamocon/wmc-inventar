@@ -1,4 +1,9 @@
-"""URLs für Geräte (M2 Bestand, M3 Lebenszyklus)."""
+"""URLs für Geräte (M2 Bestand, M3 Lebenszyklus).
+
+Die Seiten der Arbeitsplätze und der Raumplan liegen seit A-0076 (Teil 1)
+direkt unter /arbeitsplaetze/, nicht mehr unter /geraete/arbeitsplaetze/
+(TESTSCHNITTSTELLE Kapitel 3).
+"""
 from django.urls import path
 from . import views
 
@@ -19,10 +24,4 @@ urlpatterns = [
     path("<slug:inventarnummer>/reparatur/start/", views.reparatur_start, name="reparatur-start"),
     path("<slug:inventarnummer>/reparatur/fertig/", views.reparatur_fertig, name="reparatur-fertig"),
     path("<slug:inventarnummer>/ausmustern/", views.ausmustern, name="ausmustern"),
-    # M4 Arbeitsplätze
-    path("arbeitsplaetze/", views.arbeitsplaetze_liste, name="arbeitsplaetze"),
-    path("arbeitsplaetze/bedarf/", views.bedarf, name="bedarf"),
-    path("erstinventur/", views.erstinventur, name="erstinventur"),
-    path("arbeitsplaetze/<int:pk>/", views.arbeitsplatz_detail, name="arbeitsplatz-detail"),
-    path("arbeitsplaetze/<int:pk>/pruefen/", views.ort_pruefen, name="ort-pruefen"),
 ]

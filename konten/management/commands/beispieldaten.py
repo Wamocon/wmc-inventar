@@ -105,6 +105,16 @@ RAEUME = [
 # Lagerort (TESTSCHNITTSTELLE 2)
 LAGERORT = ("LAGER-EG", "IT-Lager")
 
+# Raumplan (TESTSCHNITTSTELLE 2, F-65 bis F-67):
+# Plan je Standort und Etage. Der Grundriss kommt aus docs/vorlagen/
+# und wird nach der DATEIABLAGE kopiert.
+PLAN = {
+    "standort": "Eschborn",
+    "etage": "1. OG",
+    "grundriss_datei": "grundriss_eschborn_1og.svg",
+    "ablage_ordner": "grundrisse",
+}
+
 # Geräte je Arbeitsplatz (TESTSCHNITTSTELLE 2, F-45)
 GERATEJE_PLATZ = [
     ("Notebook", "Lenovo", "ThinkPad X1 Carbon"),
@@ -159,6 +169,7 @@ class Command(BaseCommand):
             self._anlegen_kategorien()
             self._anlegen_profile()
             self._anlegen_orte()
+            self._anlegen_plan()
             self._anlegen_personen()
             self._anlegen_konten()
             self._anlegen_geraete()
@@ -181,6 +192,7 @@ class Command(BaseCommand):
             "stammdaten_person",
             "stammdaten_ausstattungsprofil",
             "stammdaten_kategorie",
+            "stammdaten_plan",       # A-0076: Raumplan
         ):
             connection.cursor().execute(f"DELETE FROM {tabelle}")
 
@@ -252,6 +264,34 @@ class Command(BaseCommand):
             standort="Eschborn",
         )
         self.stdout.write(f"  {len(ARBEITSPLAETZE)} Arbeitsplätze, {len(RAEUME)} Räume, 1 Lagerort")
+
+    def _anlegen_plan(self):
+        """Raumplan: Eschborn, 1. OG, mit Grundriss (TESTSCHNITTSTELLE 2, F-65).
+
+        Der Grundriss liegt unter docs/vorlagen/ und wird in die DATEIABLAGE
+        kopiert; der Pfad steht im Modell ``Plan``.
+        """
+        from stammdaten.models import Plan
+
+        grundriss_name = PLAN["grundriss_datei"]
+        quelle = Path(settings.ROOT_DIR) / "docs" / "vorlagen" / grundriss_name
+        ablage = Path(getattr(settings, "DATEIABLAGE", ""))
+        if not ablage:
+            ablage = Path(settings.ROOT_DIR) / "var" / "ablage"
+        ziel_ordner = ablage / PLAN["ablage_ordner"]
+        ziel_ordner.mkdir(parents=True, exist_ok=True)
+        ziel = ziel_ordner / grundriss_name
+        if quelle.exists():
+            import shutil
+            shutil.copy2(quelle, ziel)
+
+        pfad_rel = f"{PLAN['ablage_ordner']}/{grundriss_name}"
+        Plan.objects.create(
+            standort=PLAN["standort"],
+            etage=PLAN["etage"],
+            grundriss=pfad_rel,
+        )
+        self.stdout.write(f"  1 Raumplan ({PLAN['standort']}, {PLAN['etage']})")
 
     def _anlegen_personen(self):
         eintritt = date(2024, 1, 1)

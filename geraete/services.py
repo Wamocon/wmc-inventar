@@ -688,3 +688,70 @@ def fortschritt_je_ort(orte: list[Ort] | None = None) -> list[dict]:
             }
         )
     return zeilen
+
+
+def fortschritt_des_orts(ort: Ort) -> dict:
+    """Fortschritt eines einzelnen Orts (F-89, Markierung ``inventur-fortschritt``).
+
+    Geprüft = „Zuletzt geprüft“ gesetzt und das Gerät ist erfasst
+    (nicht ausgemustert, nicht in Reparatur).
+    """
+    alle = list(Gerat.objects.filter(ort=ort, status__in=_ERFASST))
+    geprueft = [g for g in alle if g.zuletzt_geprueft_am is not None]
+    return {
+        "ort": ort,
+        "geprueft": len(geprueft),
+        "alle": len(alle),
+        "vollstaendig": bool(alle) and len(geprueft) == len(alle),
+    }
+
+
+# --- Raumplan (F-65 bis F-69, A-0076 Teil 1) ------------------------------------
+
+
+def plan_auswahl() -> list[dict]:
+    """Alle Pläne je Standort und Etage, sortiert (F-65)."""
+    from stammdaten.models import Plan
+
+    return list(Plan.objects.order_by("standort", "etage"))
+
+
+def plan_finde(standort: str, etage: str):
+    """Plan nach Standort und Etage, sonst None."""
+    from stammdaten.models import Plan
+
+    return Plan.objects.filter(standort=standort, etage=etage).first()
+
+
+def plaetze_des_plans(plan) -> list[dict]:
+    """Plätze eines Plans mit Soll-Ist-Ergebnis, sortiert nach Kennung
+    (F-65, F-66): jede Zeile trägt Ort und Abgleich.
+    """
+    zeilen = []
+    for ort in Ort.objects.filter(
+        typ=Ort.TYP_ARBEITSPLATZ, standort=plan.standort, etage=plan.etage
+    ).order_by("kennung"):
+        zeilen.append({"ort": ort, "abgleich": soll_ist_abgleich(ort)})
+    return zeilen
+
+
+def raumorte_des_plans(plan) -> list[Ort]:
+    """Räume eines Plans, die Geräte tragen, sortiert nach Kennung (F-68)."""
+    orte = Ort.objects.filter(
+        typ=Ort.TYP_RAUM, standort=plan.standort, etage=plan.etage
+    ).order_by("kennung")
+    return [o for o in orte if Gerat.objects.filter(ort=o, status__in=_ERFASST).exists()]
+
+
+def ohne_position(plan) -> list[dict]:
+    """Plätze eines Plans ohne Position (F-67, Markierung ``ohne-position``)."""
+    return [
+        zeile
+        for zeile in plaetze_des_plans(plan)
+        if zeile["ort"].position_x is None or zeile["ort"].position_y is None
+    ]
+
+
+def grundriss_pfad(plan) -> str:
+    """Pfad der Grundriss-Datei in der DATEIABLAGE (F-65)."""
+    return plan.grundriss

@@ -121,6 +121,16 @@
 </div>
 {% endif %}
 
+{% if gerat.ort and gerat.ort.standort %}
+<div class="abschnitt">
+  <h2>Raumplan</h2>
+  <p class="muted">Den Platz im Grundriss sehen (F-69).</p>
+  <a class="btn"
+     href="/arbeitsplaetze/?hervorheben={{ gerat.ort.standort|urlencode }}|{{ gerat.ort.kennung|urlencode }}"
+     data-test="aktion-im-raumplan">Im Raumplan zeigen</a>
+</div>
+{% endif %}
+
 {% if ist_admin %}
   {% if gerat.status == "auf-lager" %}
   <div class="abschnitt" data-test="lebenszyklus">

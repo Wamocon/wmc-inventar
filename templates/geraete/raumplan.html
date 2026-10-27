@@ -1,0 +1,163 @@
+{% extends "basis.html" %}
+{% block titel %}Raumplan · Arbeitsplätze · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div>
+    <h1>Arbeitsplätze · Raumplan</h1>
+    <p class="muted lead">
+      {% if plan %}{{ plan.standort }}, {{ plan.etage }} (F-65 bis F-69){% else %}Es ist noch kein Plan angelegt.{% endif %}
+    </p>
+  </div>
+  <div class="actions">
+    <a class="btn" href="/arbeitsplaetze/liste/" data-test="liste-link">Liste</a>
+    <a class="btn" href="/arbeitsplaetze/bedarf/" data-test="bedarf-link">Bedarf</a>
+    <a class="btn" href="/arbeitsplaetze/pruefen/" data-test="erstinventur-link">Erstinventur</a>
+  </div>
+</div>
+
+{% if not plan %}
+<p class="muted">Bitte legen Sie mit „beispieldaten“ Beispieldaten an.</p>
+{% endif %}
+
+{% if plan %}
+{% if plane|length > 1 %}
+<div class="plan-auswahl" data-test="plan-auswahl">
+  {% for p in plane %}
+  <a class="btn sm {% if p == plan %}primary{% endif %}"
+     href="/arbeitsplaetze/?plan={{ p.standort|urlencode }}|{{ p.etage|urlencode }}"
+     data-test="plan-wahl">{{ p.standort }}, {{ p.etage }}</a>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="plan-wrap" data-test="raumplan" data-id="{{ plan.standort }}|{{ plan.etage }}">
+  <div class="plan-svg">
+    {% if plan.grundriss %}
+    <img src="/media/{{ plan.grundriss }}" alt="Grundriss {{ plan.standort }}, {{ plan.etage }}">
+    {% else %}
+    <div class="muted">Kein Grundriss hinterlegt.</div>
+    {% endif %}
+  </div>
+
+  <div class="plan-orte">
+    {% for o in raumorte %}
+    <button type="button" class="orte raumort"
+            data-test="raumort"
+            data-id="{{ o.kennung }}"
+            data-x="{{ o.position_x }}"
+            data-y="{{ o.position_y }}"
+            data-pfad="/arbeitsplaetze/raum/{{ o.kennung }}/popup/">
+      <span class="orts-name">{{ o.name }}</span>
+    </button>
+    {% endfor %}
+    {% for o in plaetze %}
+    <button type="button" class="orte platz"
+            data-test="platz"
+            data-id="{{ o.kennung }}"
+            data-soll-ist="{% if o.abgleich.ergebnis == 'vollstaendig' %}vollstaendig{% elif o.abgleich.ergebnis == 'unvollstaendig' %}unvollstaendig{% else %}mehr{% endif %}"
+            data-x="{{ o.position_x }}"
+            data-y="{{ o.position_y }}"
+            data-pfad="/arbeitsplaetze/{{ o.kennung }}/popup/">
+      <span class="orts-name">{{ o.kennung }}</span>
+      <span class="orts-status">
+        {% if o.abgleich.ergebnis == "vollstaendig" %}✓ vollständig
+        {% elif o.abgleich.ergebnis == "unvollstaendig" %}✗ unvollständig
+        {% else %}+ mehr als Soll{% endif %}
+      </span>
+    </button>
+    {% empty %}
+    <p class="muted">Keine Plätze in diesem Plan.</p>
+    {% endfor %}
+  </div>
+</div>
+
+{% if ohne_pos %}
+<div class="abschnitt">
+  <h2>Plätze ohne Position</h2>
+  <div class="liste" data-test="ohne-position">
+    {% for o in ohne_pos %}
+    <div class="zeile">
+      <span data-test="ort-kennung">{{ o.kennung }}</span>
+      <span class="muted">noch keine Position im Grundriss</span>
+      <a class="btn sm" href="/arbeitsplaetze/{{ o.kennung }}/" data-test="detail-link">Ansehen</a>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<div class="popup-bereich" id="platz-popup" data-test="platz-popup" hidden></div>
+
+{% if koennen_aendern %}
+<p class="muted klein">
+  Aktionen „Fehlendes vom Lager ausgeben“ und „Etiketten für den Platz“ stehen im Pop-up (F-66, F-69).
+</p>
+{% endif %}
+{% endif %}
+{% endblock %}
+{% block skripte %}
+<script src="/static/vendor/htmx.min.js"></script>
+<script>
+(function () {
+  var plan = document.querySelector('[data-test="raumplan"]');
+  if (!plan) return;
+
+  function popu(ziel) {
+    var bereich = document.getElementById('platz-popup');
+    var grund = ziel.getAttribute('data-pfad');
+    if (!grund) return;
+    fetch(grund, { headers: { 'HX-Request': 'true' } })
+      .then(function (antwort) {
+        if (!antwort.ok) { bereich.hidden = true; return; }
+        return antwort.text();
+      })
+      .then(function (html) {
+        bereich.innerHTML = html;
+        bereich.hidden = false;
+        plan.querySelectorAll('.orte')
+          .forEach(function (knopf) { knopf.removeAttribute('aria-expanded'); });
+        ziel.setAttribute('aria-expanded', 'true');
+      })
+      .catch(function () { bereich.hidden = true; });
+  }
+
+  plan.querySelectorAll('.orte')
+    .forEach(function (knopf) {
+      knopf.addEventListener('click', function () { popu(knopf); });
+    });
+
+  document.addEventListener('click', function (ereignis) {
+    var schliessen = ereignis.target.closest('[data-test="popup-schliessen"]');
+    if (schliessen) {
+      var bereich = document.getElementById('platz-popup');
+      if (bereich) bereich.hidden = true;
+      return;
+    }
+    if (ereignis.target.closest('.popup-bereich') || ereignis.target.closest('.orte')) return;
+    var bereich2 = document.getElementById('platz-popup');
+    if (bereich2) bereich2.hidden = true;
+  });
+
+  document.addEventListener('keydown', function (ereignis) {
+    if (ereignis.key === 'Escape') {
+      var bereich = document.getElementById('platz-popup');
+      if (bereich) bereich.hidden = true;
+    }
+  });
+
+  // Hervorhebung aus ?hervorheben=Standort|Kennung (F-69, „Im Raumplan zeigen“)
+  var parameter = new URLSearchParams(window.location.search);
+  var hervorheben = parameter.get('hervorheben');
+  if (hervorheben) {
+    var kennung = hervorheben.split('|')[1];
+    if (kennung) {
+      var mark = plan.querySelector('[data-id="' + kennung + '"]');
+      if (mark) {
+        mark.classList.add('hervorgehoben');
+        mark.scrollIntoView({ block: 'nearest' });
+      }
+    }
+  }
+})();
+</script>
+{% endblock %}

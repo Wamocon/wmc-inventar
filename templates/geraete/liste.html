@@ -40,6 +40,15 @@
 
 <p class="anzahl" data-test="anzahl">{{ anzahl }} {% if anzahl == 1 %}Gerät{% else %}Geräte{% endif %}</p>
 
+{% if fortschritt %}
+<div class="abschnitt" data-test="inventur-fortschritt" data-ist="{{ fortschritt.geprueft }}" data-gesamt="{{ fortschritt.alle }}">
+<p data-test="ist">{{ fortschritt.geprueft }} von {{ fortschritt.alle }} geprüft</p>
+  {% if fortschritt.vollstaendig %}
+  <p><span class="chip-status in-benutzung">✓ vollständig geprüft</span></p>
+  {% endif %}
+</div>
+{% endif %}
+
 <div class="liste" data-test="geraete-liste">
   {% for g in geraete %}
   <div class="zeile">

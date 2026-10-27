@@ -11,6 +11,8 @@ from django.contrib.messages import error as meldung_error
 from django.contrib.messages import info as meldung_info
 from django.contrib.messages import success as meldung_success
 from django.db.models import Q
+from django.core.exceptions import PermissionDenied
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -40,6 +42,20 @@ def _darf_ändern(user) -> bool:
     return user.ist_admin or user.ist_mitarbeiter
 
 
+def _darf_sehen_raumplan(user) -> bool:
+    """/arbeitsplaetze/…: Admin und Leser (F-110), nie Mitarbeiter (Kap. 3)."""
+    return user.ist_admin or user.ist_leser
+
+
+def _keine_berechtigung(request, pfad: str):
+    """403 für Mitarbeiter auf /arbeitsplaetze/… (Kapitel 3 der Testschnittstelle).
+
+    ``pfad`` ist die absolute Adresse, die im Satz vorkommt.
+    """
+    meldung_error(request, "Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
+    raise PermissionDenied(f"Zugriff verweigert: {pfad}")
+
+
 # --- Liste (F-41) -------------------------------------------------------------
 
 @login_required
@@ -61,7 +77,11 @@ def liste(request):
     if status:
         qs = qs.filter(status=status)
     if ort_id:
-        qs = qs.filter(ort_id=ort_id)
+        # Ort-Filter: Datenbanknummer (bestehend) oder Kennung (F-89, Kapitel 4).
+        if ort_id.isdigit():
+            qs = qs.filter(ort_id=ort_id)
+        else:
+            qs = qs.filter(ort__kennung=ort_id)
     if kategorie_id:
         qs = qs.filter(kategorie_id=kategorie_id)
     if person_id:
@@ -89,6 +109,14 @@ def liste(request):
     else:
         qs = list(qs)
 
+    # Erstinventur-Fortschritt je Ort, sobald nach ort gefiltert (F-89, Kap. 4):
+    # Markierung ``inventur-fortschritt`` mit ``ist`` und ``gesamt``.
+    fortschritt = None
+    if ort_id and not ort_id.isdigit():
+        ort = Ort.objects.filter(kennung=ort_id).first()
+        if ort:
+            fortschritt = services.fortschritt_des_orts(ort)
+
     return render(
         request,
         "geraete/liste.html",
@@ -107,6 +135,7 @@ def liste(request):
             "kategorien": sorted(Kategorie.objects.all(), key=lambda k: k.name),
             "personen": Person.objects.all(),
             "koennen_aendern": _darf_ändern(request.user),
+            "fortschritt": fortschritt,
         },
     )
 
@@ -213,16 +242,62 @@ def bearbeiten(request, inventarnummer: str):
     )
 
 
-# --- M4 Arbeitsplätze (F-62 bis F-64, F-89) ---------------------------------
+# --- M4 Arbeitsplätze und Raumplan (F-62 bis F-69, F-89) ---------------------
+
+@login_required
+def arbeitsplaetze(request):
+    """Raumplan: Plan je Standort und Etage (F-65, F-67, F-68, F-69).
+
+    Adresse /arbeitsplaetze/ (TESTSCHNITTSTELLE Kapitel 3, 4).
+    Für Admin und Leser 200, für Mitarbeiter 403.
+    """
+    if not _darf_sehen_raumplan(request.user):
+        _keine_berechtigung(request, "/arbeitsplaetze/")
+    plane = services.plan_auswahl()
+    param_hervor = request.GET.get("hervorheben", "")
+    if param_hervor:
+        plan = services.plan_finde(*param_hervor.split("|", 1)) or (plane[0] if plane else None)
+        hervorheben = param_hervor.split("|", 1)[1] if "|" in param_hervor else ""
+    else:
+        param_plan = request.GET.get("plan", "")
+        if param_plan:
+            plan = services.plan_finde(*param_plan.split("|", 1)) or (plane[0] if plane else None)
+        else:
+            plan = plane[0] if plane else None
+        hervorheben = ""
+    if plan is None:
+        plaetze, raumorte, ohne_pos = [], [], []
+    else:
+        plaetze = services.plaetze_des_plans(plan)
+        raumorte = services.raumorte_des_plans(plan)
+        ohne_pos = services.ohne_position(plan)
+    return render(
+        request,
+        "geraete/raumplan.html",
+        {
+            "plane": plane,
+            "plan": plan,
+            "plaetze": plaetze,
+            "raumorte": raumorte,
+            "ohne_pos": ohne_pos,
+            "hervorheben": hervorheben,
+            "koennen_aendern": _darf_ändern(request.user),
+        },
+    )
+
 
 @login_required
 def arbeitsplaetze_liste(request):
-    """Alle Arbeitsplätze mit Soll-Ist-Abgleich (F-62)."""
-    if not _darf_sehen(request.user):
-        meldung_error(request, "Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
-        return redirect("/")
+    """Alle Arbeitsplätze als Liste mit Soll-Ist-Ergebnis (F-62).
+
+    Adresse /arbeitsplaetze/liste/ (TESTSCHNITTSTELLE Kapitel 3).
+    """
+    if not _darf_sehen_raumplan(request.user):
+        _keine_berechtigung(request, "/arbeitsplaetze/liste/")
     orte = list(
-        Ort.objects.filter(typ=Ort.TYP_ARBEITSPLATZ).order_by("kennung")
+        Ort.objects.filter(typ=Ort.TYP_ARBEITSPLATZ).select_related(
+            "profil", "feste_person"
+        ).order_by("kennung")
     )
     zeilen = []
     for ort in orte:
@@ -231,19 +306,23 @@ def arbeitsplaetze_liste(request):
     return render(
         request,
         "geraete/arbeitsplaetze_liste.html",
-        {"zeilen": zeilen},
+        {"zeilen": zeilen, "koennen_aendern": _darf_ändern(request.user)},
     )
 
 
 @login_required
-def arbeitsplatz_detail(request, pk):
-    """Ein Arbeitsplatz: Soll, Ist, Fehlliste, Mehrliste (F-62, F-64)."""
-    if not _darf_sehen(request.user):
-        meldung_error(request, "Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
-        return redirect("/")
+def arbeitsplatz_detail(request, kennung: str):
+    """Ein Arbeitsplatz: Soll, Ist, Fehlliste, Mehrliste (F-62, F-64).
+
+    Adresse /arbeitsplaetze/<Kennung>/ (z. B. /arbeitsplaetze/WMC-WP-01/).
+    """
+    if not _darf_sehen_raumplan(request.user):
+        _keine_berechtigung(request, f"/arbeitsplaetze/{kennung}/")
     ort = get_object_or_404(
-        Ort.objects.filter(typ=Ort.TYP_ARBEITSPLATZ).select_related("profil", "feste_person"),
-        pk=pk,
+        Ort.objects.filter(
+            typ=Ort.TYP_ARBEITSPLATZ
+        ).select_related("profil", "feste_person"),
+        kennung=kennung,
     )
     abgleich = services.soll_ist_abgleich(ort)
     gerate = services.gerate_am_ort(ort)
@@ -256,30 +335,91 @@ def arbeitsplatz_detail(request, pk):
             "abgleich": abgleich,
             "gerate": gerate,
             "personen_gerate": personen_gerate,
+            "koennen_aendern": _darf_ändern(request.user),
+        },
+    )
+
+
+@login_required
+def arbeitsplatz_popup(request, kennung: str):
+    """Pop-up eines Platzes (F-66): Kennung, Raum, Person, Profil,
+    Soll-Ist mit Fehlliste, Geräte am Platz, Geräte der festen Person.
+
+    Adresse /arbeitsplaetze/<Kennung>/popup/ (HTMX-Fragment, Kapitel 4).
+    """
+    if not _darf_sehen_raumplan(request.user):
+        return HttpResponse(status=403)
+    ort = get_object_or_404(
+        Ort.objects.filter(typ=Ort.TYP_ARBEITSPLATZ).select_related(
+            "profil", "feste_person"
+        ),
+        kennung=kennung,
+    )
+    abgleich = services.soll_ist_abgleich(ort)
+    gerate = services.gerate_am_ort(ort)
+    personen_gerate = (
+        services.gerate_der_person(ort.feste_person) if ort.feste_person else []
+    )
+    return render(
+        request,
+        "geraete/platz_popup.html",
+        {
+            "ort": ort,
+            "abgleich": abgleich,
+            "gerate": gerate,
+            "personen_gerate": personen_gerate,
+            "koennen_aendern": _darf_ändern(request.user),
+        },
+    )
+
+
+@login_required
+def raum_popup(request, kennung: str):
+    """Pop-up eines Raums (F-68): dieselbe Geräteliste wie im Platz-Pop-up.
+
+    Adresse /arbeitsplaetze/raum/<Kennung>/popup/ (Kapitel 4).
+    """
+    if not _darf_sehen_raumplan(request.user):
+        return HttpResponse(status=403)
+    ort = get_object_or_404(Ort.objects.filter(typ=Ort.TYP_RAUM), kennung=kennung)
+    gerate = services.gerate_am_ort(ort)
+    return render(
+        request,
+        "geraete/platz_popup.html",
+        {
+            "ort": ort,
+            "abgleich": None,
+            "gerate": gerate,
+            "personen_gerate": [],
+            "koennen_aendern": _darf_ändern(request.user),
         },
     )
 
 
 @login_required
 def bedarf(request):
-    """Bedarf: fehlende Ausstattung je Kategorie mit Lagerbestand (F-63)."""
-    if not _darf_sehen(request.user):
-        meldung_error(request, "Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
-        return redirect("/")
+    """Bedarf: fehlende Ausstattung je Kategorie mit Lagerbestand (F-63).
+
+    Adresse /arbeitsplaetze/bedarf/ (TESTSCHNITTSTELLE Kapitel 3).
+    """
+    if not _darf_sehen_raumplan(request.user):
+        _keine_berechtigung(request, "/arbeitsplaetze/bedarf/")
     uebersicht = services.bedarf_uebersicht()
     return render(
         request,
         "geraete/bedarf.html",
-        {"uebersicht": uebersicht},
+        {"uebersicht": uebersicht, "koennen_aendern": _darf_ändern(request.user)},
     )
 
 
 @login_required
 def erstinventur(request):
-    """Erstinventur: Fortschritt je Ort (F-89, AUFTRAG M4)."""
-    if not _darf_sehen(request.user):
-        meldung_error(request, "Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
-        return redirect("/")
+    """Erstinventur: Fortschritt je Ort (F-89, AUFTRAG M4).
+
+    Adresse /arbeitsplaetze/pruefen/ (Prüfen, Kapitel 3).
+    """
+    if not _darf_sehen_raumplan(request.user):
+        _keine_berechtigung(request, "/arbeitsplaetze/pruefen/")
     zeilen = services.fortschritt_je_ort()
     total_geprueft = sum(z["geprueft"] for z in zeilen)
     total_alle = sum(z["alle"] for z in zeilen)
@@ -290,25 +430,55 @@ def erstinventur(request):
             "zeilen": zeilen,
             "total_geprueft": total_geprueft,
             "total_alle": total_alle,
+            "koennen_aendern": _darf_ändern(request.user),
         },
     )
 
 
 @login_required
 @require_POST
-def ort_pruefen(request, pk):
+def ort_pruefen(request, kennung: str):
     """Ort als geprüft markieren (F-89 Fortschritt je Ort)."""
     if not _darf_ändern(request.user):
-        meldung_error(request, "Zugriff verweigert: Prüfen ist Ihnen nicht erlaubt.")
-        return redirect("/arbeitsplaetze/")
+        _keine_berechtigung(request, f"/arbeitsplaetze/{kennung}/pruefen/")
     ort = get_object_or_404(
-        Ort.objects.filter(typ=Ort.TYP_ARBEITSPLATZ), pk=pk
+        Ort.objects.filter(typ=Ort.TYP_ARBEITSPLATZ), kennung=kennung
     )
-    # Setze aktualisiert_am als Zeitstempel der letzten Prüfung
     ort.aktualisiert_am = timezone.now()
     ort.save(update_fields=["aktualisiert_am"])
     meldung_success(request, f"Ort {ort.kennung} als geprüft markiert.")
-    return redirect("/arbeitsplaetze/" + str(pk) + "/")
+    return redirect("/arbeitsplaetze/" + kennung + "/")
+
+
+@login_required
+def platz_popup(request, kennung: str):
+    """Pop-up-Inhalt eines Platzes (F-66): Kennung, Raum, Person, Profil,
+    Soll-Ist mit Fehlliste, Geräte am Platz, Geräte der Person.
+
+    Adresse /arbeitsplaetze/<Kennung>/popup/ (HTMX-Fragment).
+    """
+    if not _darf_sehen_raumplan(request.user):
+        _keine_berechtigung(request, f"/arbeitsplaetze/{kennung}/popup/")
+    ort = get_object_or_404(
+        Ort.objects.filter(typ=Ort.TYP_ARBEITSPLATZ).select_related(
+            "profil", "feste_person"
+        ),
+        kennung=kennung,
+    )
+    abgleich = services.soll_ist_abgleich(ort)
+    gerate = services.gerate_am_ort(ort)
+    personen_gerate = services.gerate_der_person(ort.feste_person) if ort.feste_person else []
+    return render(
+        request,
+        "geraete/fragmente/platz_popup.html",
+        {
+            "ort": ort,
+            "abgleich": abgleich,
+            "gerate": gerate,
+            "personen_gerate": personen_gerate,
+            "koennen_aendern": _darf_ändern(request.user),
+        },
+    )
 
 
 # --- Prüfung (F-16) -------------------------------------------------------------
