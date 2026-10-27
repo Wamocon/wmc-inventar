@@ -7,8 +7,8 @@
     <p class="muted lead">{{ gerat.geraetename|default:gerat.modell }} · {{ gerat.kategorie.name }}</p>
   </div>
   <div class="actions">
-    {% if koennen_aendern %}
-      <a class="btn" href="/geraete/{{ gerat.inventarnummer }}/aendern/" data-test="aendern">Ändern</a>
+    {% if ist_admin %}
+      <a class="btn" href="/geraete/{{ gerat.inventarnummer }}/aendern/" data-test="aktion-bearbeiten">Ändern</a>
       <form method="post" action="/geraete/{{ gerat.inventarnummer }}/pruefen/" data-test="pruefen-formular">
         {% csrf_token %}
         <button type="submit" class="btn" data-test="pruefen">Prüfung abhaken</button>
@@ -40,7 +40,7 @@
 
 <div class="abschnitt">
   <h2>Status</h2>
-  <p><span class="chip-status {{ gerat.status }}" data-test="status">{{ gerat.status_anzeige }}</span>
+  <p><span class="chip-status {{ gerat.status }}" data-test="status" data-wert="{{ gerat.status_wert }}">{{ gerat.status_anzeige }}</span>
   {% if gerat.person %} · zuweisende Person: {{ gerat.person.voller_name }}{% endif %}
   {% if gerat.ort %} · Ort: {{ gerat.ort.kennung }}{% endif %}
   {% if gerat.leihpool %} · Leihpool{% endif %}</p>
@@ -118,32 +118,74 @@
 </div>
 {% endif %}
 
-{% if koennen_aendern and gerat.status == "verfuegbar" %}
-<div class="abschnitt" data-test="lebenszyklus">
-  <h2>Lebenszyklus</h2>
-  <p class="muted">Gerät ausgeben, umziehen, reparieren oder ausmustern.</p>
-  <div class="liste">
-    <div class="zeile">
-      <strong>Ausgeben</strong>
-      <a href="/geraete/{{ gerat.inventarnummer }}/ausgeben/" class="btn" data-test="ausgeben">Ausgeben</a>
-    </div>
-    <div class="zeile">
-      <strong>Reparatur starten</strong>
-      <a href="/geraete/{{ gerat.inventarnummer }}/reparatur-starten/" class="btn" data-test="reparatur-starten">Reparatur starten</a>
-    </div>
-    <div class="zeile">
-      <strong>Ausmustern</strong>
-      <a href="/geraete/{{ gerat.inventarnummer }}/ausmustern/" class="btn" data-test="ausmustern">Ausmustern</a>
+{% if ist_admin %}
+  {% if gerat.status == "auf-lager" %}
+  <div class="abschnitt" data-test="lebenszyklus">
+    <h2>Lebenszyklus</h2>
+    <p class="muted">Gerät ausgeben, umziehen, reparieren oder ausmustern.</p>
+    <div class="liste">
+      <div class="zeile">
+        <strong>Ausgeben</strong>
+        <a href="/geraete/{{ gerat.inventarnummer }}/ausgeben/" class="btn" data-test="aktion-ausgabe">Ausgeben</a>
+      </div>
+      <div class="zeile">
+        <strong>Umziehen</strong>
+        <a href="/geraete/{{ gerat.inventarnummer }}/umziehen/" class="btn" data-test="aktion-umzug">Umziehen</a>
+      </div>
+      <div class="zeile">
+        <strong>Reparatur starten</strong>
+        <a href="/geraete/{{ gerat.inventarnummer }}/reparatur/start/" class="btn" data-test="aktion-reparatur">Reparatur starten</a>
+      </div>
+      <div class="zeile">
+        <strong>Ausmustern</strong>
+        <a href="/geraete/{{ gerat.inventarnummer }}/ausmustern/" class="btn" data-test="aktion-ausmustern">Ausmustern</a>
+      </div>
     </div>
   </div>
-</div>
+  {% elif gerat.status == "in-benutzung" %}
+  <div class="abschnitt" data-test="lebenszyklus">
+    <h2>Lebenszyklus</h2>
+    <p class="muted">Gerät zurückgeben oder umziehen.</p>
+    <div class="liste">
+      <div class="zeile">
+        <strong>Rückgabe</strong>
+        <a href="/geraete/{{ gerat.inventarnummer }}/rueckgeben/" class="btn" data-test="aktion-rueckgabe">Rückgabe</a>
+      </div>
+      <div class="zeile">
+        <strong>Umziehen</strong>
+        <a href="/geraete/{{ gerat.inventarnummer }}/umziehen/" class="btn" data-test="aktion-umzug">Umziehen</a>
+      </div>
+    </div>
+  </div>
+  {% elif gerat.status == "in-reparatur" %}
+  <div class="abschnitt" data-test="lebenszyklus">
+    <h2>Lebenszyklus</h2>
+    <p class="muted">Reparatur abschließen.</p>
+    <div class="liste">
+      <div class="zeile">
+        <strong>Reparatur abschließen</strong>
+        <a href="/geraete/{{ gerat.inventarnummer }}/reparatur/fertig/" class="btn" data-test="aktion-reparatur-abschliessen">Reparatur abschließen</a>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 {% endif %}
 
-{% if gerat.status == "in_reparatur" and koennen_aendern %}
-<div class="abschnitt" data-test="reparatur-fertig">
-  <h2>Reparatur</h2>
-  <p>Reparatur fertigstellen:</p>
-  <a href="/geraete/{{ gerat.inventarnummer }}/reparatur-fertigstellen/" class="btn" data-test="reparatur-fertigstellen">Reparatur fertigstellen</a>
+<div class="abschnitt">
+  <h2>Historie</h2>
+  {% if gerat.vorgaenge.exists %}
+  <div class="liste" data-test="historie">
+    {% for v in gerat.vorgaenge.all %}
+    <div class="zeile" data-typ="{{ v.get_typ_display }}">
+      <span data-test="vorgang">{{ v.get_typ_display }}</span>
+      <span data-test="zeitpunkt">{{ v.zeitpunkt|date:"d.m.Y H:i" }}</span>
+      {% if v.erzeugt_von %}<span data-test="erzeugt-von">{{ v.erzeugt_von.name }}</span>{% endif %}
+      {% if v.notiz %}<span data-test="notiz-vorgang">{{ v.notiz }}</span>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">Noch keine Vorgänge.</p>
+  {% endif %}
 </div>
-{% endif %}
 {% endblock %}

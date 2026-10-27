@@ -57,7 +57,11 @@
     {% if messages %}
       <div class="meldungen" data-test="meldungen">
         {% for m in messages %}
-          <div class="meldung {{ m.tags }}" data-test="meldung">{{ m }}</div>
+          {% if m.tags == "error" %}
+            <div class="meldung {{ m.tags }}" data-test="fehler">{{ m }}</div>
+          {% else %}
+            <div class="meldung {{ m.tags }}" data-test="meldung">{{ m }}</div>
+          {% endif %}
         {% endfor %}
       </div>
     {% endif %}

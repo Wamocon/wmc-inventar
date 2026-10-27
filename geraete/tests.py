@@ -361,6 +361,7 @@ class M3LebenszyklusTests(TestCase):
         self.assertEqual(self.gerat.status, Gerat.STATUS_IN_BENUTZUNG)
         self.assertEqual(self.gerat.person, self.person)
         v = Vorgang.objects.filter(gerat=self.gerat).order_by('-zeitpunkt').first()
+        self.assertEqual(v.typ, Vorgang.TYP_AUSGABE)
         self.assertTrue(v.abschliesst)
 
     def test_ausgabe_an_ort(self):
@@ -606,7 +607,7 @@ class M3LebenszyklusTests(TestCase):
         self.gerat.refresh_from_db()
         services.gerat_rueckgeben(self.gerat, zustand_rueckgabe=1, ausgefuehrt_von=self.admin)
         anzahl = Vorgang.objects.filter(gerat=self.gerat).count()
-        self.assertEqual(anzahl, 2)
+        self.assertEqual(anzahl, 3)
 
     def test_jeder_vorgang_hat_konto_und_zeitstempel(self):
         services.gerat_ausgeben(self.gerat, self.person, ausgefuehrt_von=self.admin)
@@ -620,7 +621,7 @@ class M3LebenszyklusTests(TestCase):
         services.gerat_rueckgeben(self.gerat, zustand_rueckgabe=1, ausgefuehrt_von=self.admin)
         hist = list(Vorgang.objects.filter(gerat=self.gerat).order_by('-zeitpunkt'))
         self.assertEqual(hist[0].typ, Vorgang.TYP_RUECKGABE)
-        self.assertEqual(hist[1].typ, Vorgang.TYP_AENDERUNG)
+        self.assertEqual(hist[1].typ, Vorgang.TYP_AUSGABE)
 
     def test_nach_ausmusterung_keine_weiteren_vorgaenge(self):
         from datetime import date
@@ -641,6 +642,147 @@ class M3LebenszyklusTests(TestCase):
                 self.gerat, dienstleister="FixIT", vorgangsnummer="VR-999",
                 notiz="X", ausgefuehrt_von=self.admin,
             )
+
+
+# --- M3 Nachbesserung: Gerätedetail Aktionen (A-0074) --------------------------
+
+class DetailAktionenTests(TestCase):
+    """Gerätedetail zeigt Aktionen je Status und Recht (TESTSCHNITTSTELLE 5)."""
+
+    def setUp(self):
+        self.client = Client()
+        self.kat = Kategorie.objects.create(name="Notebook")
+        self.person = Person.objects.create(
+            anrede=Person.ANREDE_FRAU, vorname="Erika", nachname="Muster",
+            email="e.muster@wamocon.de",
+        )
+        self.ort = Ort.objects.create(typ=Ort.TYP_LAGER, kennung="DET-LAG")
+        self.admin = konto_erstellen("det.admin")
+        self.mitarbeiter = konto_erstellen("det.mitarbeiter", rolle="mitarbeiter")
+
+    def _detail(self, gerat, user):
+        self.client.logout()
+        self.client.login(username=user.email, password="test-passwort-123")
+        return self.client.get(f"/geraete/{gerat.inventarnummer}/")
+
+    def test_auf_lager_admin_zeigt_alle_aktionen(self):
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        antwort = self._detail(g, self.admin)
+        self.assertEqual(antwort.status_code, 200)
+        text = antwort.content.decode()
+        self.assertIn('data-test="aktion-ausgabe"', text)
+        self.assertIn('data-test="aktion-reparatur"', text)
+        self.assertIn('data-test="aktion-ausmustern"', text)
+        self.assertIn('data-test="aktion-bearbeiten"', text)
+        self.assertNotIn('data-test="aktion-rueckgabe"', text)
+        self.assertNotIn('data-test="aktion-reparatur-abschliessen"', text)
+
+    def test_in_benutzung_admin_zeigt_rueckgabe(self):
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        services.gerat_ausgeben(g, self.person, ausgefuehrt_von=self.admin)
+        antwort = self._detail(g, self.admin)
+        self.assertEqual(antwort.status_code, 200)
+        text = antwort.content.decode()
+        self.assertIn('data-test="aktion-rueckgabe"', text)
+        self.assertIn('data-test="aktion-umzug"', text)
+        self.assertNotIn('data-test="aktion-ausgabe"', text)
+        self.assertNotIn('data-test="aktion-reparatur"', text)
+        self.assertNotIn('data-test="aktion-ausmustern"', text)
+
+    def test_in_reparatur_admin_zeigt_abschliessen(self):
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        services.gerat_in_reparatur_geschickt(
+            g, dienstleister="FixIT", vorgangsnummer="VR-001",
+            notiz="Defekt", ausgefuehrt_von=self.admin,
+        )
+        antwort = self._detail(g, self.admin)
+        self.assertEqual(antwort.status_code, 200)
+        text = antwort.content.decode()
+        self.assertIn('data-test="aktion-reparatur-abschliessen"', text)
+        self.assertNotIn('data-test="aktion-ausgabe"', text)
+        self.assertNotIn('data-test="aktion-rueckgabe"', text)
+        self.assertNotIn('data-test="aktion-umzug"', text)
+        self.assertNotIn('data-test="aktion-ausmustern"', text)
+
+    def test_mitarbeiter_zeigt_keine_aktionen(self):
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        antwort = self._detail(g, self.mitarbeiter)
+        self.assertEqual(antwort.status_code, 200)
+        text = antwort.content.decode()
+        self.assertNotIn('data-test="aktion-ausgabe"', text)
+        self.assertNotIn('data-test="aktion-rueckgabe"', text)
+        self.assertNotIn('data-test="aktion-umzug"', text)
+        self.assertNotIn('data-test="aktion-reparatur"', text)
+        self.assertNotIn('data-test="aktion-reparatur-abschliessen"', text)
+        self.assertNotIn('data-test="aktion-ausmustern"', text)
+        self.assertNotIn('data-test="aktion-bearbeiten"', text)
+
+    def test_status_data_wert(self):
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        antwort = self._detail(g, self.admin)
+        text = antwort.content.decode()
+        self.assertIn('data-wert="auf-lager"', text)
+
+    def test_historie_aufnahme(self):
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        antwort = self._detail(g, self.admin)
+        text = antwort.content.decode()
+        self.assertIn('data-typ="Aufnahme"', text)
+        self.assertIn('data-test="historie"', text)
+
+    def test_historie_ausgabe(self):
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        services.gerat_ausgeben(g, self.person, ausgefuehrt_von=self.admin)
+        antwort = self._detail(g, self.admin)
+        text = antwort.content.decode()
+        self.assertIn('data-typ="Ausgabe"', text)
+
+    def test_link_ausgabe_offnet_seite(self):
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get(f"/geraete/{g.inventarnummer}/ausgeben/")
+        self.assertEqual(antwort.status_code, 200)
+
+    def test_link_rueckgabe_offnet_seite(self):
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        services.gerat_ausgeben(g, self.person, ausgefuehrt_von=self.admin)
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get(f"/geraete/{g.inventarnummer}/rueckgeben/")
+        self.assertEqual(antwort.status_code, 200)
+
+    def test_link_umzug_offnet_seite(self):
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get(f"/geraete/{g.inventarnummer}/umziehen/")
+        self.assertEqual(antwort.status_code, 200)
+
+    def test_link_reparatur_offnet_seite(self):
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get(f"/geraete/{g.inventarnummer}/reparatur/start/")
+        self.assertEqual(antwort.status_code, 200)
+
+    def test_link_reparatur_abschliessen_offnet_seite(self):
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        services.gerat_in_reparatur_geschickt(
+            g, dienstleister="FixIT", vorgangsnummer="VR-001",
+            notiz="Defekt", ausgefuehrt_von=self.admin,
+        )
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get(f"/geraete/{g.inventarnummer}/reparatur/fertig/")
+        self.assertEqual(antwort.status_code, 200)
+
+    def test_link_ausmustern_offnet_seite(self):
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get(f"/geraete/{g.inventarnummer}/ausmustern/")
+        self.assertEqual(antwort.status_code, 200)
+
+    def test_link_bearbeiten_offnet_seite(self):
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get(f"/geraete/{g.inventarnummer}/aendern/")
+        self.assertEqual(antwort.status_code, 200)
 
 
 # --- M4 Arbeitsplätze (F-62 bis F-64, F-89) -----------------------------------

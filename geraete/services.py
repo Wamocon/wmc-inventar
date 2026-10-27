@@ -108,6 +108,25 @@ def gerat_anlegen(
         erstellt_am=timezone.now(),
         erstellt_von=erzeugt_von,
     )
+    erstellten = gerat.erstellt_am
+    if altbestand_ohne_protokoll:
+        # F-85: Import – der Vorgang „Import“ steht in der Historie.
+        Vorgang.objects.create(
+            gerat=gerat,
+            typ=Vorgang.TYP_IMPORT,
+            zeitpunkt=erstellten,
+            erzeugt_von=erzeugt_von,
+            abschliesst=True,
+        )
+    else:
+        # F-10: Aufnahme – Vorgang „Aufnahme“ steht in der Historie.
+        Vorgang.objects.create(
+            gerat=gerat,
+            typ=Vorgang.TYP_AUFNAHME,
+            zeitpunkt=erstellten,
+            erzeugt_von=erzeugt_von,
+            abschliesst=True,
+        )
     return gerat
 
 
@@ -156,10 +175,10 @@ def gerat_ausgeben(
     gerat.person = person
     gerat.ort = ort
 
-    # F-23: Ausgabe an einen Ort — kein Protokoll nötig, aber Vorgang
+    # F-20 bis F-23: Ausgabe – Vorgang „Ausgabe“ steht in der Historie.
     Vorgang.objects.create(
         gerat=gerat,
-        typ=Vorgang.TYP_AENDERUNG if ort is not None and person is None else Vorgang.TYP_AENDERUNG,
+        typ=Vorgang.TYP_AUSGABE,
         zeitpunkt=timezone.now(),
         erzeugt_von=ausgefuehrt_von,
         leihgabe_an=person,

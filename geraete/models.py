@@ -257,21 +257,21 @@ class Vorgang(models.Model):
     gesetzt ist; sonst ist er offen und der dazugehörige Status ist aktiv.
     """
 
-    TYP_LEIHEN = "leihen"
+    TYP_AUFNAHME = "aufnahme"
+    TYP_IMPORT = "import"
+    TYP_AUSGABE = "ausgabe"
     TYP_RUECKGABE = "rueckgabe"
     TYP_REPARATUR = "reparatur"
-    TYP_INSTANDHALTUNG = "instandhaltung"
     TYP_AUSMUSTERUNG = "ausmusterung"
-    TYP_RUECKSTELLUNG = "rueckstellung"
     TYP_UMZUG = "umzug"
     TYP_AENDERUNG = "aenderung"
     TYPEN = [
-        (TYP_LEIHEN, "Verliehen"),
+        (TYP_AUFNAHME, "Aufnahme"),
+        (TYP_IMPORT, "Import"),
+        (TYP_AUSGABE, "Ausgabe"),
         (TYP_RUECKGABE, "Rückgabe"),
-        (TYP_REPARATUR, "In Reparatur"),
-        (TYP_INSTANDHALTUNG, "Instandhaltung"),
-        (TYP_AUSMUSTERUNG, "Ausgemustert"),
-        (TYP_RUECKSTELLUNG, "Rückstellung"),
+        (TYP_REPARATUR, "Reparatur"),
+        (TYP_AUSMUSTERUNG, "Ausmusterung"),
         (TYP_UMZUG, "Umzug"),
         (TYP_AENDERUNG, "Änderung"),
     ]

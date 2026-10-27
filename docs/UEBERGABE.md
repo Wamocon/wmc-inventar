@@ -1,10 +1,10 @@
 # Übergabe WMCNL-2755
 
-Ausgefüllt von: Gregor · Datum: 23.10.2026 · Letzter Commit: 255006e
+Ausgefüllt von: Gregor · Datum: 27.10.2026 · Letzter Commit: (in Arbeit)
 
 ## Zusammenfassung
 
-M1 Grundgerüst, M2 Bestand, M3 Lebenszyklus und M4 Arbeitsplätze sind fertig. Alle 73 Tests sind grün. M4 bringt Soll-Ist-Abgleich je Arbeitsplatz (F-62), Bedarf mit Lagerbestand (F-63), Geräte der festen Person getrennt (F-64) und Erstinventur-Fortschritt je Ort (F-89). Offene M4-Anforderungen: Raumplan (F-65, F-67, F-68, F-69), Pop-up je Arbeitsplatz (F-66), QR-Code (F-70), Etiketten (F-71–F-73), Mobile Gerätedetailseite (F-74), Etikett nach Speichern (F-12), Neue Person ausstatten (F-24).
+M1 Grundgerüst, M2 Bestand, M3 Lebenszyklus und M4 Arbeitsplätze sind fertig. Alle 89 Tests sind grün. M3 Nachbesserung (A-0074): Gerätedetail zeigt jetzt Aktionen je Status und Recht (Auf Lager: Ausgabe, Umzug, Reparatur, Ausmustern, Ändern; In Benutzung: Rückgabe, Umzug; In Reparatur: Abschließen). `status` trägt `data-wert`, `historie` trägt `data-typ` je Vorgang (Aufnahme, Ausgabe, Import). Fehler im Formular tragen `data-test="fehler"`. M4 bringt Soll-Ist-Abgleich je Arbeitsplatz (F-62), Bedarf mit Lagerbestand (F-63), Geräte der festen Person getrennt (F-64) und Erstinventur-Fortschritt je Ort (F-89). Offene M4-Anforderungen: Raumplan (F-65, F-67, F-68, F-69), Pop-up je Arbeitsplatz (F-66), QR-Code (F-70), Etiketten (F-71–F-73), Mobile Gerätedetailseite (F-74), Etikett nach Speichern (F-12), Neue Person ausstatten (F-24).
 
 ## Stand je Meilenstein
 
@@ -12,7 +12,7 @@ M1 Grundgerüst, M2 Bestand, M3 Lebenszyklus und M4 Arbeitsplätze sind fertig. 
 |---|---|---|---|---|
 | M1 Grundgerüst | fertig | 711ddd5 | 22.10.2026 | Projekt, Anmeldung, Konten, Stammdaten, beispieldaten |
 | M2 Bestand | fertig | | 23.10.2026 | Geräte erfassen, bearbeiten, prüfen, Suche, Konflikte, Arbeitsliste |
-| M3 Lebenszyklus | fertig | | 23.10.2026 | Ausgabe, Rückgabe, Umzug, Reparatur, Ausmusterung, Vorgang-Historie |
+| M3 Lebenszyklus | fertig | | 27.10.2026 | Ausgabe, Rückgabe, Umzug, Reparatur, Ausmusterung, Vorgang-Historie, Gerätedetail-Aktionen (A-0074) |
 | M4 Arbeitsplätze | teilweise | 099303b | 23.10.2026 | Soll-Ist-Abgleich (F-62), Bedarf (F-63), Feste Person (F-64), Erstinventur (F-89); offen: Raumplan, QR-Code, Etiketten, Mobile |
 | M5 Verleih | offen | | | |
 | M6 Signatur | offen | | | |
@@ -126,7 +126,7 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 | N-07 | | M7 | Mengengerüst | offen | |
 | N-08 | | alle | Bedienung | erfüllt | Zeitzone Europe/Berlin, Datum TT.MM.JJJJ, deutsche Sprache |
 | N-09 | | alle | Gestaltung | teilweise | WAMOCON-CI in `static/basis.css`; Schrift Archivo aus `static/fonts/` (vorhanden im Repo) |
-| N-10 | | alle | Qualität | teilweise | `manage.py check` grün; 73 Tests (alle grün); Docker und PostgreSQL auf der DGX nicht geprüft |
+| N-10 | | alle | Qualität | teilweise | `manage.py check` grün; 89 Tests (alle grün); Docker und PostgreSQL auf der DGX nicht geprüft |
 | N-11 | | M7 | Wartbarkeit | offen | |
 
 ## Wie getestet
