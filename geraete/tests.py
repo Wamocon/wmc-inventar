@@ -1486,3 +1486,65 @@ class M4ArbeitsplatzTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.ort.refresh_from_db()
         self.assertIsNotNone(self.ort.aktualisiert_am)
+
+
+# --- F-14 (A-0099): Löschen ---------------------------------------------------
+
+class LoeschenTests(TestCase):
+    """Gerät löschen: Admin, nur ohne Vorgang außer Aufnahme (F-14)."""
+
+    def setUp(self):
+        self.kat = Kategorie.objects.create(name="Notebook")
+        self.person = Person.objects.create(
+            anrede=Person.ANREDE_FRAU, vorname="Erika", nachname="Muster",
+            email="e.muster@wamocon.de",
+        )
+        self.admin = konto_erstellen("loeschen.admin")
+        self.mitarbeiter = konto_erstellen("loeschen.mitarbeiter", rolle="mitarbeiter")
+
+    def _gerat(self):
+        return services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+
+    def test_admin_ohne_vorgang_kann_loeschen(self):
+        g = self._gerat()
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.post(f"/geraete/{g.inventarnummer}/loeschen/bestaetigen/")
+        self.assertEqual(antwort.status_code, 302)
+        self.assertFalse(Gerat.objects.filter(inventarnummer=g.inventarnummer).exists())
+
+    def test_mitarbeiter_kann_nicht_loeschen(self):
+        g = self._gerat()
+        self.client.login(username=self.mitarbeiter.email, password="test-passwort-123")
+        antwort = self.client.post(f"/geraete/{g.inventarnummer}/loeschen/bestaetigen/")
+        self.assertEqual(antwort.status_code, 302)
+        self.assertTrue(Gerat.objects.filter(inventarnummer=g.inventarnummer).exists())
+
+    def test_admin_mit_vorgang_kann_nicht_loeschen(self):
+        g = self._gerat()
+        services.gerat_ausgeben(g, self.person, ausgefuehrt_von=self.admin)
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.post(f"/geraete/{g.inventarnummer}/loeschen/bestaetigen/")
+        self.assertEqual(antwort.status_code, 302)
+        self.assertTrue(Gerat.objects.filter(inventarnummer=g.inventarnummer).exists())
+
+    def test_admin_ohne_vorgang_zeigt_loeschen_aktion(self):
+        g = self._gerat()
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get(f"/geraete/{g.inventarnummer}/")
+        text = antwort.content.decode()
+        self.assertIn('data-test="aktion-loeschen"', text)
+
+    def test_admin_mit_vorgang_zeigt_keine_loeschen_aktion(self):
+        g = self._gerat()
+        services.gerat_ausgeben(g, self.person, ausgefuehrt_von=self.admin)
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get(f"/geraete/{g.inventarnummer}/")
+        text = antwort.content.decode()
+        self.assertNotIn('data-test="aktion-loeschen"', text)
+
+    def test_mitarbeiter_zeigt_keine_loeschen_aktion(self):
+        g = self._gerat()
+        self.client.login(username=self.mitarbeiter.email, password="test-passwort-123")
+        antwort = self.client.get(f"/geraete/{g.inventarnummer}/")
+        text = antwort.content.decode()
+        self.assertNotIn('data-test="aktion-loeschen"', text)

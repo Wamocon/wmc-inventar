@@ -7,6 +7,7 @@
     <p class="muted lead">{{ gerat.geraetename|default:gerat.modell }} · {{ gerat.kategorie.name }}</p>
   </div>
   <div class="actions">
+    {% if kann_loeschen %}<a class="btn" href="/geraete/{{ gerat.inventarnummer }}/loeschen/" data-test="aktion-loeschen">Löschen</a>{% endif %}
     {% if ist_admin and gerat.status != "ausgemustert" %}
       <a class="btn" href="/geraete/{{ gerat.inventarnummer }}/aendern/" data-test="aktion-bearbeiten">Ändern</a>
       <form method="post" action="/geraete/{{ gerat.inventarnummer }}/pruefen/" data-test="pruefen-formular">

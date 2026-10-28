@@ -119,6 +119,96 @@ def personen_detail(request, pk):
     return render(request, "stammdaten/person_detail.html", {"person": person})
 
 
+def offboarding(request, pk):
+    """Offboarding-Ansicht (F-52, A-0099).
+
+    Zeigt alle Geräte der Person (Inventarnummer und Modell oder
+    Gerätename) und deren offene Leihen.
+    """
+    if not _darf_lesen(request):
+        return _keine_berechtigung(request)
+    try:
+        person = Person.objects.get(pk=pk)
+    except Person.DoesNotExist:
+        from django.http import Http404
+        raise Http404
+    from geraete.services import gerate_der_person
+    gerate = gerate_der_person(person)
+    return render(
+        request,
+        "stammdaten/offboarding.html",
+        {"person": person, "gerate": gerate},
+    )
+
+
+def offboarding_zuruecknehmen(request, pk):
+    """Alle Geräte der Person zurücknehmen (F-52, A-0099).
+
+    POST-Handler für den Button „Alle zurücknehmen“.
+    """
+    if not request.user.is_authenticated or not request.user.ist_admin:
+        return _keine_berechtigung(request)
+    try:
+        person = Person.objects.get(pk=pk)
+    except Person.DoesNotExist:
+        from django.http import Http404
+        raise Http404
+    from geraete import services
+    anzahl = services.person_alle_zuruecknehmen(person, ausgefuehrt_von=request.user)
+    from django.contrib.messages import success as meldung_success
+    meldung_success(request, f"{anzahl} Gerät(e) zurückgenommen.")
+    return redirect(reverse("stammdaten:personen-detail", kwargs={"pk": pk}))
+
+
+def austritt_eintragen(request, pk):
+    """Austritt eintragen (F-53, A-0099).
+
+    Zeigt einen Dialog mit Austrittsdatum. Sind der Person noch Geräte
+    zugeordnet, zeigt die Warnung diese an.
+    """
+    if not request.user.is_authenticated or not request.user.ist_admin:
+        return _keine_berechtigung(request)
+    try:
+        person = Person.objects.get(pk=pk)
+    except Person.DoesNotExist:
+        from django.http import Http404
+        raise Http404
+    from geraete.services import gerate_der_person
+    gerate = gerate_der_person(person)
+    return render(
+        request,
+        "stammdaten/austritt.html",
+        {"person": person, "gerate": gerate},
+    )
+
+
+def austritt_speichern(request, pk):
+    """Austritt speichern (F-53, A-0099).
+
+    POST-Handler für den Austrittsdialog.
+    """
+    if not request.user.is_authenticated or not request.user.ist_admin:
+        return _keine_berechtigung(request)
+    try:
+        person = Person.objects.get(pk=pk)
+    except Person.DoesNotExist:
+        from django.http import Http404
+        raise Http404
+    from django.utils.dateparse import parse_date
+    datum = request.POST.get("austrittsdatum", "")
+    parsed = parse_date(datum) if datum else None
+    if parsed is None:
+        from django.contrib.messages import error as meldung_error
+        meldung_error(request, "Bitte ein gültiges Austrittsdatum angeben.")
+        return redirect(reverse("stammdaten:austritt-eintragen", kwargs={"pk": pk}))
+    person.austritt = parsed
+    person.aktiv = False
+    person.save(update_fields=["austritt", "aktiv"])
+    from django.contrib.messages import success as meldung_success
+    meldung_success(request, f"Austritt am {datum} eingetragen.")
+    return redirect(reverse("stammdaten:personen-detail", kwargs={"pk": pk}))
+
+
 def personen_aendern(request, pk):
     """Person ändern (F-121)."""
     if not _nur_admin(request):

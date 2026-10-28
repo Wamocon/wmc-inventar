@@ -3,7 +3,11 @@
 {% block inhalt %}
 <div class="page-head">
   <div><h1>{{ person.nachname }} {{ person.vorname }}</h1><p class="muted lead">Person (F-121)</p></div>
-  {% if user.ist_admin %}<div class="actions"><a class="btn" href="/personen/{{ person.pk }}/aendern/" data-test="person-aendern">Ändern</a></div>{% endif %}
+  {% if user.ist_admin %}<div class="actions">
+    <a class="btn" href="/personen/{{ person.pk }}/aendern/" data-test="person-aendern">Ändern</a>
+    <a class="btn" href="/personen/{{ person.pk }}/offboarding/" data-test="offboarding">Offboarding</a>
+    <a class="btn" href="/personen/{{ person.pk }}/austritt/eintragen/" data-test="austritt-eintragen">Austritt eintragen</a>
+  </div>{% endif %}
 </div>
 <dl class="detail-grid" data-test="person-detail">
   <dt>Anrede</dt><dd>{{ person.anrede|default:"—" }}</dd>

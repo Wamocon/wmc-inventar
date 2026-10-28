@@ -1,0 +1,34 @@
+{% extends "basis.html" %}
+{% block titel %}Austritt eintragen · {{ person.nachname }} {{ person.vorname }} · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div>
+    <h1>Austritt eintragen</h1>
+    <p class="muted lead">{{ person.nachname }} {{ person.vorname }} (F-53)</p>
+  </div>
+</div>
+<div data-test="dialog" data-name="austritt">
+  {% if gerate %}
+  <div class="meldung warning" data-test="warnung">
+    <strong>{{ person.nachname }} {{ person.vorname }} hat noch {{ gerate|length }} Gerät(e):</strong>
+    {% for g in gerate %}
+    <span data-test="warnung-geraet">{{ g.inventarnummer }} ({{ g.geraetename|default:g.modell }})</span>
+    {% if not forloop.last %}, {% endif %}
+    {% endfor %}
+  </div>
+  {% endif %}
+  <form method="post" novalidate data-test="austritt-formular" action="/personen/{{ person.pk }}/austritt/speichern/">
+    {% csrf_token %}
+    <div class="form-grid">
+      <div class="field">
+        <label for="id_austrittsdatum" class="req">Austrittsdatum</label>
+        <input type="date" id="id_austrittsdatum" name="austrittsdatum" data-test="austrittsdatum" required>
+      </div>
+    </div>
+    <div class="actions">
+      <button type="submit" class="btn primary" data-test="bestaetigen">Bestätigen</button>
+      <a class="btn link" href="/personen/{{ person.pk }}/" data-test="abbrechen">Abbrechen</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

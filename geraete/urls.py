@@ -24,4 +24,6 @@ urlpatterns = [
     path("<slug:inventarnummer>/reparatur/start/", views.reparatur_start, name="reparatur-start"),
     path("<slug:inventarnummer>/reparatur/fertig/", views.reparatur_fertig, name="reparatur-fertig"),
     path("<slug:inventarnummer>/ausmustern/", views.ausmustern, name="ausmustern"),
+    path("<slug:inventarnummer>/loeschen/", views.loeschen_zeigen, name="loeschen-zeigen"),
+    path("<slug:inventarnummer>/loeschen/bestaetigen/", views.loeschen, name="loeschen"),
 ]

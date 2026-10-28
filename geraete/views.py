@@ -30,7 +30,7 @@ from .forms import (
     GeratRueckgabeForm,
     GeratUmzugForm,
 )
-from .models import Gerat, GeratKonflikt
+from .models import Gerat, GeratKonflikt, Vorgang
 
 # --- Rechte -----------------------------------------------------------------
 
@@ -157,6 +157,12 @@ def detail(request, inventarnummer: str):
     offene_konflikte = list(GeratKonflikt.objects.filter(gerat=gerat, offen=True))
     doppelte_namen = gerat.doppelte_namen()
     doppelte_serien = gerat.doppelte_seriennummern()
+    # F-14 (A-0099): Löschen ist nur für Admin, solange außer Aufnahme
+    # kein Vorgang existiert; sonst fehlt die Aktion im HTML.
+    kann_loeschen = (
+        request.user.ist_admin
+        and gerat.vorgaenge.exclude(typ=Vorgang.TYP_AUFNAHME).count() == 0
+    )
     return render(
         request,
         "geraete/detail.html",
@@ -168,6 +174,7 @@ def detail(request, inventarnummer: str):
             "datenluecken": gerat.datenluecken(),
             "koennen_aendern": _darf_ändern(request.user),
             "ist_admin": request.user.ist_admin,
+            "kann_loeschen": kann_loeschen,
         },
     )
 
@@ -705,3 +712,34 @@ def ausmustern(request, inventarnummer: str):
     else:
         form = GeratAusmusterungForm(gerat=gerat)
     return render(request, "geraete/ausmusterung.html", {"gerat": gerat, "form": form})
+
+
+# --- F-14 (A-0099): Löschen ----------------------------------------------------
+
+@login_required
+def loeschen_zeigen(request, inventarnummer: str):
+    """Bestätigungsdialog für „Gerät löschen“ (F-14, A-0099)."""
+    if not request.user.ist_admin:
+        meldung_error(request, "Zugriff verweigert: Löschen ist Ihnen nicht erlaubt.")
+        return redirect("/")
+    gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
+    return render(request, "geraete/loeschen.html", {"gerat": gerat})
+
+
+@login_required
+@require_POST
+def loeschen(request, inventarnummer: str):
+    """Gerät löschen (F-14, A-0099).
+
+    Nur für Admin und nur, solange außer Aufnahme kein Vorgang existiert.
+    """
+    if not request.user.ist_admin:
+        meldung_error(request, "Zugriff verweigert: Löschen ist Ihnen nicht erlaubt.")
+        return redirect("/")
+    gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
+    if gerat.vorgaenge.exclude(typ=Vorgang.TYP_AUFNAHME).count() > 0:
+        meldung_error(request, "Das Gerät hat schon Vorgänge und kann nicht gelöscht werden.")
+        return redirect("/geraete/" + gerat.inventarnummer + "/")
+    gerat.delete()
+    meldung_success(request, f"Gerät {inventarnummer} gelöscht.")
+    return redirect("/geraete/")

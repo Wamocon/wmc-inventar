@@ -13,6 +13,10 @@ urlpatterns = [
     path("personen/", views.personen_liste, name="personen-liste"),
     path("personen/neu/", views.personen_anlegen, name="personen-anlegen"),
     path("personen/<int:pk>/", views.personen_detail, name="personen-detail"),
+    path("personen/<int:pk>/offboarding/", views.offboarding, name="offboarding"),
+    path("personen/<int:pk>/offboarding/zuruecknehmen/", views.offboarding_zuruecknehmen, name="offboarding-zuruecknehmen"),
+    path("personen/<int:pk>/austritt/eintragen/", views.austritt_eintragen, name="austritt-eintragen"),
+    path("personen/<int:pk>/austritt/speichern/", views.austritt_speichern, name="austritt-speichern"),
     path("personen/<int:pk>/aendern/", views.personen_aendern, name="personen-aendern"),
     # Orte (F-60)
     path("orte/", views.orte_liste, name="orte-liste"),

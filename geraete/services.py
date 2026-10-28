@@ -678,6 +678,37 @@ def gerate_der_person(person: Person) -> list[Gerat]:
     )
 
 
+@transaction.atomic
+def person_alle_zuruecknehmen(
+    person: Person, *, ausgefuehrt_von: Konto | None = None
+) -> int:
+    """Alle Geräte einer Person zurücknehmen (F-52, A-0099).
+
+    Jedes Gerät, das noch bei der Person liegt („In Benutzung“ oder
+    „Verliehen“), wird ins Lager zurückgenommen: Status „Auf Lager“,
+    Person wird entfernt, Vorgang „Rückgabe“ entsteht je Gerät.
+    „Auf Lager“ bleibt unverändert (dort ist die Person nicht zugeordnet).
+    Gibt die Anzahl der zurückgenommenen Geräte zurück.
+    """
+    gerate = list(
+        Gerat.objects.filter(
+            person=person,
+            status__in=[Gerat.STATUS_IN_BENUTZUNG, Gerat.STATUS_VERLIEHEN],
+        ).order_by("inventarnummer")
+    )
+    for gerat in gerate:
+        gerat_rueckgeben(
+            gerat,
+            zustand_rueckgabe=gerat.zustand,
+            zubesehoer_komplett=True,
+            maengel="",
+            ziel="lager",
+            fehlend=False,
+            ausgefuehrt_von=ausgefuehrt_von,
+        )
+    return len(gerate)
+
+
 def soll_zahlen(ort: Ort) -> list[tuple[Kategorie, int]]:
     """Soll-Ausstattung eines Ortes als Liste (Kategorie, Anzahl) (F-62).
 

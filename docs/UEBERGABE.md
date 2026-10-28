@@ -7,13 +7,19 @@ Ausgefüllt von: Gregor · Datum: 28.10.2026 · Zweig: gregor/a-0076-arbeitsplae
 M1 Grundgerüst, M2 Bestand, M3 Lebenszyklus und M4 Arbeitsplätze sind fertig. Alle 140 Tests sind grün. M3 Nachbesserung (A-0074): Gerätedetail zeigt jetzt Aktionen je Status und Recht (Auf Lager: Ausgabe, Umzug, Reparatur, Ausmustern, Ändern; In Benutzung: Rückgabe, Umzug; In Reparatur: Abschließen). `status` trägt `data-wert`, `historie` trägt `data-typ` je Vorgang (Aufnahme, Ausgabe, Import). Fehler im Formular tragen `data-test="fehler"`. M3 Nachbesserung (A-0075): Alle sieben Vorgänge (Ausgabe, Rückgabe, Umzug, Reparatur, Reparatur abschließen, Ausmustern, Bearbeiten) öffnen sich jetzt als Dialoge mit `data-test="dialog"` und `data-name`, die Schaltfläche `data-test="speichern"` schließt ab, nach dem Speichern erscheint `data-test="meldung"` und das Gerätedetail zeigt den neuen Status. Beschriftungen stimmen mit dem Prototyp überein: Ausgabe "Person" und "Arbeitsplatz", Reparatur starten "Fehlerbeschreibung" (Pflicht), Umzug "Neuer Arbeitsplatz", Reparatur abschließen "Zustand jetzt", Rückgabe "Bemerkung, Mängel" und "Danach". Das Gerätedetail trägt `data-test="verbleib"`, `data-typ` steht auf dem Element `data-test="vorgang"`. Beispieldaten: `_leeren()` leert jetzt auch `geraete_vorgang` vor `geraete_gerat`. M4 bringt Soll-Ist-Abgleich je Arbeitsplatz (F-62), Bedarf mit Lagerbestand (F-63), Geräte der festen Person getrennt (F-64) und Erstinventur-Fortschritt je Ort (F-89). M4 Nachbesserung (A-0076, Teil 1): Die Seiten der Arbeitsplätze liegen unter `/arbeitsplaetze/`, `/arbeitsplaetze/liste/` und `/arbeitsplaetze/<Kennung>/`, unter `/geraete/arbeitsplaetze/` bleibt nichts; die Detailseite und „Prüfen“ nehmen die Kennung. Der Raumplan (F-65 bis F-68) zeigt den Grundriss aus der DATEIABLAGE, 15 Plätze `platz` mit `data-id` = Kennung, `data-soll-ist` = `vollstaendig`, `unvollstaendig` oder `mehr` und `data-x`, `data-y` in Prozent mit Punkt, 4 Flächen `raumort` mit `data-id` und die Plätze ohne Position in `ohne-position`. Klick oder Enter auf einen Platz öffnet ... [truncated]
 M3 Nachbesserung (A-0098): F-40: `gerat_bearbeiten` legt je geändertem Feld einen Vorgang „Änderung“ an mit `aenderung_feld`, `aenderung_alter_wert`, `aenderung_neuer_wert`; die Historie zeigt das Feld, den alten und den neuen Wert. F-43: `konten/models.py:bezeichnung` zeigt den Namen, sonst die E-Mail-Adresse; jede Zeile der Historie und „Erstellt“ zeigen das Konto. F-44: Suche nach Inventarnummer, Seriennummer, Modell, Hostname und Person; jede Trefferzeile trägt `data-test="suchtreffer"`, das Suchfeld trägt `data-test="suche"`. F-131: Der Ausgabe-Dialog bekommt „Zustand“ (Auswahl mit den vier Stufen), „Zubehör komplett“ (Ja/Nein) und „Bemerkung“; der Zustand geht in den Vorgang Ausgabe und auf das Gerät. F-02: Kontenverwaltung unter `/konten/` mit `data-test="konten-liste"` und `data-test="konto-anlegen"`, nur für Admin (403 für Mitarbeiter); Navigation `nav-konten` zeigt dorthin.
 
+M3 Nachbesserung (A-0099): F-52: Offboarding-Ansicht unter `/personen/<id>/offboarding/` zeigt alle Geräte der Person (Inventarnummer und Modell oder Gerätename) und deren offene Leihen. Button `data-test="alle-zuruecknehmen"`; nach der Bestätigung sind alle Geräte der Person Auf Lager, jedes mit einem Vorgang „Rückgabe“. Service-Funktion `geraete/services.py:person_alle_zuruecknehmen`. F-53: Austritt eintragen unter `/personen/<id>/austritt/eintragen/` mit `data-test="austritt-eintragen"` auf der Personenseite. Sind der Person noch Geräte zugeordnet, zeigt der Dialog `data-test="warnung"` mit den Geräten. Speichern mit Austrittsdatum unter `/personen/<id>/austritt/speichern/`; setzt `person.austritt` und `person.aktiv=False`. F-14: Löschen am Gerätedetail mit `data-test="aktion-loeschen"`, nur für Admin und nur solange außer Aufnahme kein Vorgang existiert. Dialog `data-name="loeschen"` mit `data-test="bestaetigen"` und `data-test="abbrechen"`; nach der Bestätigung ist das Gerät gelöscht, die Meldung nennt „gelöscht“. View `geraete/views.py:loeschen_zeigen` (Dialog) und `geraete/views.py:loeschen` (POST).
+
+**Nicht Teil dieser Karte (A-0099):**
+- **Protokoll in einem Vorgang (F-130):** Kommt mit M6; die Rückgabe-Ansicht im Offboarding zeigt keine Protokollfunktion.
+- **Deaktivieren des Kontos am Tag nach dem Austritt (F-53):** Ist ein Befehl für den Tageslauf und nicht Teil dieser Karte. `austritt_speichern` setzt `person.aktiv=False`, das Konto-Deaktivieren ist ein separater Tageslauf-Auftrag.
+
 ## Stand je Meilenstein
 
 | Meilenstein | Stand | Commit | Datum | Hinweis |
 |---|---|---|---|---|
 | M1 Grundgerüst | fertig | 711ddd5 | 22.10.2026 | Projekt, Anmeldung, Konten, Stammdaten, beispieldaten |
 | M2 Bestand | fertig | | 23.10.2026 | Geräte erfassen, bearbeiten, prüfen, Suche, Konflikte, Arbeitsliste |
-|M3 Lebenszyklus | fertig | | 28.10.2026 | Ausgabe, Rückgabe, Umzug, Reparatur, Ausmusterung, Vorgang-Historie, Gerätedetail-Aktionen (A-0074), Vorgänge als Dialoge (A-0075), Formulare und Fehlermeldungen (A-0097) |
+| M3 Lebenszyklus | fertig | | 28.10.2026 | Ausgabe, Rückgabe, Umzug, Reparatur, Ausmusterung, Vorgang-Historie, Gerätedetail-Aktionen (A-0074), Vorgänge als Dialoge (A-0075), Formulare und Fehlermeldungen (A-0097), Historie/Suche/Zustand/Konten (A-0098), Offboarding/Austritt/Löschen (A-0099) |
 | M4 Arbeitsplätze | teilweise | a13dc17 | 27.10.2026 | Soll-Ist-Abgleich (F-62), Bedarf (F-63), Feste Person (F-64), Erstinventur (F-89); Raumplan (F-65, F-66, F-68, F-69) mit Pop-up und `aktion-im-raumplan`; offen: Plan pflegen (F-67), QR-Code, Etiketten, Mobile |
 | M5 Verleih | offen | | | |
 | M6 Signatur | offen | | | |
@@ -34,7 +40,7 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 | F-11 | M | M2 | Mehrere gleiche Geräte auf einmal erfassen | teilweise | `gerat_anlegen` einmalig; Mehrfach-Aufnahme (Zählerfeld) noch offen |
 | F-12 | M | M4 | Etikett direkt nach dem Speichern drucken | offen | |
 | F-13 | S | M2 | Gerät als Vorlage kopieren | offen | |
-| F-14 | M | M2 | Fehlerfassung löschen | offen | |
+| F-14 | M | M2 | Fehlerfassung löschen | erfüllt | `geraete/views.py:loeschen`, `geraete/views.py:loeschen_zeigen`, Test: `test_admin_ohne_vorgang_kann_loeschen`, `test_admin_mit_vorgang_kann_nicht_loeschen`, `test_mitarbeiter_kann_nicht_loeschen` |
 | F-20 | M | M3 | Ein oder mehrere Geräte an eine Person und/oder einen Arbeitsplatz ausgeben | erfüllt | `geraete/services.py:gerat_ausgeben`, Test: `test_ausgabe_an_person`, `test_ausgabe_an_ort` |
 | F-21 | M | M3, M6 | Ausgabeprotokoll bei Ausgabe an eine Person | teilweise | Ausgabe in Service-Schicht vorhanden; PDF-Protokoll (FRM-001) in M6 |
 | F-22 | M | M3, M7 | Papierweg | teilweise | Vorgang „Unterschrift offen" in Service-Schicht; Scan-Upload in M7 |
@@ -55,8 +61,8 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 | F-44 | M | M2 | Globale Suche | erfüllt | `geraete/views.py:liste` mit Suchfeld `q`, Test: `test_liste_suche_nach_name` |
 | F-50 | M | M3 | Rückgabe einzelner oder mehrerer Geräte einer Person | erfüllt | `geraete/services.py:gerat_rueckgeben`, Test: `test_rueckgabe_nach_lager`, `test_rueckgabe_ziel_reparatur` |
 | F-51 | M | M3, M6 | Rücknahmeprotokoll | teilweise | Rückgabe in Service-Schicht vorhanden; PDF-Protokoll (FRM-002) in M6 |
-| F-52 | M | M3 | Offboarding-Ansicht | teilweise | Rückgabe und Ausmusterung vorhanden; Offboarding-UI in M4 |
-| F-53 | M | M3 | Austritt eintragen | teilweise | Rückgabe vorhanden; Austritts-Flow in M4 |
+| F-52 | M | M3 | Offboarding-Ansicht | erfüllt | `stammdaten/views.py:offboarding`, `stammdaten/views.py:offboarding_zuruecknehmen`, `geraete/services.py:person_alle_zuruecknehmen`, Test: `test_offboarding_zeig_geraete`, `test_alle_zuruecknehmen` |
+| F-53 | M | M3 | Austritt eintragen | erfüllt | `stammdaten/views.py:austritt_eintragen`, `stammdaten/views.py:austritt_speichern`, Test: `test_austritt_mit_geraeten_zeigt_warnung`, `test_austritt_ohne_geraete_zeigt_keine_warnung`, `test_austritt_speichern_mit_datum` |
 | F-55 | M | M3 | Ausmustern | erfüllt | `geraete/services.py:ausmustern`, Test: `test_ausmusterung` |
 | F-56 | M | M3 | Löschnachweis bei Datenträgern | erfüllt | `geraete/services.py:ausmustern` mit `loeschung_art`, `loeschung_nachweis`, Test: `test_ausmusterung_datentraeger_mit_loeschung` |
 | F-57 | M | M3 | Verlust und Diebstahl | erfüllt | `geraete/services.py:ausmustern` mit `disposition=Verlust`, `bestaetigt_gemeldt`, Test: `test_ausmusterung_verloren_mit_bestatigung` |
@@ -132,7 +138,14 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 
 ## Wie getestet
 
-Befehle mit gekürzter Ausgabe: `python manage.py test` (140 Tests, alle grün), `python manage.py check` (keine Probleme), `python manage.py migrate` (Migration 0004), `python manage.py beispieldaten --neu` (21 Kategorien, 26 Geräte, 4 Konten). `testsiegel` und `tageslauf` sind noch nicht implementiert (M6/M7).
+Befehle mit gekürzter Ausgabe: `python manage.py test` (155 Tests, alle grün), `python manage.py check` (keine Probleme), `python manage.py migrate` (keine neuen Migrationen), `python manage.py beispieldaten --neu` (21 Kategorien, 26 Geräte, 4 Konten). `testsiegel` und `tageslauf` sind noch nicht implementiert (M6/M7).
+
+## Offene Punkte (A-0099)
+
+- **F-130 Protokoll in einem Vorgang:** Kommt mit M6 (Signatur). Die Offboarding-Ansicht zeigt keine Protokollfunktion.
+- **Deaktivieren des Kontos am Tag nach dem Austritt:** Ist ein Befehl für den Tageslauf (M7) und nicht Teil dieser Karte. `austritt_speichern` setzt `person.aktiv=False`; das Konto-Deaktivieren ist ein separater Tageslauf-Auftrag.
+- **Dialog-Implementierung (F-14):** Der Löschen-Dialog ist die Bestätigungsseite `templates/geraete/loeschen.html` mit `data-test="dialog"` und `data-name="loeschen"`, `data-test="bestaetigen"` und `data-test="abbrechen"`. `data-test="aktion-loeschen"` ist der Link auf der Detailseite.
+- **Offboarding und Austritt sind Admin-aktionen:** `offboarding_zuruecknehmen` und `austritt_speichern` erfordern `ist_admin`. `offboarding` und `austritt_eintragen` zeigen die Seiten für Admin und Leser.
 
 ## Annahmen und Abweichungen
 
