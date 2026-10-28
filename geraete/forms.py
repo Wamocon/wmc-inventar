@@ -104,7 +104,15 @@ class GeratBearbeitungsForm(GeratForm):
 # --- M3 Lebenszyklus ---------------------------------------------------------
 
 class GeratAusgabeForm(forms.Form):
-    """Gerät ausgeben (F-20 bis F-23, M3)."""
+    """Gerät ausgeben (F-20 bis F-23, F-131).
+
+    A-0098 (F-131): der Dialog trägt je Gerät „Zustand“ (die vier Stufen
+    von ``Gerat.ZUSTAENDE``, voreingestellt mit dem Zustand des Geräts),
+    „Zubehör komplett“ (Ja, Nein) und „Bemerkung“. Protokoll und Signatur
+    bleiben M6, das Protokoll-PDF folgt mit F-130.
+    """
+
+    ZUBEOER = [("ja", "Ja"), ("nein", "Nein")]
 
     ziel_person = forms.ModelChoiceField(
         queryset=Person.objects.all(),
@@ -118,21 +126,31 @@ class GeratAusgabeForm(forms.Form):
         label="Arbeitsplatz",
         widget=forms.Select(attrs={"data-test": "ausgabe-ort"}),
     )
-    zurueck_am = forms.DateField(
-        required=False,
-        label="Zurück am",
-        widget=forms.DateInput(attrs={"type": "date", "data-test": "zurueck-am"}),
+    zustand = forms.ChoiceField(
+        choices=Gerat.ZUSTAENDE,
+        required=True,
+        label="Zustand",
+        widget=forms.Select(attrs={"data-test": "ausgabe-zustand"}),
+    )
+    zubehoer_komplett = forms.ChoiceField(
+        choices=ZUBEOER,
+        required=True,
+        initial="ja",
+        label="Zubehör komplett",
+        widget=forms.Select(attrs={"data-test": "zubehoer-komplett"}),
     )
     anmerkung = forms.CharField(
         required=False,
-        label="Bemerkung zum Vorgang",
+        label="Bemerkung",
         widget=forms.Textarea(attrs={"rows": 2, "data-test": "anmerkung"}),
     )
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, gerat: Gerat | None = None, **kwargs):
         super().__init__(*args, **kwargs)
         from stammdaten.models import Ort
         self.fields["ziel_ort"].queryset = Ort.objects.all().order_by("kennung")
+        if gerat is not None:
+            self.fields["zustand"].initial = gerat.zustand
 
     def clean(self) -> dict:
         daten = super().clean()

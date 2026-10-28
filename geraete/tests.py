@@ -789,6 +789,168 @@ class DetailAktionenTests(TestCase):
         text = antwort.content.decode()
         self.assertIn('data-typ="Ausgabe"', text)
 
+    def test_historie_aenderungen_gezeigt(self):
+        """A-0098 (F-40): Ändert man Felder, zeigt die Historie je geändertem
+        Feld einen Vorgang vom Typ „Änderung“ mit dem Feld, dem alten und dem
+        neuen Wert (data-typ trägt „Änderung“)."""
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        services.gerat_bearbeiten(
+            g, werte={"modell": "T16", "seriennummer": "SN-1234"}, erzeugt_von=self.admin
+        )
+        antwort = self._detail(g, self.admin)
+        text = antwort.content.decode()
+        self.assertIn('data-typ="Änderung"', text)
+        self.assertIn('data-feld="modell"', text)
+        self.assertIn('data-alt="T14"', text)
+        self.assertIn('data-neu="T16"', text)
+        self.assertIn('data-feld="seriennummer"', text)
+        self.assertIn('data-alt=""', text)
+        self.assertIn('data-neu="SN-1234"', text)
+
+    def test_historie_aenderung_kein_vorgang_ohne_aenderung(self):
+        """A-0098 (F-40): Ohne Änderung entsteht kein Vorgang."""
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        vorher = g.vorgaenge.count()
+        services.gerat_bearbeiten(g, werte={"modell": "T14"}, erzeugt_von=self.admin)
+        self.assertEqual(g.vorgaenge.count(), vorher)
+
+    def test_historie_zeigt_konto(self):
+        """A-0098 (F-43, N-03): Jede Zeile der Historie und die Zeile
+        „Erstellt“ zeigen das Konto, das den Vorgang ausgeführt hat: den
+        Namen, sonst die E-Mail-Adresse."""
+        g = services.gerat_anlegen(
+            kategorie=self.kat, hersteller="Lenovo", modell="T14", erzeugt_von=self.admin
+        )
+        services.gerat_ausgeben(g, self.person, ausgefuehrt_von=self.admin)
+        antwort = self._detail(g, self.admin)
+        text = antwort.content.decode()
+        self.assertIn(self.admin.email, text)
+        self.assertIn('data-test="erzeugt-von"', text)
+
+    def test_konto_bezeichnung_zeigt_namen(self):
+        """A-0098 (F-43): Bezeichnung des Kontos – Name, sonst E-Mail."""
+        person = Person.objects.create(
+            anrede=Person.ANREDE_FRAU, vorname="Anna", nachname="Becker",
+            email="anna.becker@example.test",
+        )
+        konto = Konto(email="anna@example.test", rolle=Konto.ROLLE_MITARBEITER, person=person)
+        konto.save()
+        self.assertEqual(konto.bezeichnung(), "Anna Becker")
+        # Ohne Person: die E-Mail-Adresse.
+        leer = Konto(email="it-admin@beispiel.test", rolle=Konto.ROLLE_ADMIN)
+        leer.save()
+        self.assertEqual(leer.bezeichnung(), "it-admin@beispiel.test")
+
+    def test_aufnahme_erzeugt_von_gezaehlt(self):
+        """A-0098 (F-43): Der Vorgang Aufnahme bekommt ein Konto,
+        wenn erzeugt_von übergeben wird."""
+        g = services.gerat_anlegen(
+            kategorie=self.kat, hersteller="Lenovo", modell="T14", erzeugt_von=self.admin
+        )
+        aufnahme = g.vorgaenge.filter(typ=Vorgang.TYP_AUFNAHME).first()
+        self.assertIsNotNone(aufnahme)
+        self.assertEqual(aufnahme.erzeugt_von, self.admin)
+
+    # --- A-0098 (F-44): Suche je Feld ----------------------------------------
+
+    def _suche(self, wert: str):
+        antwort = self.client.get("/geraete/", {"q": wert})
+        self.assertEqual(antwort.status_code, 200)
+        return antwort.content.decode()
+
+    def test_suche_inventarnummer(self):
+        """A-0098 (F-44): Die Suche findet nach Inventarnummer;
+        jede Trefferzeile trägt data-test=suchtreffer."""
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        text = self._suche(g.inventarnummer)
+        self.assertIn('data-test="suchtreffer"', text)
+        self.assertIn(g.inventarnummer, text)
+
+    def test_suche_seriennummer(self):
+        """A-0098 (F-44): Die Suche findet nach Seriennummer."""
+        g = services.gerat_anlegen(
+            kategorie=self.kat, hersteller="Lenovo", modell="T14", seriennummer="SN-8842"
+        )
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        text = self._suche("SN-8842")
+        self.assertIn('data-test="suchtreffer"', text)
+        self.assertIn(g.inventarnummer, text)
+
+    def test_suche_modell(self):
+        """A-0098 (F-44): Die Suche findet nach Modell."""
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        text = self._suche("T14")
+        self.assertIn('data-test="suchtreffer"', text)
+        self.assertIn(g.inventarnummer, text)
+
+    def test_suche_hostname(self):
+        """A-0098 (F-44): Die Suche findet nach Hostname (Gerätename)."""
+        g = services.gerat_anlegen(
+            kategorie=self.kat, hersteller="Lenovo", modell="T14", geraetename="Pool-A"
+        )
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        text = self._suche("Pool-A")
+        self.assertIn('data-test="suchtreffer"', text)
+        self.assertIn(g.inventarnummer, text)
+
+    def test_suche_person(self):
+        """A-0098 (F-44): Die Suche findet nach Person (Vor- und Nachname)."""
+        g = services.gerat_anlegen(
+            kategorie=self.kat, hersteller="Lenovo", modell="T14", person=self.person
+        )
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        text = self._suche("Muster")
+        self.assertIn('data-test="suchtreffer"', text)
+        self.assertIn(g.inventarnummer, text)
+
+    def test_suche_feld_traegt_data_test(self):
+        """A-0098 (F-44): Das Suchfeld trägt data-test=suche (Kapitel 4)."""
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get("/geraete/")
+        text = antwort.content.decode()
+        self.assertIn('data-test="suche"', text)
+
+    # --- A-0098 (F-131): Zustand je Stufe in der Ausgabe ----------------------
+
+    def _ausgabe_abschliessen(self, g, zustand):
+        antwort = self.client.post(
+            f"/geraete/{g.inventarnummer}/ausgeben/",
+            {
+                "ziel_person": self.person.pk,
+                "zustand": zustand,
+                "zubehoer_komplett": "ja",
+                "anmerkung": "ausgabe-test",
+            },
+        )
+        self.assertEqual(antwort.status_code, 302)
+        g.refresh_from_db()
+        return g.vorgaenge.filter(typ=Vorgang.TYP_AUSGABE).latest("zeitpunkt")
+
+    def _zustand_je_stufe(self, stufe: int):
+        """A-0098 (F-131): Der Zustand geht je Stufe in den Vorgang Ausgabe
+        und auf das Gerät."""
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        vorgang = self._ausgabe_abschliessen(g, int(stufe))
+        self.assertEqual(g.zustand, stufe)
+        zustaende = dict(Gerat.ZUSTAENDE)
+        self.assertIn("Zustand: " + zustaende[stufe], vorgang.notiz)
+        self.assertIn("Zubehör komplett: Ja", vorgang.notiz)
+
+    def test_ausgabe_zustand_neuwertig(self):
+        self._zustand_je_stufe(Gerat.ZUSTAND_NEUWERTIG)
+
+    def test_ausgabe_zustand_gut(self):
+        self._zustand_je_stufe(Gerat.ZUSTAND_GUT)
+
+    def test_ausgabe_zustand_spuren(self):
+        self._zustand_je_stufe(Gerat.ZUSTAND_SPUREN)
+
+    def test_ausgabe_zustand_eingeschraenkt(self):
+        self._zustand_je_stufe(Gerat.ZUSTAND_EINGESCHRAENKT)
+
     def test_link_ausgabe_offnet_seite(self):
         g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
         self.client.login(username=self.admin.email, password="test-passwort-123")
@@ -851,18 +1013,43 @@ class DetailAktionenTests(TestCase):
         self.assertIn('data-test="speichern"', text)
 
     def test_dialog_ausgabe_speichern_zeigt_meldung(self):
-        """Nach dem Speichern zeigt /geraete/<nr>/ die Meldung (data-test=meldung)."""
+        """A-0098 (F-131): Nach dem Speichern zeigt /geraete/<nr>/ die Meldung
+        (data-test=meldung). Der Dialog trägt jetzt Zustand, Zubehör komplett,
+        Bemerkung."""
         g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
         self.client.login(username=self.admin.email, password="test-passwort-123")
         antwort = self.client.post(
             f"/geraete/{g.inventarnummer}/ausgeben/",
-            {"ziel_person": self.person.pk},
+            {
+                "ziel_person": self.person.pk,
+                "zustand": Gerat.ZUSTAND_GUT,
+                "zubehoer_komplett": "ja",
+            },
         )
         self.assertEqual(antwort.status_code, 302)
         self.assertEqual(antwort.headers["Location"], f"/geraete/{g.inventarnummer}/")
         detail = self.client.get(f"/geraete/{g.inventarnummer}/")
         self.assertEqual(detail.status_code, 200)
         self.assertIn('data-test="meldung"', detail.content.decode())
+
+    def test_dialog_ausgabe_oeffnet_mit_zustand_zubehoer_bemerkung(self):
+        """A-0098 (F-131): Der Ausgabe-Dialog trägt die Felder des Prototyps:
+        „Zustand“ (Auswahl mit den vier Stufen von Gerat.ZUSTAENDE,
+        voreingestellt mit dem Zustand des Geräts), „Zubehör komplett“
+        (Ja, Nein) und „Bemerkung“."""
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get(f"/geraete/{g.inventarnummer}/ausgeben/")
+        self.assertEqual(antwort.status_code, 200)
+        text = antwort.content.decode()
+        self.assertIn('data-test="ausgabe-zustand"', text)
+        self.assertIn('data-test="zubehoer-komplett"', text)
+        self.assertIn('data-test="anmerkung"', text)
+        # Voreingestellt mit dem Zustand des Geräts (default 2 – gut).
+        self.assertIn('value="2" selected', text)
+        # Alle vier Stufen stehen in der Auswahl.
+        for stufe in (1, 2, 3, 4):
+            self.assertIn(f'value="{stufe}"', text)
 
     def test_dialog_rueckgabe_oeffnet_mit_speichern(self):
         g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")

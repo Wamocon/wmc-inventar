@@ -143,3 +143,72 @@ class UebersichtTests(TestCase):
         antwort = self.client.get("/")
         self.assertEqual(antwort.status_code, 302)
         self.assertEqual(antwort["Location"], "/meine-geraete/")
+
+
+class KontenVerwaltungTests(TestCase):
+    """F-02 (A-0098): Kontenliste nur für Admin."""
+
+    def setUp(self):
+        self.konto_admin = Konto.objects.create_konto(
+            email="it-admin@beispiel.test",
+            password="Beispiel-Passwort-2026",
+            rolle=Konto.ROLLE_ADMIN,
+        )
+        self.person = Person.objects.create(
+            anrede=Person.ANREDE_FRAU,
+            vorname="Anna",
+            nachname="Becker",
+            email="anna.becker@beispiel.test",
+        )
+        self.konto_mitarbeiter = Konto.objects.create_konto(
+            email="anna.becker@beispiel.test",
+            password="Beispiel-Passwort-2026",
+            rolle=Konto.ROLLE_MITARBEITER,
+            person=self.person,
+        )
+
+    def test_konten_liste_admin_200(self):
+        """F-02: /konten/ für Admin antwortet mit 200 und zeigt die Liste."""
+        self.client.login(
+            username="it-admin@beispiel.test",
+            password="Beispiel-Passwort-2026",
+        )
+        antwort = self.client.get("/konten/")
+        self.assertEqual(antwort.status_code, 200)
+        text = antwort.content.decode()
+        self.assertIn('data-test="konten-liste"', text)
+        self.assertIn('data-test="konto-anlegen"', text)
+        # Das eigene Konto und das Mitarbeiter-Konto stehen in der Liste.
+        self.assertIn("it-admin@beispiel.test", text)
+        self.assertIn("anna.becker@beispiel.test", text)
+
+    def test_konten_liste_mitarbeiter_403(self):
+        """F-02: /konten/ für Mitarbeiter antwortet mit 403."""
+        self.client.login(
+            username="anna.becker@beispiel.test",
+            password="Beispiel-Passwort-2026",
+        )
+        antwort = self.client.get("/konten/")
+        self.assertEqual(antwort.status_code, 403)
+
+    def test_konto_anlegen_admin_200(self):
+        """F-02: /konten/neu/ für Admin antwortet mit 200 und zeigt das Formular."""
+        self.client.login(
+            username="it-admin@beispiel.test",
+            password="Beispiel-Passwort-2026",
+        )
+        antwort = self.client.get("/konten/neu/")
+        self.assertEqual(antwort.status_code, 200)
+        text = antwort.content.decode()
+        self.assertIn('data-test="konto-speichern"', text)
+        self.assertIn("name=\"email\"", text)
+        self.assertIn("name=\"rolle\"", text)
+
+    def test_konto_anlegen_mitarbeiter_403(self):
+        """F-02: /konten/neu/ für Mitarbeiter antwortet mit 403."""
+        self.client.login(
+            username="anna.becker@beispiel.test",
+            password="Beispiel-Passwort-2026",
+        )
+        antwort = self.client.get("/konten/neu/")
+        self.assertEqual(antwort.status_code, 403)

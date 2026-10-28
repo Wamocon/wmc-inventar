@@ -11,4 +11,8 @@ urlpatterns = [
     path("passwort-vergessen/", views.passwort_vergessen, name="passwort-vergessen"),
     path("passwort-setzen/<str:token>/", views.passwort_setzen, name="passwort-setzen"),
     path("konto/passwort/", views.passwort_aendern, name="passwort-aendern"),
+    # Konten verwalten (F-02): nur Admin
+    path("konten/", views.konten_liste, name="konten-liste"),
+    path("konten/neu/", views.konto_anlegen, name="konto-anlegen"),
+    path("konten/<int:pk>/", views.konto_aendern, name="konto-aendern"),
 ]

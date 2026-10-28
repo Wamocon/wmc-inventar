@@ -118,6 +118,20 @@ class Konto(AbstractBaseUser, PermissionsMixin):
     def hat_person(self) -> bool:
         return self.person_id is not None
 
+    def bezeichnung(self) -> str:
+        """F-43 (A-0098): Name des Kontos, sonst die E-Mail-Adresse.
+
+        Historie und „Erstellt“ zeigen das Konto, das den Vorgang
+        ausgeführt hat. Ein leeres Name-Feld darf nicht leer bleiben.
+        """
+        if self.person is not None:
+            name = f"{self.person.vorname} {self.person.nachname}".strip()
+            if name:
+                return name
+        if self.email:
+            return self.email
+        return "ohne Konto"
+
     # --- Sperre (F-01) ------------------------------------------------------
     def ist_gesperrt(self, jetzt=None) -> bool:
         """F-01: nach 5 Fehlversuchen 15 Minuten gesperrt."""

@@ -16,8 +16,9 @@
     <div class="form-grid">
       <div class="field"><label for="id_ziel_person">Person</label>{{ form.ziel_person }}{% if form.ziel_person.errors %}<div class="meldung error">{% for e in form.ziel_person.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
       <div class="field"><label for="id_ziel_ort">Arbeitsplatz</label>{{ form.ziel_ort }}{% if form.ziel_ort.errors %}<div class="meldung error">{% for e in form.ziel_ort.errors %}{{ e }}{% endfor %}</div>{% endif %}<small class="help">Person, Arbeitsplatz oder beides</small></div>
-      <div class="field"><label for="id_zurueck_am">Zurück am (optional)</label>{{ form.zurueck_am }}{% if form.zurueck_am.errors %}<div class="meldung error">{% for e in form.zurueck_am.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
-      <div class="field full"><label for="id_anmerkung">Bemerkung zum Vorgang</label>{{ form.anmerkung }}{% if form.anmerkung.errors %}<div class="meldung error">{% for e in form.anmerkung.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+      <div class="field"><label for="id_zustand">Zustand</label>{{ form.zustand }}{% if form.zustand.errors %}<div class="meldung error">{% for e in form.zustand.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+      <div class="field"><label for="id_zubehoer_komplett">Zubehör komplett</label>{{ form.zubehoer_komplett }}{% if form.zubehoer_komplett.errors %}<div class="meldung error">{% for e in form.zubehoer_komplett.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+      <div class="field full"><label for="id_anmerkung">Bemerkung</label>{{ form.anmerkung }}{% if form.anmerkung.errors %}<div class="meldung error">{% for e in form.anmerkung.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
     </div>
     <div class="actions">
       <button type="submit" class="btn primary" data-test="speichern">Ausgabe abschließen</button>

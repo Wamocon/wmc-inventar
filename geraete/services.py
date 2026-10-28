@@ -179,15 +179,21 @@ def gerat_ausgeben(
     gerat: Gerat,
     ziel: Person | Ort,
     *,
-    zurueck_am: date | None = None,
+    zustand: int | None = None,
+    zubehoer_komplett: bool = True,
     anmerkung: str = "",
     ausgefuehrt_von: Konto | None = None,
 ) -> Gerat:
-    """Gerät ausgeben (F-20 bis F-23, M3).
+    """Gerät ausgeben (F-20 bis F-23, F-131, M3).
 
     Ziel ist eine Person oder ein Ort (Arbeitsplatz, Raum, Lager).
     Status wird „In Benutzung“, Person und/oder Ort werden gesetzt.
     Ein Vorgang wird geschrieben.
+
+    F-131 (A-0098): Der Dialog trägt „Zustand“, „Zubehör komplett“ und
+    „Bemerkung“. Der Zustand geht in den Vorgang „Ausgabe“ und auf das
+    Gerät. Protokoll und Signatur bleiben M6, das Protokoll-PDF folgt
+    mit F-130.
     """
     if gerat.status == Gerat.STATUS_AUSGEMUSTERT:
         raise GeratFehler("Ausgemusterte Geräte können nicht ausgegeben werden.")
@@ -204,6 +210,22 @@ def gerat_ausgeben(
     gerat.person = person
     gerat.ort = ort
 
+    # F-131 (A-0098): Zustand auf das Gerät; in den Vorgang geht er
+    # über die Notiz wie bei der Rückgabe (F-50).
+    if zustand is not None:
+        gerat.zustand = int(zustand)
+
+    teile = []
+    if zustand is not None:
+        stufe = int(zustand)
+        zustaende = dict(Gerat.ZUSTAENDE)
+        teile.append("Zustand: " + zustaende.get(stufe, str(stufe)))
+    if zubehoer_komplett is not None:
+        teile.append("Zubehör komplett: " + ("Ja" if zubehoer_komplett else "Nein"))
+    if anmerkung:
+        teile.append(anmerkung)
+    bemerkt = ", ".join(teile)
+
     # F-20 bis F-23: Ausgabe – Vorgang „Ausgabe“ steht in der Historie.
     Vorgang.objects.create(
         gerat=gerat,
@@ -211,8 +233,8 @@ def gerat_ausgeben(
         zeitpunkt=timezone.now(),
         erzeugt_von=ausgefuehrt_von,
         leihgabe_an=person,
-        zurueck_am=zurueck_am,
-        notiz=anmerkung,
+        zurueck_am=None,
+        notiz=bemerkt,
         abschliesst=True,
     )
     gerat.save()
@@ -452,7 +474,13 @@ def gerat_reparatur_fertig(
 def gerat_bearbeiten(
     gerat: Gerat, *, werte: dict, erzeugt_von: Konto | None = None
 ) -> Gerat:
-    """Gerät ändern (F-15). Inventarnummer bleibt unverändert (F-12)."""
+    """Gerät ändern (F-15). Inventarnummer bleibt unverändert (F-12).
+
+    A-0098 (F-40): je geändertem Feld entsteht ein Vorgang vom Typ
+    „Änderung“ mit dem Feld, dem alten und dem neuen Wert
+    (``aenderung_feld``, ``aenderung_alter_wert``, ``aenderung_neuer_wert``).
+    Ohne Änderung entsteht kein Vorgang.
+    """
     # F-58 (A-0097): Ausgemusterte Geräte sind nicht mehr änderbar.
     if gerat.status == Gerat.STATUS_AUSGEMUSTERT:
         raise GeratFehler("Ausgemusterte Geräte sind nicht mehr änderbar.")
@@ -486,9 +514,37 @@ def gerat_bearbeiten(
                 f"Seriennummer ist schon bei einem anderen Gerät hinterlegt ({doppelte.inventarnummer})."
             )
     for name, wert in werte.items():
+        alter = _wert_anzeigen(gerat, name)
+        neuer = _wert_anzeigen_wert(wert)
+        if neuer != alter:
+            Vorgang.objects.create(
+                gerat=gerat,
+                typ=Vorgang.TYP_AENDERUNG,
+                zeitpunkt=timezone.now(),
+                erzeugt_von=erzeugt_von,
+                aenderung_feld=name,
+                aenderung_alter_wert=alter,
+                aenderung_neuer_wert=neuer,
+                abschliesst=True,
+            )
+    for name, wert in werte.items():
         setattr(gerat, name, wert)
     gerat.save()
     return gerat
+
+
+def _wert_anzeigen(gerat: Gerat, feld: str) -> str:
+    """Zeigt den alten Wert eines Feldes für die Historie an (F-40, A-0098)."""
+    return _wert_anzeigen_wert(getattr(gerat, feld))
+
+
+def _wert_anzeigen_wert(wert) -> str:
+    """Zeigt einen Feldwert für die Historie an (F-40, A-0098)."""
+    if wert is None:
+        return ""
+    if isinstance(wert, bool):
+        return "ja" if wert else "nein"
+    return str(wert)
 
 
 @transaction.atomic

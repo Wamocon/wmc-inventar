@@ -221,7 +221,7 @@ def _nur_admin(request):
 def konten_liste(request):
     """Liste der Konten (F-02)."""
     if not _nur_admin(request):
-        _keine_berechtigung(request)
+        return _keine_berechtigung(request)
     return render(
         request,
         "konten/konten_liste.html",

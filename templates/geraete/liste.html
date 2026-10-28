@@ -51,7 +51,7 @@
 
 <div class="liste" data-test="geraete-liste">
   {% for g in geraete %}
-  <div class="zeile">
+  <div class="zeile"{% if suche %} data-test="suchtreffer"{% endif %}>
     <span class="inv num" data-test="inventarnummer">{{ g.inventarnummer }}</span>
     <span data-test="zeile-name">{{ g.geraetename|default:g.modell }} · {{ g.kategorie.name }}{% if g.ort %} · {{ g.ort.kennung }}{% elif g.person %} · {{ g.person.voller_name }}{% endif %}</span>
     <span class="chip-status {{ g.status }}" data-test="status">{{ g.status_anzeige }}</span>

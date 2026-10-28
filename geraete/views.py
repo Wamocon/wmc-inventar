@@ -88,14 +88,13 @@ def liste(request):
         qs = qs.filter(person_id=person_id)
 
     if q:
+        # F-44 (A-0098): Suche nach Inventarnummer, Seriennummer, Modell,
+        # Hostname (Gerätename) und Person (Vor- und Nachname).
         qs = qs.filter(
             Q(inventarnummer__icontains=q)
             | Q(geraetename__icontains=q)
             | Q(seriennummer__icontains=q)
-            | Q(hersteller__icontains=q)
             | Q(modell__icontains=q)
-            | Q(kategorie__name__icontains=q)
-            | Q(ort__kennung__icontains=q)
             | Q(person__vorname__icontains=q)
             | Q(person__nachname__icontains=q)
         )
@@ -542,14 +541,15 @@ def ausgeben(request, inventarnummer: str):
         return redirect("/")
     gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
     if request.method == "POST":
-        form = GeratAusgabeForm(request.POST)
+        form = GeratAusgabeForm(request.POST, gerat=gerat)
         if form.is_valid():
             ziel = form.cleaned_data.get("ziel_person") or form.cleaned_data.get("ziel_ort")
             try:
                 services.gerat_ausgeben(
                     gerat,
                     ziel,
-                    zurueck_am=form.cleaned_data.get("zurueck_am"),
+                    zustand=form.cleaned_data.get("zustand"),
+                    zubehoer_komplett=form.cleaned_data.get("zubehoer_komplett") == "ja",
                     anmerkung=form.cleaned_data.get("anmerkung", ""),
                     ausgefuehrt_von=request.user,
                 )
@@ -559,7 +559,7 @@ def ausgeben(request, inventarnummer: str):
             meldung_success(request, "Gerät ausgegeben.")
             return redirect("/geraete/" + gerat.inventarnummer + "/")
     else:
-        form = GeratAusgabeForm()
+        form = GeratAusgabeForm(gerat=gerat)
     return render(request, "geraete/ausgabe.html", {"gerat": gerat, "form": form})
 
 

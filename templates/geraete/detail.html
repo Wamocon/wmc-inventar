@@ -111,7 +111,7 @@
 {% if gerat.erstellt_am %}
 <div class="abschnitt">
   <h2>Erstellt</h2>
-  <p>{{ gerat.erstellt_am|date:"d.m.Y H:i" }}{% if gerat.erstellt_von %} · von {{ gerat.erstellt_von.name }}{% endif %}</p>
+  <p>{{ gerat.erstellt_am|date:"d.m.Y H:i" }}{% if gerat.erstellt_von %} · von {{ gerat.erstellt_von.bezeichnung }}{% endif %}</p>
 </div>
 {% endif %}
 
@@ -190,9 +190,9 @@
   <div class="liste" data-test="historie">
     {% for v in gerat.vorgaenge.all %}
     <div class="zeile">
-      <span data-test="vorgang" data-typ="{{ v.get_typ_display }}">{{ v.get_typ_display }}</span>
+      <span data-test="vorgang" data-typ="{{ v.get_typ_display }}"{% if v.get_typ_display == "Änderung" %} data-feld="{{ v.aenderung_feld }}" data-alt="{{ v.aenderung_alter_wert }}" data-neu="{{ v.aenderung_neuer_wert }}"{% endif %}>{{ v.get_typ_display }}</span>
       <span data-test="zeitpunkt">{{ v.zeitpunkt|date:"d.m.Y H:i" }}</span>
-      {% if v.erzeugt_von %}<span data-test="erzeugt-von">{{ v.erzeugt_von.name }}</span>{% endif %}
+      {% if v.erzeugt_von %}<span data-test="erzeugt-von">{{ v.erzeugt_von.bezeichnung }}</span>{% endif %}
       {% if v.notiz %}<span data-test="notiz-vorgang">{{ v.notiz }}</span>{% endif %}
     </div>
     {% endfor %}
