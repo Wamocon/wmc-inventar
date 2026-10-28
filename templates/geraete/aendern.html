@@ -8,10 +8,10 @@
   </div>
 </div>
 <div data-test="dialog" data-name="bearbeiten">
-  <form method="post" data-test="aendern-formular">
+  <form method="post" novalidate data-test="aendern-formular">
     {% csrf_token %}
     <div class="meldungen">
-      {% if form.non_field_errors %}<div class="meldung error" data-test="fehler">{% for e in form.non_field_errors %}{{ e }}{% endfor %}</div>{% endif %}
+      {% include "fragmente/fehler.html" %}
     </div>
     <div class="form-grid">
       {% for field in form %}

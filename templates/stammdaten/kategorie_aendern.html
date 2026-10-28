@@ -1,0 +1,5 @@
+{% extends "basis.html" %}
+{% block titel %}Kategorie ändern · WMC Inventar{% endblock %}
+{% block inhalt %}
+{% include "stammdaten/_formular.html" with titel="Kategorie ändern" form=form zurueck="/kategorien/" %}
+{% endblock %}

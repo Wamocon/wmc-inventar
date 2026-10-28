@@ -40,6 +40,28 @@ def naechste_inventarnummer() -> str:
     return f"WMC-{zaehler:05d}"
 
 
+def seriennummer_pruefen(
+    hersteller: str, seriennummer: str, ausschluss_geraet: Gerat | None = None
+) -> Gerat | None:
+    """Gibt ein anderes Gerät mit derselben Seriennummer und demselben Hersteller zurück.
+
+    F-10 (A-0097): Vergleich ohne Groß- und Kleinschreibung und ohne
+    Leerzeichen am Rand. ``ausschluss_geraet`` wird ignoriert, z. B. beim
+    Bearbeiten eines vorhandenen Geräts.
+    """
+    if not seriennummer or not seriennummer.strip():
+        return None
+    if not hersteller or not hersteller.strip():
+        return None
+    queryset = Gerat.objects.filter(
+        hersteller__iexact=hersteller.strip(),
+        seriennummer__iexact=seriennummer.strip(),
+    )
+    if ausschluss_geraet is not None:
+        queryset = queryset.exclude(pk=ausschluss_geraet.pk)
+    return queryset.order_by("pk").first()
+
+
 # --- Vorgänge ---------------------------------------------------------------
 
 
@@ -78,6 +100,13 @@ def gerat_anlegen(
     """
     if person is not None and ort is not None:
         raise GeratFehler("Ein Gerät steht bei einer Person oder an einem Ort, nicht beides.")
+    # F-10 (A-0097): dieselbe Seriennummer beim selben Hersteller wird abgelehnt,
+    # ohne Groß- und Kleinschreibung und ohne Leerzeichen am Rand.
+    doppelte = seriennummer_pruefen(hersteller, seriennummer)
+    if doppelte is not None:
+        raise GeratFehler(
+            f"Seriennummer ist schon bei einem anderen Gerät hinterlegt ({doppelte.inventarnummer})."
+        )
     status = (
         Gerat.STATUS_IN_BENUTZUNG if person is not None else Gerat.STATUS_AUF_LAGER
     )
@@ -196,7 +225,7 @@ def ausmustern(
     *,
     grund: str,
     datum: date,
-    disposition: str,
+    disposition: str = "",
     loeschung_art: str = "",
     loeschung_nachweis: str = "",
     bestaetigt_gemeldt: bool = False,
@@ -212,14 +241,17 @@ def ausmustern(
     if gerat.status == Gerat.STATUS_AUSGEMUSTERT:
         raise GeratFehler("Gerät ist bereits ausgemustert.")
 
-    # F-55: Grund, Datum, Verbleib
+    # F-55: Grund, Datum, Verbleib.
     if not grund:
         raise GeratFehler("Grund der Ausmusterung muss angegeben werden.")
     if not datum:
         raise GeratFehler("Datum der Ausmusterung muss angegeben werden.")
+    verloren = grund in ("verloren", "gestohlen")
+    if not verloren and not disposition:
+        raise GeratFehler("Verbleib muss angegeben werden.")
 
-    # F-56: Löschnachweis bei Datenträgern
-    if gerat.kategorie.hat_datentraeger:
+    # F-56: Löschnachweis bei Datenträgern (Fehlt das Gerät, entfällt er.)
+    if gerat.kategorie.hat_datentraeger and not verloren:
         if not loeschung_art:
             raise GeratFehler("Art der Löschung muss angegeben werden (F-56).")
         if not loeschung_nachweis:
@@ -272,14 +304,13 @@ def gerat_rueckgeben(
     gerat.zustand = zustand_rueckgabe
 
     if fehlend:
-        # F-50: „Fehlt“ startet die Ausmusterung mit Grund „verloren“
+        # F-50 (A-0097): „fehlt, Ausmusterung starten“ aus der Auswahl „Danach“
+        # startet die Ausmusterung mit Grund „verloren“ (wie bisher, fehlend=True).
         return ausmustern(
             gerat,
             grund="verloren",
             datum=date.today(),
             disposition="Verlust",
-            loeschung_art="physisch zerstört durch Dienstleister",
-            loeschung_nachweis="Verlustmeldung",
             bestaetigt_gemeldt=True,
             ausgefuehrt_von=ausgefuehrt_von,
         )
@@ -390,8 +421,12 @@ def gerat_reparatur_fertig(
     gerat.zustand = zustand
 
     if ziel == "zuordnung":
-        # F-42: Ziel „bisherige Zuordnung“
-        gerat.status = Gerat.STATUS_IN_BENUTZUNG
+        # F-42: Ziel „Bisherige Zuordnung“ – Gerät geht zurück zu Person/Ort.
+        if gerat.person is None and gerat.ort is None:
+            # Kein vorheriger Verbleib bekannt – Gerät geht ins Lager.
+            gerat.status = Gerat.STATUS_AUF_LAGER
+        else:
+            gerat.status = Gerat.STATUS_IN_BENUTZUNG
     else:
         # F-42: Ziel „Lager“
         gerat.status = Gerat.STATUS_AUF_LAGER
@@ -405,6 +440,7 @@ def gerat_reparatur_fertig(
         erzeugt_von=ausgefuehrt_von,
         reparatur_kosten=kosten,
         reparatur_beleg=beleg,
+        reparatur_ziel=ziel,
         notiz=f"Zustand: {zustand}, Ziel: {ziel}",
         abschliesst=True,
     )
@@ -417,6 +453,9 @@ def gerat_bearbeiten(
     gerat: Gerat, *, werte: dict, erzeugt_von: Konto | None = None
 ) -> Gerat:
     """Gerät ändern (F-15). Inventarnummer bleibt unverändert (F-12)."""
+    # F-58 (A-0097): Ausgemusterte Geräte sind nicht mehr änderbar.
+    if gerat.status == Gerat.STATUS_AUSGEMUSTERT:
+        raise GeratFehler("Ausgemusterte Geräte sind nicht mehr änderbar.")
     zulassig = {
         "kategorie", "hersteller", "modell", "seriennummer", "zustand",
         "leihpool", "person", "ort", "geraetename", "standardzuehoer",
@@ -437,6 +476,15 @@ def gerat_bearbeiten(
     if werte.get("person") is not None and werte.get("ort") is not None and \
             werte.get("person") and werte.get("ort"):
         raise GeratFehler("Ein Gerät steht bei einer Person oder an einem Ort, nicht beides.")
+    # F-10 (A-0097): dieselbe Seriennummer beim selben Hersteller wird abgelehnt.
+    if "seriennummer" in werte or "hersteller" in werte:
+        neue_seriennummer = werte.get("seriennummer", gerat.seriennummer) or ""
+        neuer_hersteller = werte.get("hersteller", gerat.hersteller) or ""
+        doppelte = seriennummer_pruefen(neuer_hersteller, neue_seriennummer, gerat)
+        if doppelte is not None:
+            raise GeratFehler(
+                f"Seriennummer ist schon bei einem anderen Gerät hinterlegt ({doppelte.inventarnummer})."
+            )
     for name, wert in werte.items():
         setattr(gerat, name, wert)
     gerat.save()

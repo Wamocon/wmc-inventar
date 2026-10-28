@@ -144,7 +144,19 @@ class GeratAusgabeForm(forms.Form):
 
 
 class GeratRueckgabeForm(forms.Form):
-    """Gerät zurückgeben (F-50, M3)."""
+    """Gerät zurückgeben (F-50, M3).
+
+    A-0097: „Zubehör komplett“ ist eine Auswahl Ja/Nein (Ja vorbelegt),
+    „Danach“ eine Auswahl mit „ins Lager“, „in Reparatur“ und
+    „fehlt, Ausmusterung starten“. Das Kästchen „Fehlt“ entfällt.
+    """
+
+    ZUBEOER = [("ja", "Ja"), ("nein", "Nein")]
+    DANACH = [
+        ("lager", "ins Lager"),
+        ("reparatur", "in Reparatur"),
+        ("fehlend", "fehlt, Ausmusterung starten"),
+    ]
 
     zustand_rueckgabe = forms.ChoiceField(
         choices=Gerat.ZUSTAENDE,
@@ -152,10 +164,12 @@ class GeratRueckgabeForm(forms.Form):
         label="Zustand bei Rückgabe",
         widget=forms.Select(attrs={"data-test": "zustand-rueckgabe"}),
     )
-    zubehoer_komplett = forms.BooleanField(
+    zubehoer_komplett = forms.ChoiceField(
+        choices=ZUBEOER,
         required=True,
+        initial="ja",
         label="Zubehör komplett",
-        widget=forms.CheckboxInput(attrs={"data-test": "zubehoer-komplett"}),
+        widget=forms.Select(attrs={"data-test": "zubehoer-komplett"}),
     )
     maengel = forms.CharField(
         required=False,
@@ -163,16 +177,16 @@ class GeratRueckgabeForm(forms.Form):
         widget=forms.Textarea(attrs={"rows": 2, "data-test": "maengel"}),
     )
     ziel = forms.ChoiceField(
-        choices=[("lager", "Lager"), ("reparatur", "Reparatur")],
+        choices=DANACH,
         required=True,
         label="Danach",
-        widget=forms.Select(attrs={"data-test": "ziel"}),
+        widget=forms.Select(attrs={"data-test": "danach"}),
     )
-    fehlend = forms.BooleanField(
-        required=False,
-        label="Fehlt (startet Ausmusterung)",
-        widget=forms.CheckboxInput(attrs={"data-test": "fehlend"}),
-    )
+
+    def clean(self) -> dict:
+        daten = super().clean()
+        daten["fehlend"] = daten.get("ziel") == "fehlend"
+        return daten
 
 
 class GeratUmzugForm(forms.Form):
@@ -212,7 +226,13 @@ class GeratReparaturStartForm(forms.Form):
 
 
 class GeratReparaturFertigForm(forms.Form):
-    """Reparatur abschließen (F-42, M3)."""
+    """Reparatur abschließen (F-42, M3).
+
+    A-0097: „Ziel“ sind zwei Optionsfelder mit eigenen Beschriftungen,
+    „Bisherige Zuordnung“ (voreingestellt) und „Ins Lager“.
+    """
+
+    ZIEL = [("zuordnung", "Bisherige Zuordnung"), ("lager", "Ins Lager")]
 
     zustand = forms.ChoiceField(
         choices=Gerat.ZUSTAENDE,
@@ -221,10 +241,11 @@ class GeratReparaturFertigForm(forms.Form):
         widget=forms.Select(attrs={"data-test": "reparatur-zustand"}),
     )
     ziel = forms.ChoiceField(
-        choices=[("lager", "Lager"), ("zuordnung", "Bisherige Zuordnung")],
+        choices=ZIEL,
         required=True,
+        initial="zuordnung",
         label="Ziel",
-        widget=forms.Select(attrs={"data-test": "reparatur-ziel"}),
+        widget=forms.RadioSelect(attrs={"data-test": "reparatur-ziel"}),
     )
     kosten = forms.DecimalField(
         required=False,
@@ -239,19 +260,40 @@ class GeratReparaturFertigForm(forms.Form):
 
 
 class GeratAusmusterungForm(forms.Form):
-    """Gerät ausmustern (F-55 bis F-58, M3)."""
+    """Gerät ausmustern (F-55 bis F-58, M3).
+
+    A-0097 nach dem Prototyp (Dialog „Gerät ausmustern“):
+    „Grund“ beginnt mit „Bitte wählen“; „Datum“ ist Pflicht;
+    „Verbleib“ ist Pflicht, außer bei verloren/gestohlen;
+    bei Verlust/Diebstahl: Bestätigung „Der Vorfall ist an Datenschutz
+    bzw. Informationssicherheit gemeldet.“;
+    bei Datenträgern und nicht bei Verlust: zwei Optionsfelder für die
+    Löschung plus Zertifikats- oder Protokollnummer.
+    """
 
     GRUENDE = [
+        ("", "Bitte wählen"),
         ("defekt", "Defekt"),
         ("veraltet", "Veraltet"),
         ("verkauft", "Verkauft"),
         ("verloren", "Verloren"),
         ("gestohlen", "Gestohlen"),
     ]
+    LOESCHUNG = [
+        ("nist", "Gelöscht durch die IT nach NIST SP 800-88"),
+        ("zerstoert", "Physisch zerstört durch Dienstleister"),
+    ]
+    VERLOREN = ("verloren", "gestohlen")
+
+    def __init__(self, *args, gerat: Gerat | None = None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._datentraeger = bool(gerat and gerat.kategorie and gerat.kategorie.hat_datentraeger)
+        self._verloren = False
 
     grund = forms.ChoiceField(
         choices=GRUENDE,
         required=True,
+        error_messages={"required": "Bitte einen Grund wählen."},
         label="Grund",
         widget=forms.Select(attrs={"data-test": "ausmusterung-grund"}),
     )
@@ -261,25 +303,58 @@ class GeratAusmusterungForm(forms.Form):
         widget=forms.DateInput(attrs={"type": "date", "data-test": "ausmusterung-datum"}),
     )
     disposition = forms.CharField(
-        required=True,
+        required=False,
         label="Verbleib",
         widget=forms.TextInput(attrs={"data-test": "ausmusterung-disposition"}),
     )
-    loeschung_art = forms.CharField(
+    loeschung_art = forms.ChoiceField(
+        choices=LOESCHUNG,
         required=False,
-        label="Art der Löschung (bei Datenträgern)",
-        widget=forms.TextInput(attrs={"data-test": "loeschung-art"}),
+        label="Datenlöschung",
+        error_messages={"required": "Bitte die Art der Löschung wählen."},
+        widget=forms.RadioSelect(attrs={"data-test": "loeschung-art"}),
     )
     loeschung_nachweis = forms.CharField(
         required=False,
-        label="Nachweis der Löschung",
+        label="Zertifikats- oder Protokollnummer",
         widget=forms.TextInput(attrs={"data-test": "loeschung-nachweis"}),
+    )
+    loeschung_datei = forms.FileField(
+        required=False,
+        label="Nachweis (Datei hochladen)",
+        widget=forms.ClearableFileInput(attrs={"data-test": "loeschung-datei"}),
     )
     bestaetigt_gemeldt = forms.BooleanField(
         required=False,
-        label="Vorfall gemeldet (Pflicht bei Verlust/Diebstahl)",
+        label="Der Vorfall ist an Datenschutz bzw. Informationssicherheit gemeldet.",
         widget=forms.CheckboxInput(attrs={"data-test": "bestaetigt-gemeldet"}),
     )
+
+    def clean(self) -> dict:
+        daten = super().clean()
+        grund = daten.get("grund") or ""
+        daten["grund"] = grund
+        verloren = grund in self.VERLOREN
+        self._verloren = verloren
+        # Verbleib: Pflicht außer bei verloren/gestohlen (dort entfällt das Feld).
+        if not verloren and not daten.get("disposition"):
+            self.add_error("disposition", "Verbleib muss angegeben werden.")
+        # Bestätigung: Pflicht bei verloren/gestohlen.
+        if verloren and not daten.get("bestaetigt_gemeldt"):
+            self.add_error(
+                "bestaetigt_gemeldt",
+                "Der Vorfall ist an Datenschutz bzw. Informationssicherheit zu melden.",
+            )
+        # Datenlöschung: Pflicht bei Datenträger und nicht bei Verlust.
+        if self._datentraeger and not verloren:
+            if not daten.get("loeschung_art"):
+                self.add_error("loeschung_art", "Bitte die Art der Löschung wählen.")
+            if not daten.get("loeschung_nachweis") and not daten.get("loeschung_datei"):
+                self.add_error(
+                    "loeschung_nachweis",
+                    "Zertifikats- oder Protokollnummer oder Nachweis angeben.",
+                )
+        return daten
 
 
 def kategorie_wahl() -> forms.ChoiceField:

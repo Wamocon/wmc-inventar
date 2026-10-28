@@ -82,6 +82,31 @@ class GeratModelTests(TestCase):
         self.assertIn(g1, g2.doppelte_namen())
         self.assertIn(g2, g1.doppelte_namen())
 
+    def test_seriennummer_doppelte_selber_hersteller_abgelehnt(self):
+        """A-0097 F-10: dieselbe Seriennummer beim selben Hersteller wird abgelehnt."""
+        kat, ort, person = stammdaten_erstellen()
+        g1 = services.gerat_anlegen(
+            kategorie=kat, hersteller="Lenovo", modell="T14", seriennummer="SN-12345"
+        )
+        with self.assertRaises(services.GeratFehler) as ctx:
+            services.gerat_anlegen(
+                kategorie=kat, hersteller="Lenovo", modell="X1", seriennummer="sn-12345 "
+            )
+        self.assertIn(g1.inventarnummer, str(ctx.exception))
+
+    def test_seriennummer_doppelte_ander_hersteller_laeuft(self):
+        """A-0097 F-10: beim anderen Hersteller wird das Gerät angelegt (kein Fehler)."""
+        kat, ort, person = stammdaten_erstellen()
+        g1 = services.gerat_anlegen(
+            kategorie=kat, hersteller="Lenovo", modell="T14", seriennummer="SN-99999"
+        )
+        # Beim anderen Hersteller: kein GeratFehler, Gerät wird angelegt.
+        g2 = services.gerat_anlegen(
+            kategorie=kat, hersteller="HP", modell="EliteBook", seriennummer="SN-99999"
+        )
+        self.assertIsNotNone(g2.pk)
+        self.assertEqual(g2.seriennummer, "SN-99999")
+
     def test_importlauf_nachvollziehbar(self):
         kat, ort, person = stammdaten_erstellen()
         konto = konto_erstellen("max.admin")
@@ -317,6 +342,33 @@ class AnsichtsTests(TestCase):
         self.client.login(username="leser.k@wamocon.de", password="test-passwort-123")
         antwort = self.client.get(f"/geraete/{self.g1.inventarnummer}/aendern/")
         self.assertEqual(antwort.status_code, 302)
+
+    def test_ausgemustert_zeigt_keine_aktion_bearbeiten(self):
+        """A-0097 F-58: Ausgemustertes Gerät zeigt weder „Ändern“ noch „Prüfung abhaken“."""
+        services.ausmustern(
+            self.g1, grund="verloren", datum=date(2026, 10, 1),
+            bestaetigt_gemeldt=True, ausgefuehrt_von=self.konto,
+        )
+        self.client.login(username=self.konto.email, password="test-passwort-123")
+        antwort = self.client.get(f"/geraete/{self.g1.inventarnummer}/")
+        text = antwort.content.decode()
+        self.assertNotIn('data-test="aktion-bearbeiten"', text)
+        self.assertNotIn('data-test="pruefen"', text)
+
+    def test_ausgemustert_aendern_adresse_lehnt_ab(self):
+        """A-0097 F-58: /aendern/ eines ausgemusterten Geräts wird abgelehnt."""
+        services.ausmustern(
+            self.g1, grund="verloren", datum=date(2026, 10, 1),
+            bestaetigt_gemeldt=True, ausgefuehrt_von=self.konto,
+        )
+        self.client.login(username=self.konto.email, password="test-passwort-123")
+        antwort = self.client.get(f"/geraete/{self.g1.inventarnummer}/aendern/")
+        self.assertEqual(antwort.status_code, 302)
+        self.assertEqual(antwort.headers["Location"], f"/geraete/{self.g1.inventarnummer}/")
+        detail = self.client.get(f"/geraete/{self.g1.inventarnummer}/")
+        text = detail.content.decode()
+        self.assertIn('data-test="fehler"', text)
+        self.assertIn("nicht mehr änderbar", text)
 
 
 class OhneDebugTests(TestCase):
@@ -829,13 +881,30 @@ class DetailAktionenTests(TestCase):
         self.client.login(username=self.admin.email, password="test-passwort-123")
         antwort = self.client.post(
             f"/geraete/{g.inventarnummer}/rueckgeben/",
-            {"zustand_rueckgabe": "2", "zubehoer_komplett": "on", "ziel": "lager"},
+            {"zustand_rueckgabe": "2", "zubehoer_komplett": "ja", "ziel": "lager"},
         )
         self.assertEqual(antwort.status_code, 302)
         detail = self.client.get(f"/geraete/{g.inventarnummer}/")
         self.assertEqual(detail.status_code, 200)
         self.assertIn('data-test="meldung"', detail.content.decode())
         self.assertIn('data-test="status"', detail.content.decode())
+
+    def test_dialog_rueckgabe_fehlend_startet_ausmusterung(self):
+        """A-0097: „fehlt, Ausmusterung starten“ startet die Ausmusterung."""
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        services.gerat_ausgeben(g, self.person, ausgefuehrt_von=self.admin)
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.post(
+            f"/geraete/{g.inventarnummer}/rueckgeben/",
+            {"zustand_rueckgabe": "2", "zubehoer_komplett": "nein", "ziel": "fehlend"},
+        )
+        self.assertEqual(antwort.status_code, 302)
+        g.refresh_from_db()
+        self.assertEqual(g.status, "ausgemustert")
+        detail = self.client.get(f"/geraete/{g.inventarnummer}/")
+        text = detail.content.decode()
+        self.assertIn('data-test="status"', text)
+        self.assertIn("ausgemustert", text)
 
     def test_dialog_umzug_oeffnet_mit_speichern(self):
         g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
@@ -919,6 +988,26 @@ class DetailAktionenTests(TestCase):
         g.refresh_from_db()
         self.assertEqual(g.status, Gerat.STATUS_AUF_LAGER)
 
+    def test_dialog_reparatur_abschliessen_ziel_bisherige_zuordnung(self):
+        """A-0097: Ziel „Bisherige Zuordnung“ gibt das Gerät zurück an die Person."""
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        services.gerat_ausgeben(g, self.person, ausgefuehrt_von=self.admin)
+        services.gerat_in_reparatur_geschickt(
+            g, dienstleister="FixIT", vorgangsnummer="VR-002",
+            notiz="Defekt", ausgefuehrt_von=self.admin,
+        )
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.post(
+            f"/geraete/{g.inventarnummer}/reparatur/fertig/",
+            {"zustand": "2", "ziel": "zuordnung"},
+        )
+        self.assertEqual(antwort.status_code, 302)
+        g.refresh_from_db()
+        self.assertEqual(g.status, Gerat.STATUS_IN_BENUTZUNG)
+        self.assertEqual(g.person, self.person)
+        detail = self.client.get(f"/geraete/{g.inventarnummer}/")
+        self.assertIn('data-test="meldung"', detail.content.decode())
+
     def test_dialog_ausmustern_oeffnet_mit_speichern(self):
         g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
         self.client.login(username=self.admin.email, password="test-passwort-123")
@@ -945,6 +1034,48 @@ class DetailAktionenTests(TestCase):
         detail = self.client.get(f"/geraete/{g.inventarnummer}/")
         self.assertEqual(detail.status_code, 200)
         self.assertIn('data-test="meldung"', detail.content.decode())
+        g.refresh_from_db()
+        self.assertEqual(g.status, Gerat.STATUS_AUSGEMUSTERT)
+
+    def test_dialog_ausmustern_grund_pflicht(self):
+        """A-0097: Grund ohne Auswahl zeigt „Bitte einen Grund wählen.“"""
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.post(
+            f"/geraete/{g.inventarnummer}/ausmustern/",
+            {"grund": "", "datum": "2026-10-01", "disposition": "Schrotten"},
+        )
+        self.assertEqual(antwort.status_code, 200)
+        text = antwort.content.decode()
+        self.assertIn('data-test="fehler"', text)
+        self.assertIn("Bitte einen Grund wählen.", text)
+        g.refresh_from_db()
+        self.assertNotEqual(g.status, Gerat.STATUS_AUSGEMUSTERT)
+
+    def test_dialog_ausmustern_verloren_ohne_bestätigung(self):
+        """A-0097: Verlust ohne Bestätigung „gemeldet“ zeigt fehler."""
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.post(
+            f"/geraete/{g.inventarnummer}/ausmustern/",
+            {"grund": "verloren", "datum": "2026-10-01"},
+        )
+        self.assertEqual(antwort.status_code, 200)
+        text = antwort.content.decode()
+        self.assertIn('data-test="fehler"', text)
+        self.assertIn("gemeldet", text)
+        g.refresh_from_db()
+        self.assertNotEqual(g.status, Gerat.STATUS_AUSGEMUSTERT)
+
+    def test_dialog_ausmustern_verloren_mit_bestätigung(self):
+        """A-0097: Verlust mit Bestätigung läuft durch."""
+        g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.post(
+            f"/geraete/{g.inventarnummer}/ausmustern/",
+            {"grund": "verloren", "datum": "2026-10-01", "bestaetigt_gemeldt": "on"},
+        )
+        self.assertEqual(antwort.status_code, 302)
         g.refresh_from_db()
         self.assertEqual(g.status, Gerat.STATUS_AUSGEMUSTERT)
 

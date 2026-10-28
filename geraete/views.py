@@ -214,6 +214,10 @@ def neu_anzeigen(request):
 def bearbeiten(request, inventarnummer: str):
     """Änderungen eintragen (F-15). Inventarnummer bleibt unverändert (F-12)."""
     gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
+    # F-58 (A-0097): Ausgemusterte Geräte sind nicht mehr änderbar.
+    if gerat.status == Gerat.STATUS_AUSGEMUSTERT:
+        meldung_error(request, "Ausgemusterte Geräte sind nicht mehr änderbar.")
+        return redirect("/geraete/" + gerat.inventarnummer + "/")
     if not _darf_ändern(request.user):
         meldung_error(request, "Zugriff verweigert: Ändern ist Ihnen nicht erlaubt.")
         return redirect("/geraete/" + gerat.inventarnummer + "/")
@@ -680,7 +684,7 @@ def ausmustern(request, inventarnummer: str):
         return redirect("/")
     gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
     if request.method == "POST":
-        form = GeratAusmusterungForm(request.POST)
+        form = GeratAusmusterungForm(request.POST, request.FILES, gerat=gerat)
         if form.is_valid():
             try:
                 services.ausmustern(
@@ -699,5 +703,5 @@ def ausmustern(request, inventarnummer: str):
             meldung_success(request, "Gerät ausgemustert.")
             return redirect("/geraete/" + gerat.inventarnummer + "/")
     else:
-        form = GeratAusmusterungForm()
+        form = GeratAusmusterungForm(gerat=gerat)
     return render(request, "geraete/ausmusterung.html", {"gerat": gerat, "form": form})

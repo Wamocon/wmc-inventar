@@ -297,6 +297,8 @@ class Vorgang(models.Model):
         "Reparaturkosten (EUR)", max_digits=10, decimal_places=2, null=True, blank=True
     )
     reparatur_beleg = models.CharField("Reparaturbeleg", max_length=320, blank=True, default="")
+    # A-0097: Ziel des Abschließens („bisherige Zuordnung“ oder „Lager“), F-42.
+    reparatur_ziel = models.CharField("Reparaturziel", max_length=32, blank=True, default="")
     # --- Instandhaltung (F-54, F-56) ------------------------------------------
     instandhaltung_art = models.CharField("Art", max_length=240, blank=True, default="")
     instandhaltung_kosten = models.DecimalField(

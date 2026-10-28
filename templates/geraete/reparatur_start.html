@@ -8,10 +8,10 @@
   </div>
 </div>
 <div data-test="dialog" data-name="reparatur">
-  <form method="post" data-test="reparatur-start-formular">
+  <form method="post" novalidate data-test="reparatur-start-formular">
     {% csrf_token %}
     <div class="meldungen">
-      {% if form.non_field_errors %}<div class="meldung error" data-test="fehler">{% for e in form.non_field_errors %}{{ e }}{% endfor %}</div>{% endif %}
+      {% include "fragmente/fehler.html" %}
     </div>
     <div class="form-grid">
       <div class="field"><label for="id_dienstleister">Dienstleister</label>{{ form.dienstleister }}{% if form.dienstleister.errors %}<div class="meldung error">{% for e in form.dienstleister.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>

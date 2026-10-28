@@ -1,6 +1,6 @@
 # Übergabe WMCNL-2755
 
-Ausgefüllt von: Gregor · Datum: 27.10.2026 · Zweig: gregor/a-0076-arbeitsplaetze · Letzter Commit: e3d7765
+Ausgefüllt von: Gregor · Datum: 28.10.2026 · Zweig: gregor/a-0076-arbeitsplaetze · Letzter Commit: (siehe git log)
 
 ## Zusammenfassung
 
@@ -12,7 +12,7 @@ M1 Grundgerüst, M2 Bestand, M3 Lebenszyklus und M4 Arbeitsplätze sind fertig. 
 |---|---|---|---|---|
 | M1 Grundgerüst | fertig | 711ddd5 | 22.10.2026 | Projekt, Anmeldung, Konten, Stammdaten, beispieldaten |
 | M2 Bestand | fertig | | 23.10.2026 | Geräte erfassen, bearbeiten, prüfen, Suche, Konflikte, Arbeitsliste |
-| M3 Lebenszyklus | fertig | | 27.10.2026 | Ausgabe, Rückgabe, Umzug, Reparatur, Ausmusterung, Vorgang-Historie, Gerätedetail-Aktionen (A-0074), Vorgänge als Dialoge (A-0075) |
+|M3 Lebenszyklus | fertig | | 28.10.2026 | Ausgabe, Rückgabe, Umzug, Reparatur, Ausmusterung, Vorgang-Historie, Gerätedetail-Aktionen (A-0074), Vorgänge als Dialoge (A-0075), Formulare und Fehlermeldungen (A-0097) |
 | M4 Arbeitsplätze | teilweise | a13dc17 | 27.10.2026 | Soll-Ist-Abgleich (F-62), Bedarf (F-63), Feste Person (F-64), Erstinventur (F-89); Raumplan (F-65, F-66, F-68, F-69) mit Pop-up und `aktion-im-raumplan`; offen: Plan pflegen (F-67), QR-Code, Etiketten, Mobile |
 | M5 Verleih | offen | | | |
 | M6 Signatur | offen | | | |
@@ -49,7 +49,7 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 | F-37 | M | M5 | Anfrage zurückziehen | offen | |
 | F-40 | M | M2 | Stammdaten ändern | erfüllt | `geraete/services.py:gerat_bearbeiten`, Test: `test_bearbeiten_gultige_felder` |
 | F-41 | M | M3 | Umzug | erfüllt | `geraete/services.py:gerat_umziehen`, Test: `test_umzug` |
-| F-42 | M | M3 | Reparatur | erfüllt | `geraete/services.py:gerat_in_reparatur_geschickt`, `gerat_reparatur_fertig`, Test: `test_reparatur_start`, `test_reparatur_fertig_ziel_lager` |
+| F-42 | M | M3 | Reparatur | erfüllt | `geraete/services.py:gerat_in_reparatur_geschickt`, `gerat_reparatur_fertig` mit `ziel` (F-42), Test: `test_reparatur_start`, `test_reparatur_fertig_ziel_lager`, `test_dialog_reparatur_abschliessen_ziel_bisherige_zuordnung` |
 | F-43 | M | M2 | Historie je Gerät | offen | |
 | F-44 | M | M2 | Globale Suche | erfüllt | `geraete/views.py:liste` mit Suchfeld `q`, Test: `test_liste_suche_nach_name` |
 | F-50 | M | M3 | Rückgabe einzelner oder mehrerer Geräte einer Person | erfüllt | `geraete/services.py:gerat_rueckgeben`, Test: `test_rueckgabe_nach_lager`, `test_rueckgabe_ziel_reparatur` |
@@ -59,7 +59,7 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 | F-55 | M | M3 | Ausmustern | erfüllt | `geraete/services.py:ausmustern`, Test: `test_ausmusterung` |
 | F-56 | M | M3 | Löschnachweis bei Datenträgern | erfüllt | `geraete/services.py:ausmustern` mit `loeschung_art`, `loeschung_nachweis`, Test: `test_ausmusterung_datentraeger_mit_loeschung` |
 | F-57 | M | M3 | Verlust und Diebstahl | erfüllt | `geraete/services.py:ausmustern` mit `disposition=Verlust`, `bestaetigt_gemeldt`, Test: `test_ausmusterung_verloren_mit_bestatigung` |
-| F-58 | M | M3 | Archiv | erfüllt | `Vorgang`-Modell mit `abschliesst=False` für offene Vorgänge, Test: `test_vorgaenge_nicht_geloescht` |
+| F-58 | M | M3 | Archiv | erfüllt | `Vorgang`-Modell mit `abschliesst=False` für offene Vorgänge, Test: `test_vorgaenge_nicht_geloescht`; ausgemusterte Geräte nicht änderbar (A-0097), Test: `test_ausgemustert_zeigt_keine_aktion_bearbeiten`, `test_ausgemustert_aendern_adresse_lehnt_ab` |
 | F-60 | M | M1 | Arbeitsplätze und Lagerorte pflegen | erfüllt | `stammdaten/views.py:orte_liste`, `orte_anlegen`, `orte_aendern` |
 | F-61 | M | M4 | Ausstattungsprofile pflegen und Arbeitsplätzen zuweisen | erfüllt | `stammdaten/models.py:Ausstattungsprofil`, `Profilposition`, `Ort.profil`; Test: M4-Tests mit Profil |
 | F-62 | M | M4 | Soll-Ist-Abgleich je Arbeitsplatz | erfüllt | `geraete/services.py:soll_ist_abgleich`, Test: `test_soll_ist_vollstaendig`, `test_soll_ist_unvollstaendig`, `test_soll_ist_mehr_als_soll` |
@@ -131,7 +131,7 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 
 ## Wie getestet
 
-Befehle mit gekürzter Ausgabe: `python manage.py test` (98 Tests, alle grün), Import der Testfilei mit den Eckwerten, `tageslauf` mit Stichtag, erzeugte PDFs (welche, wie geprüft), Docker, falls verfügbar.
+Befehle mit gekürzter Ausgabe: `python manage.py test` (120 Tests, alle grün), `python manage.py check` (keine Probleme), `python manage.py migrate` (Migration 0004), `python manage.py beispieldaten --neu` (21 Kategorien, 26 Geräte, 4 Konten). `testsiegel` und `tageslauf` sind noch nicht implementiert (M6/M7).
 
 ## Annahmen und Abweichungen
 
@@ -142,6 +142,13 @@ Befehle mit gekürzter Ausgabe: `python manage.py test` (98 Tests, alle grün), 
 - **Vorgangstypen leihen, instandhaltung, rueckstellung (A-0075, 27.10.):** In Teil 1 (A-0074) entfernt, weil `docs/anforderungen.md` M3 diese Typen nicht verlangt. M5 (Verleih) bringt `leihen` und `rueckstellung`, M6/M7 bringen `instandhaltung`. Die Felder `leihgabe_an`, `leihgabe_seit`, `instandhaltung_frist`, `instandhaltung_von` bleiben im Modell, sie werden in M5/M6/M7 aktiv.
 - **Dialog-Implementierung (A-0075, 27.10.):** Der Dialog ist die Formularseite mit dem Rahmen `data-test="dialog"` und `data-name`, kein Fenster auf dem Gerätedetail. Beide Varianten erfüllen die Testschnittstelle; die Formularseite ist der einfachere Weg, weil die Views schon existieren.
 - **Nicht gebaut (A-0075, 27.10.):** Protokoll und Signatur stehen im Prototyp in den Dialogen, sind aber in M3 nicht verlangt (M6). Sie fehlen deshalb in den Dialogen.
+- **Fehlermeldungen standardisiert (A-0097, 28.10.):** Alle Formularseiten zeigen jetzt bei jeder ungültigen Eingabe oben ein Element mit `data-test="fehler"`, auch bei Feldfehlern. `novalidate` an allen Formularen, damit der Browser nicht bremst. Gemeinsames Fragment `templates/fragmente/fehler.html`.
+- **F-10 Seriennummer (A-0097, 28.10.):** Dieselbe Seriennummer beim selben Hersteller wird jetzt abgelehnt mit `data-test="fehler"`, nicht mehr nur als Hinweis. Beim anderen Hersteller bleibt der Hinweis. Service-Funktion `seriennummer_pruefen` mit `__iexact` und `.strip()`.
+- **Rückgabe nach Prototyp (A-0097, 28.10.):** „Zubehör komplett" ist jetzt eine Auswahl (Ja/Nein, Ja voreingestellt), kein Pflichtkästchen. „Danach" ist eine Auswahl (Lager, Reparatur, fehlend). Wer „fehlt" wählt, startet die Ausmusterung mit Grund „verloren".
+- **Ausmustern nach Prototyp (A-0097, 28.10.):** „Grund" beginnt mit „Bitte wählen" und ist Pflicht. „Verbleib" ist Pflicht außer bei verloren/gestohlen. Bestätigung „gemeldet" Pflicht bei verloren/gestohlen. Datenlöschung (Art + Nachweis) Pflicht bei Datenträger und nicht bei Verlust.
+- **Kategorien-Templates (A-0097, 28.10.):** `kategorie_anlegen.html` und `kategorie_aendern.html` angelegt. Die Views rendern sie jetzt, `/kategorien/neu/` stürzt nicht mehr ab.
+- **Reparatur abschließen (A-0097, 28.10.):** „Ziel" hat jetzt zwei Optionsfelder mit eigenen Beschriftungen („Bisherige Zuordnung" und „Lager"), nicht mehr eine Auswahl. `reparatur_ziel`-Feld im `Vorgang`-Modell (Migration 0004).
+- **F-58 Ausgemusterte nicht änderbar (A-0097, 28.10.):** „Ändern" und „Prüfung abhaken" ausgeblendet auf der Detailseite. `/aendern/` lehnt ab mit Weiterleitung und Fehlermeldung. Service-Schicht prüft `status == STATUS_AUSGEMUSTERT` und wirft `GeratFehler`.
 
 ## Offene Fragen
 

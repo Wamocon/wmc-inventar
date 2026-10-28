@@ -4,10 +4,10 @@
 <div class="page-head">
   <div><h1>Gerät anlegen</h1><p class="muted lead">Neues Gerät mit automatischer Inventarnummer (F-11 bis F-14).</p></div>
 </div>
-<form method="post" action="/geraete/speichern/" data-test="geraet-formular">
+<form method="post" action="/geraete/speichern/" novalidate data-test="geraet-formular">
   {% csrf_token %}
   <div class="meldungen">
-    {% if form.non_field_errors %}<div class="meldung error" data-test="fehler">{% for e in form.non_field_errors %}{{ e }}{% endfor %}</div>{% endif %}
+    {% include "fragmente/fehler.html" %}
   </div>
   <div class="form-grid">
     <div class="field"><label class="req" for="id_kategorie">Kategorie</label>{{ form.kategorie }}{% if form.kategorie.errors %}<div class="meldung error" data-test="fehler-kategorie">{% for e in form.kategorie.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
