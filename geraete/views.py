@@ -791,11 +791,8 @@ def etikett_drucken(request, inventarnummer: str):
 
     Für Admin und Leser.
     """
-    if not _darf_sehen(request.user):
-        meldung_error(request, "Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
-        return redirect("/")
-    if request.user.ist_mitarbeiter:
-        raise PermissionDenied("Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
+    if not (request.user.ist_admin or request.user.ist_leser):
+        _keine_berechtigung(request, f"/geraete/{inventarnummer}/etikett/")
     gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
     from .etiketten import etikett_pdf
     pdf = etikett_pdf(gerat)
@@ -811,11 +808,8 @@ def etiketten_auswahl(request):
     POST mit auswahl=Inventarnummern (kommagetrennt) und startposition.
     Für Admin und Leser.
     """
-    if not _darf_sehen(request.user):
-        meldung_error(request, "Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
-        return redirect("/")
-    if request.user.ist_mitarbeiter:
-        raise PermissionDenied("Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
+    if not (request.user.ist_admin or request.user.ist_leser):
+        _keine_berechtigung(request, "/etiketten/auswahl/")
 
     if request.method != "POST":
         meldung_error(request, "Bitte die Auswahl mit POST an /etiketten/auswahl/ übermitteln.")
@@ -860,11 +854,8 @@ def etiketten_ort(request):
     Für Admin und Leser. Mitarbeiter: 403.
     Ort über ?ort=<Kennung>.
     """
-    if not _darf_sehen(request.user):
-        meldung_error(request, "Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
-        return redirect("/")
-    if request.user.ist_mitarbeiter:
-        raise PermissionDenied("Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
+    if not (request.user.ist_admin or request.user.ist_leser):
+        _keine_berechtigung(request, "/etiketten/")
 
     ort_kennung = (request.GET.get("ort") or "").strip()
     if not ort_kennung:
