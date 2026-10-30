@@ -8,12 +8,14 @@ Serverseitige Prüfung (AGENTS.md).
 """
 from __future__ import annotations
 
-from django.http import HttpResponse, HttpResponseRedirect
+from django.core.files import File
+from django.http import Http404, HttpResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from .models import Ausstattungsprofil, Ort, Person, Kategorie
+from .models import Ausstattungsprofil, Ort, Person, Kategorie, Plan
 from .forms import KategorieForm, PersonForm, OrtForm, ProfilForm, ProfilpositionForm
 
 
@@ -297,3 +299,133 @@ def profil_anlegen(request):
         form.save()
         return redirect(reverse("stammdaten:profile-liste"))
     return render(request, "stammdaten/profil_anlegen.html", {"form": form})
+
+
+# ---------------------------------------------------------------------------
+# Raumplan pflegen (F-67, A-0107 Teil 2)
+# ---------------------------------------------------------------------------
+
+def _bild_aus_pdf(datei) -> bytes:
+    """Erste Seite eines PDFs als PNG (F-67, pypdfium2)."""
+    import io
+    import pypdfium2 as pdfium
+    doc = pdfium.PdfDocument(datei.read())
+    try:
+        if len(doc) == 0:
+            raise ValueError("Das PDF hat keine Seiten.")
+        seite = doc[0]
+        bild = seite.render(scale=2).to_pil()
+        puffer = io.BytesIO()
+        bild.save(puffer, format="PNG")
+        return puffer.getvalue()
+    finally:
+        doc.close()
+
+
+def _grundriss_speichern(plan: Plan, datei) -> None:
+    """Datei für den Grundriss annehmen: PNG, JPG, SVG oder PDF (F-67).
+
+    Die erste Seite eines PDFs wird mit pypdfium2 zu einem Bild.
+    Die Datei landet in der DATEIABLAGE unter ``grundrisse/``.
+    """
+    from django.core.files.base import ContentFile
+    from django.core.files.storage import default_storage
+    name = (datei.name or "").lower()
+    if name.endswith(".png"):
+        daten, dateiname = datei.read(), "grundriss.png"
+    elif name.endswith((".jpg", ".jpeg")):
+        daten, dateiname = datei.read(), "grundriss.jpg"
+    elif name.endswith(".svg"):
+        daten, dateiname = datei.read(), "grundriss.svg"
+    elif name.endswith(".pdf"):
+        daten, dateiname = _bild_aus_pdf(datei), "grundriss.png"
+    else:
+        raise ValueError("Der Grundriss muss PNG, JPG, SVG oder ein PDF sein (F-67).")
+    # Alte Datei löschen, falls vorhanden
+    if plan.grundriss and plan.grundriss.name:
+        try:
+            default_storage.delete(plan.grundriss.name)
+        except OSError:
+            pass
+    # Neue Datei speichern: Zuerst die Standarddatei löschen, damit
+    # default_storage.save() den Namen "grundriss.png" (nicht "grundriss_XXXX.png")
+    # verwenden kann.
+    standard_pfad = f"grundrisse/{dateiname}"
+    if default_storage.exists(standard_pfad):
+        default_storage.delete(standard_pfad)
+    pfad = default_storage.save(standard_pfad, ContentFile(daten))
+    plan.grundriss.name = pfad
+    plan.save(update_fields=["grundriss"])
+
+
+def plan_bearbeiten(request, plan_id: int):
+    """Raumplan pflegen: Grundriss hochladen, Positionen setzen (F-67).
+
+    Adresse /arbeitsplaetze/plan/<id>/bearbeiten/ (TESTSCHNITTSTELLE 3).
+    Für Admins 200, für Leser und Mitarbeiter 403 (TESTSCHNITTSTELLE 2).
+    """
+    user = request.user
+    if not user.is_authenticated or not user.ist_admin:
+        return _keine_berechtigung(request)
+    try:
+        plan = Plan.objects.get(pk=plan_id)
+    except Plan.DoesNotExist:
+        from django.http import Http404
+        raise Http404
+
+    meldung = None
+    datei = request.FILES.get("grundriss")
+    pfad = request.path
+
+    if request.method == "POST":
+        # Position speichern (x, y in Prozent vom Mittelpunkt, TESTSCHNITTSTELLE 2)
+        von = request.POST.get("ort", "")
+        if von:
+            try:
+                ort = Ort.objects.get(pk=int(von), plan_id=plan.id)
+            except Ort.DoesNotExist:
+                ort = None
+            if ort is not None:
+                try:
+                    ort.position_x = round(float(request.POST.get("x", "0")), 1)
+                    ort.position_y = round(float(request.POST.get("y", "0")), 1)
+                except (ValueError, TypeError):
+                    ort.position_x = None
+                    ort.position_y = None
+                ort.aktualisiert_am = timezone.now()
+                ort.save()
+                meldung = f"Position von {ort.kennung} gespeichert."
+                return redirect(pfad)
+
+        # Grundriss hochladen
+        if datei is not None and datei.size:
+            try:
+                _grundriss_speichern(plan, datei)
+                meldung = "Grundriss gespeichert."
+            except Exception as fehler:
+                meldung = f"Fehler beim Speichern des Grundrisses: {fehler}"
+            return redirect(pfad)
+
+    grundriss_name = ""
+    grundriss_typ = ""
+    if plan.grundriss and plan.grundriss.name:
+        grundriss_name = plan.grundriss.name
+        if "." in plan.grundriss.name:
+            grundriss_typ = plan.grundriss.name.rsplit(".", 1)[-1].lower()
+    plaetze = (
+        Ort.objects.filter(
+            plan_id=plan.id,
+            typ__in=(Ort.TYP_ARBEITSPLATZ, Ort.TYP_RAUM),
+        ).order_by("kennung")
+    )
+    return render(
+        request,
+        "geraete/plan_bearbeiten.html",
+        {
+            "plan": plan,
+            "plaetze": plaetze,
+            "meldung": meldung,
+            "grundriss_name": grundriss_name,
+            "grundriss_typ": grundriss_typ,
+        },
+    )

@@ -273,28 +273,19 @@ class Command(BaseCommand):
         """Raumplan: Eschborn, 1. OG, mit Grundriss (TESTSCHNITTSTELLE 2, F-65).
 
         Der Grundriss liegt unter docs/vorlagen/ und wird in die DATEIABLAGE
-        kopiert; der Pfad steht im Modell ``Plan``.
+        kopiert; die Datei wird über das FileField im Modell ``Plan`` gespeichert.
         """
+        from django.core.files.base import ContentFile
         from stammdaten.models import Plan
 
         grundriss_name = PLAN["grundriss_datei"]
         quelle = Path(settings.ROOT_DIR) / "docs" / "vorlagen" / grundriss_name
-        ablage = Path(getattr(settings, "DATEIABLAGE", ""))
-        if not ablage:
-            ablage = Path(settings.ROOT_DIR) / "var" / "ablage"
-        ziel_ordner = ablage / PLAN["ablage_ordner"]
-        ziel_ordner.mkdir(parents=True, exist_ok=True)
-        ziel = ziel_ordner / grundriss_name
-        if quelle.exists():
-            import shutil
-            shutil.copy2(quelle, ziel)
 
-        pfad_rel = f"{PLAN['ablage_ordner']}/{grundriss_name}"
-        plan = Plan.objects.create(
-            standort=PLAN["standort"],
-            etage=PLAN["etage"],
-            grundriss=pfad_rel,
-        )
+        plan = Plan(standort=PLAN["standort"], etage=PLAN["etage"])
+        if quelle.exists():
+            with open(quelle, "rb") as f:
+                plan.grundriss.save(grundriss_name, ContentFile(f.read()), save=False)
+        plan.save()
         self.stdout.write(f"  1 Raumplan ({PLAN['standort']}, {PLAN['etage']})")
         return plan
 

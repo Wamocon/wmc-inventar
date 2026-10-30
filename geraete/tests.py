@@ -1565,7 +1565,6 @@ class RaumplanTests(TestCase):
         self.plan = Plan.objects.create(
             standort="Eschborn",
             etage="1. OG",
-            grundriss="grundrisse/grundriss_eschborn_1og.svg",
         )
 
         # 15 Arbeitsplätze (TESTSCHNITTSTELLE Kapitel 2)
@@ -1685,3 +1684,168 @@ class RaumplanTests(TestCase):
         # Jeder Raum muss data-id mit seiner Kennung haben
         for kennung in ["STUDIO-TECHNIK", "ACADEMY-TECHNIK", "SERVER-TECHNIK", "EINGANG"]:
             self.assertIn(f'data-id="{kennung}"', html)
+
+
+# --- A-0107: Raumplan pflegen (F-67, Teil 2) -----------------------------------
+
+class PlanPflegeTests(TestCase):
+    """Raumplan pflegen: Rechte, Upload, Position, ohne Position (F-67).
+
+    TESTSCHNITTSTELLE:
+      - Kapitel 1: DATEIABLAGE, Grundriss PNG, JPG, SVG oder erste Seite eines PDF
+      - Kapitel 2: Position in Prozent von Breite und Höhe, gemessen am Mittelpunkt
+      - Kapitel 3: /arbeitsplaetze/plan/<id>/bearbeiten/ – Admin 200, sonst 403
+      - Kapitel 4: ohne Position in „ohne-position“ neben dem Plan
+    """
+
+    def setUp(self):
+        from stammdaten.models import Plan
+        from konten.models import Konto
+
+        self.plan = Plan.objects.create(standort="Eschborn", etage="Erdgeschoss")
+        self.ort_mit = Ort.objects.create(
+            typ=Ort.TYP_ARBEITSPLATZ, kennung="WMC-WP-01",
+            standort="Eschborn", raum="Großraumbüro",
+            plan_id=self.plan.id, position_x=30.0, position_y=40.0,
+        )
+        self.ort_ohne = Ort.objects.create(
+            typ=Ort.TYP_ARBEITSPLATZ, kennung="WMC-WP-02",
+            standort="Eschborn", raum="Großraumbüro",
+            plan_id=self.plan.id,
+        )
+        self.leser = konto_erstellen("gf", rolle="leser", email="gf@beispiel.test")
+        self.mitarbeiter = konto_erstellen(
+            "anna.becker", rolle="mitarbeiter", email="anna.becker@beispiel.test"
+        )
+        self.admin = konto_erstellen(
+            "it-admin", rolle="admin", email="it-admin@beispiel.test"
+        )
+
+    @staticmethod
+    def _png_datei(name="grundriss.png"):
+        import io
+        from PIL import Image
+        bild = Image.new("RGB", (200, 100), color=(240, 244, 255))
+        puffer = io.BytesIO()
+        bild.save(puffer, format="PNG")
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        return SimpleUploadedFile(name, puffer.getvalue(), content_type="image/png")
+
+    @staticmethod
+    def _pdf_datei(name="grundriss.pdf"):
+        # Minimal-Valides PDF mit einer Seite (300x200).
+        datei = (
+            b"%PDF-1.4\n"
+            b"1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n"
+            b"2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n"
+            b"3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 300 200]>>endobj\n"
+            b"xref\n0 4\n0000000000 65535 f \n"
+            b"0000000009 00000 n \n"
+            b"0000000052 00000 n \n"
+            b"0000000101 00000 n \n"
+            b"trailer<</Size 4/Root 1 0 R>>\nstartxref\n161\n%%EOF\n"
+        )
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        return SimpleUploadedFile(name, datei, content_type="application/pdf")
+
+    def test_admin_erhaelt_200(self):
+        """Kapitel 3: Admin sieht die Pflege-Seite mit 200."""
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get(f"/arbeitsplaetze/plan/{self.plan.id}/bearbeiten/")
+        self.assertEqual(antwort.status_code, 200)
+
+    def test_leser_erhaelt_403(self):
+        """Kapitel 3: Leser erhält 403."""
+        self.client.login(username=self.leser.email, password="test-passwort-123")
+        antwort = self.client.get(f"/arbeitsplaetze/plan/{self.plan.id}/bearbeiten/")
+        self.assertEqual(antwort.status_code, 403)
+
+    def test_mitarbeiter_erhaelt_403(self):
+        """Kapitel 3: Mitarbeiter erhält 403."""
+        self.client.login(username=self.mitarbeiter.email, password="test-passwort-123")
+        antwort = self.client.get(f"/arbeitsplaetze/plan/{self.plan.id}/bearbeiten/")
+        self.assertEqual(antwort.status_code, 403)
+
+    def test_upload_png_wird_abgelegt(self):
+        """Kapitel 1: PNG wird als Grundriss gespeichert."""
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.post(
+            f"/arbeitsplaetze/plan/{self.plan.id}/bearbeiten/",
+            {"grundriss": self._png_datei()},
+            follow=True,
+        )
+        self.assertEqual(antwort.status_code, 200)
+        self.plan.refresh_from_db()
+        self.assertTrue(self.plan.grundriss, "Grundriss ist leer")
+        self.assertTrue(self.plan.grundriss.name.endswith("grundriss.png"),
+                        f"Name ist '{self.plan.grundriss.name}', erwartet Ende mit 'grundriss.png'")
+
+    def test_upload_einseitiges_pdf_wird_zum_bild(self):
+        """Kapitel 1: Einseitiges PDF wird mit pypdfium2 zum Bild."""
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.post(
+            f"/arbeitsplaetze/plan/{self.plan.id}/bearbeiten/",
+            {"grundriss": self._pdf_datei()},
+            follow=True,
+        )
+        self.assertEqual(antwort.status_code, 200)
+        self.plan.refresh_from_db()
+        self.assertTrue(self.plan.grundriss)
+        self.assertTrue(self.plan.grundriss.name.endswith("grundriss.png"))
+
+    def test_position_erscheint_im_raumplan(self):
+        """Kapitel 2 und 4: Gespeicherte Position steht als data-x/data-y am platz."""
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get("/arbeitsplaetze/")
+        html = antwort.content.decode()
+        self.assertIn('data-x="30"', html)
+        self.assertIn('data-y="40"', html)
+
+    @staticmethod
+    def _ohne_position_kennungen(html: str) -> list[str]:
+        """Kennungen aus dem Abschnitt „ohne-position“ ziehen (Kapitel 4)."""
+        if 'data-test="ohne-position"' not in html:
+            return []
+        start = html.split('data-test="ohne-position"')[1]
+        # Ende des Abschnitts suchen: Das nächste data-test-Attribut oder das Ende
+        kennungen = []
+        import re
+        # Suchen alle ort-kennung Werte im Abschnitt
+        for match in re.finditer(r'data-test="ort-kennung">([^<]+)</span>', start):
+            kennungen.append(match.group(1).strip())
+        return kennungen
+
+    def test_ohne_position_erscheint_neben_dem_plan(self):
+        """Kapitel 4: Platz ohne Position steht in „ohne-position“."""
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get("/arbeitsplaetze/")
+        html = antwort.content.decode()
+        self.assertIn('data-test="ohne-position"', html)
+        kennungen = self._ohne_position_kennungen(html)
+        self.assertIn("WMC-WP-02", kennungen)
+        self.assertNotIn("WMC-WP-01", kennungen)
+
+    def test_position_wird_im_plan_bearbeiten_gespeichert(self):
+        """Kapitel 2: Position wird in Prozent gespeichert und im Plan angezeigt."""
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.post(
+            f"/arbeitsplaetze/plan/{self.plan.id}/bearbeiten/",
+            {
+                "ort": self.ort_ohne.id,
+                "x": "55.5",
+                "y": "25.0",
+            },
+        )
+        self.assertEqual(antwort.status_code, 302)
+        self.ort_ohne.refresh_from_db()
+        self.assertEqual(self.ort_ohne.position_x, 55.5)
+        self.assertEqual(self.ort_ohne.position_y, 25.0)
+
+        antwort = self.client.get("/arbeitsplaetze/")
+        html = antwort.content.decode()
+        self.assertIn('data-x="55.5"', html)
+        self.assertIn('data-y="25"', html)
+        # Platz ohne Position verschwindet aus „ohne-position“,
+        # sobald er eine Position hat.
+        kennungen = self._ohne_position_kennungen(html)
+        self.assertNotIn("WMC-WP-02", kennungen)

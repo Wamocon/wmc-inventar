@@ -75,11 +75,11 @@
 <div class="abschnitt">
   <h2>Plätze ohne Position</h2>
   <div class="liste" data-test="ohne-position">
-    {% for o in ohne_pos %}
+    {% for zeile in ohne_pos %}
     <div class="zeile">
-      <span data-test="ort-kennung">{{ o.kennung }}</span>
+      <span data-test="ort-kennung">{{ zeile.ort.kennung }}</span>
       <span class="muted">noch keine Position im Grundriss</span>
-      <a class="btn sm" href="/arbeitsplaetze/{{ o.kennung }}/" data-test="detail-link">Ansehen</a>
+      <a class="btn sm" href="/arbeitsplaetze/{{ zeile.ort.kennung }}/" data-test="detail-link">Ansehen</a>
     </div>
     {% endfor %}
   </div>

@@ -40,8 +40,14 @@ class Plan(models.Model):
 
     standort = models.CharField("Standort", max_length=120)
     etage = models.CharField("Etage", max_length=40)
-    grundriss = models.CharField(
-        "Grundriss (Pfad in der DATEIABLAGE)", max_length=320, blank=True, default=""
+    # F-67: Grundriss als Datei in der DATEIABLAGE; die Positionen bleiben
+    # beim Austausch erhalten, weil sie pro Ort in Prozent gespeichert sind.
+    grundriss = models.FileField(
+        "Grundriss (Datei in der DATEIABLAGE)",
+        upload_to="grundrisse/",
+        blank=True,
+        default="",
+        null=True,
     )
     erzeugt_am = models.DateTimeField("Erzeugt am", auto_now_add=True)
 

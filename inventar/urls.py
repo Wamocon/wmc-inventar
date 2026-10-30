@@ -5,6 +5,7 @@ TESTSCHNITTSTELLE Abschnitt 3 (Adressen).
 from django.contrib import admin
 from django.urls import path, include
 from geraete import views as geraete_views
+from stammdaten import views as stammdaten_views
 
 urlpatterns = [
     path("", include("konten.urls")),
@@ -13,6 +14,7 @@ urlpatterns = [
     # M4 Arbeitsplätze und Raumplan (F-65 bis F-69, A-0076 Teil 1):
     # direkt unter /arbeitsplaetze/, unter /geraete/arbeitsplaetze/ bleibt nichts.
     path("arbeitsplaetze/", geraete_views.arbeitsplaetze, name="arbeitsplaetze-raumplan"),
+    path("arbeitsplaetze/plan/<int:plan_id>/bearbeiten/", stammdaten_views.plan_bearbeiten, name="plan-bearbeiten"),
     path("arbeitsplaetze/liste/", geraete_views.arbeitsplaetze_liste, name="arbeitsplaetze-liste"),
     path("arbeitsplaetze/bedarf/", geraete_views.bedarf, name="bedarf"),
     path("arbeitsplaetze/pruefen/", geraete_views.erstinventur, name="erstinventur"),
