@@ -73,10 +73,10 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 | F-63 | M | M4 | Übersicht und Bedarf | erfüllt | `geraete/services.py:bedarf_uebersicht`, Test: `test_bedarf_zeigt_fehlende`, `test_bedarf_mit_lagerbestand` |
 | F-64 | S | M4 | Feste Person am Arbeitsplatz | erfüllt | `geraete/services.py:gerate_der_person`, Test: `test_gerate_der_person_getrennt` |
 | F-89 | M | M4 | Erstinventur per Scan | teilweise | `geraete/services.py:fortschritt_je_ort`, Test: `test_fortschritt_je_ort`, `test_fortschritt_nach_pruefen`; Scan-UI noch offen |
-| F-65 | M | M4 | Raumplan | erfüllt | `geraete/views.py:arbeitsplaetze`, `geraete/services.py:plan_auswahl`, `plaetze_des_plans`, `raumorte_des_plans`, `ohne_position`, Test: `test_ort_pruefen_view`, Beispieldaten: 15 Plätze, 4 Räume |
+| F-65 | M | M4 | Raumplan | erfüllt | `geraete/views.py:arbeitsplaetze`, `geraete/services.py:plan_auswahl`, `plaetze_des_plans`, `raumorte_des_plans`, `ohne_position`, Test: `RaumplanTests` (5 Tests), Beispieldaten: 15 Plätze, 4 Räume mit `plan_id` (A-0106) |
 | F-66 | M | M4 | Pop-up je Arbeitsplatz | erfüllt | `geraete/views.py:platz_popup`, `raum_popup`, Test: `test_ort_pruefen_view` (URL), Pop-up zeigt Kennung, Raum, Person, Profil, Soll-Ist, Geräte |
 | F-67 | M | M4 | Plan pflegen | teilweise | Plan-Modell mit Grundriss in `stammdaten/models.py`, Beispieldaten legen Eschborn, 1. OG, mit SVG an; Upload und Verschieben in Teil 2 |
-| F-68 | M | M4 | Räume ohne festen Platz | erfüllt | `geraete/views.py:raum_popup`, `raumorte_des_plans`, Test: Beispieldaten 4 Räume |
+| F-68 | M | M4 | Räume ohne festen Platz | erfüllt | `geraete/views.py:raum_popup`, `raumorte_des_plans` (alle Räume des Plans, nicht nur mit Geräten), Test: `RaumplanTests.test_raumplan_admin_sieht_alle_plaetze` (4 `raumort` mit `data-id`, A-0106) |
 | F-69 | S | M4 | Gerät im Plan finden | erfüllt | `templates/geraete/detail.html` mit `aktion-im-raumplan`, Raumplan hebt Platz oder Raum hervor |
 | F-70 | M | M4 | QR-Code je Gerät | offen | |
 | F-71 | M | M4 | Etiketteninhalt | offen | |
@@ -138,7 +138,7 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 
 ## Wie getestet
 
-Befehle mit gekürzter Ausgabe: `python manage.py test` (155 Tests, alle grün), `python manage.py check` (keine Probleme), `python manage.py migrate` (keine neuen Migrationen), `python manage.py beispieldaten --neu` (21 Kategorien, 26 Geräte, 4 Konten). `testsiegel` und `tageslauf` sind noch nicht implementiert (M6/M7).
+Befehle mit gekürzter Ausgabe: `python manage.py test` (160 Tests, alle grün), `python manage.py check` (keine Probleme), `python manage.py migrate` (keine neuen Migrationen), `python manage.py beispieldaten --neu` (21 Kategorien, 26 Geräte, 4 Konten, 1 Raumplan mit 15 Arbeitsplätzen und 4 Räumen). `testsiegel` und `tageslauf` sind noch nicht implementiert (M6/M7).
 
 ## Offene Punkte (A-0099)
 
@@ -168,6 +168,7 @@ Befehle mit gekürzter Ausgabe: `python manage.py test` (155 Tests, alle grün),
 - **F-44 Suche je Feld (A-0098, 28.10.):** Suche nach Inventarnummer, Seriennummer, Modell, Hostname (Gerätename) und Person (Vor- und Nachname). Jede Trefferzeile trägt `data-test="suchtreffer"`, das Suchfeld trägt `data-test="suche"`. Test: `test_suche_inventarnummer`, `test_suche_seriennummer`, `test_suche_modell`, `test_suche_hostname`, `test_suche_person`.
 - **F-131 Zustand in der Ausgabe (A-0098, 28.10.):** Der Ausgabe-Dialog bekommt „Zustand" (Auswahl mit den vier Stufen, voreingestellt mit dem Zustand des Geräts), „Zubehör komplett" (Ja/Nein) und „Bemerkung". Der Zustand geht in den Vorgang Ausgabe und auf das Gerät. Test: `test_ausgabe_zustand_neuwertig`, `test_ausgabe_zustand_gut`, `test_ausgabe_zustand_spuren`, `test_ausgabe_zustand_eingeschraenkt`.
 - **F-02 Kontenverwaltung (A-0098, 28.10.):** Kontenliste unter `/konten/` mit `data-test="konten-liste"` und `data-test="konto-anlegen"`, nur für Admin (403 für Mitarbeiter). Navigation `nav-konten` zeigt dorthin. Test: `test_konten_liste_admin_200`, `test_konten_liste_mitarbeiter_403`, `test_konto_anlegen_admin_200`, `test_konto_anlegen_mitarbeiter_403`.
+- **Raumplan Filter (A-0106, 30.10.):** `geraete/services.py:plaetze_des_plans` und `raumorte_des_plans` filterten nach `etage` (Feld existiert nur an `Plan`), nicht nach `plan_id`. Behoben: Filter nutzt jetzt `plan_id=plan.id`. `raumorte_des_plans` nimmt jetzt alle Räume des Plans, nicht nur mit Geräten (F-68). Beispieldaten setzen `plan_id` auf alle 15 Arbeitsplätze und 4 Räume (Plan: Eschborn, 1. OG). Template `raumplan.html` korrigiert: `o.ort.kennung` statt `o.kennung` für `plaetze` (Diktat mit `ort` und `abgleich`). `stringformat:'g'` für `data-x` und `data-y` (Punkt statt Komma, TESTSCHNITTSTELLE Kapitel 2). Test: `RaumplanTests` (5 Tests: Admin/Leser sehen 15 Plätze + 4 Räume, Mitarbeiter 403, Positionen mit Punkt, `data-id` auf `raumort`).
 
 ## Offene Fragen
 

@@ -1548,3 +1548,140 @@ class LoeschenTests(TestCase):
         antwort = self.client.get(f"/geraete/{g.inventarnummer}/")
         text = antwort.content.decode()
         self.assertNotIn('data-test="aktion-loeschen"', text)
+
+
+# --- A-0106: Raumplan (F-65, F-68) --------------------------------------------
+
+class RaumplanTests(TestCase):
+    """Raumplan: 15 Plätze und 4 Räume (F-65, F-68, A-0106).
+
+    TESTSCHNITTSTELLE Kapitel 2: 15 Arbeitsplätze und 4 Orte vom Typ Raum.
+    """
+
+    def setUp(self):
+        from stammdaten.models import Plan
+
+        # Plan und Orte wie in beispieldaten anlegen
+        self.plan = Plan.objects.create(
+            standort="Eschborn",
+            etage="1. OG",
+            grundriss="grundrisse/grundriss_eschborn_1og.svg",
+        )
+
+        # 15 Arbeitsplätze (TESTSCHNITTSTELLE Kapitel 2)
+        arbeitsplaetze = [
+            ("WMC-WP-01", "Großraumbüro", 50.1, 55.6),
+            ("WMC-WP-02", "Großraumbüro", 64.1, 55.6),
+            ("WMC-WP-03", "Großraumbüro", 50.1, 61.3),
+            ("WMC-WP-04", "Großraumbüro", 64.1, 61.3),
+            ("WMC-WP-05", "Großraumbüro", 50.1, 69.3),
+            ("WMC-WP-06", "Großraumbüro", 64.1, 69.3),
+            ("WMC-WP-07", "Großraumbüro", 50.1, 75.1),
+            ("WMC-WP-08", "Großraumbüro", 64.1, 75.1),
+            ("WMC-WP-09", "Großraumbüro", 50.1, 83.1),
+            ("WMC-WP-10", "Großraumbüro", 64.1, 83.1),
+            ("WMC-WP-11", "Großraumbüro", 50.1, 88.9),
+            ("WMC-WP-12", "Großraumbüro", 64.1, 88.9),
+            ("WMC-WP-13", "Büro Geschäftsführung", 10.4, 62.7),
+            ("WMC-WP-14", "Büro Geschäftsführung", 24.3, 62.7),
+            ("WMC-WP-15", "Studio", 10.7, 77.3),
+        ]
+        for kennung, raum, x, y in arbeitsplaetze:
+            Ort.objects.create(
+                typ=Ort.TYP_ARBEITSPLATZ,
+                kennung=kennung,
+                name=kennung,
+                standort="Eschborn",
+                raum=raum,
+                position_x=x,
+                position_y=y,
+                plan_id=self.plan.id,
+            )
+
+        # 4 Räume (TESTSCHNITTSTELLE Kapitel 2)
+        raume = [
+            ("STUDIO-TECHNIK", "Studiotechnik", "Studio", 24.1, 87.3),
+            ("ACADEMY-TECHNIK", "Academy-Technik", "Academy-Raum", 77.4, 36.9),
+            ("SERVER-TECHNIK", "Serverschrank", "Serverraum", 24.6, 30.3),
+            ("EINGANG", "Eingangsbereich", "Großraumbüro", 44.6, 44.7),
+        ]
+        for kennung, name, raum, x, y in raume:
+            Ort.objects.create(
+                typ=Ort.TYP_RAUM,
+                kennung=kennung,
+                name=name,
+                standort="Eschborn",
+                raum=raum,
+                position_x=x,
+                position_y=y,
+                plan_id=self.plan.id,
+            )
+
+        # Konten
+        self.admin = konto_erstellen("raumplan.admin", rolle="admin")
+        self.leser = konto_erstellen("raumplan.leser", rolle="leser")
+        self.mitarbeiter = konto_erstellen("raumplan.mitarbeiter", rolle="mitarbeiter")
+
+    def test_raumplan_admin_sieht_alle_plaetze(self):
+        """F-65: Admin sieht 15 Plätze und 4 Räume im Raumplan."""
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get("/arbeitsplaetze/")
+        self.assertEqual(antwort.status_code, 200)
+        html = antwort.content.decode()
+
+        # 15 Plätze mit data-x und data-y
+        platz_count = html.count('data-test="platz"')
+        self.assertEqual(platz_count, 15, f"Erwartet 15 Plätze, gefunden: {platz_count}")
+
+        # 4 Räume mit data-id
+        raumort_count = html.count('data-test="raumort"')
+        self.assertEqual(raumort_count, 4, f"Erwartet 4 Räume, gefunden: {raumort_count}")
+
+        # Prüfen, dass alle Platz-Kennungen vorhanden sind
+        for kennung in [f"WMC-WP-{i:02d}" for i in range(1, 16)]:
+            self.assertIn(kennung, html, f"Platz {kennung} fehlt im HTML")
+
+        # Prüfen, dass alle Raum-Kennungen vorhanden sind
+        for kennung in ["STUDIO-TECHNIK", "ACADEMY-TECHNIK", "SERVER-TECHNIK", "EINGANG"]:
+            self.assertIn(kennung, html, f"Raum {kennung} fehlt im HTML")
+
+    def test_raumplan_leser_sieht_alle_plaetze(self):
+        """F-65: Leser sieht 15 Plätze und 4 Räume im Raumplan."""
+        self.client.login(username=self.leser.email, password="test-passwort-123")
+        antwort = self.client.get("/arbeitsplaetze/")
+        self.assertEqual(antwort.status_code, 200)
+        html = antwort.content.decode()
+
+        platz_count = html.count('data-test="platz"')
+        self.assertEqual(platz_count, 15)
+
+        raumort_count = html.count('data-test="raumort"')
+        self.assertEqual(raumort_count, 4)
+
+    def test_raumplan_mitarbeiter_erhaelt_403(self):
+        """F-112: Mitarbeiter erhält 403 bei /arbeitsplaetze/."""
+        self.client.login(username=self.mitarbeiter.email, password="test-passwort-123")
+        antwort = self.client.get("/arbeitsplaetze/")
+        self.assertEqual(antwort.status_code, 403)
+
+    def test_raumplan_plaetze_haben_position(self):
+        """F-65: Alle Plätze haben Position (data-x und data-y)."""
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get("/arbeitsplaetze/")
+        self.assertEqual(antwort.status_code, 200)
+        html = antwort.content.decode()
+
+        # Jeder Platz muss data-x und data-y haben
+        self.assertIn('data-x="50.1"', html)
+        self.assertIn('data-y="55.6"', html)
+
+    def test_raumplan_raume_haben_data_id(self):
+        """F-68: Alle Räume haben data-id."""
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get("/arbeitsplaetze/")
+        self.assertEqual(antwort.status_code, 200)
+        html = antwort.content.decode()
+
+        # Jeder Raum muss data-id mit seiner Kennung haben
+        for kennung in ["STUDIO-TECHNIK", "ACADEMY-TECHNIK", "SERVER-TECHNIK", "EINGANG"]:
+            self.assertIn(f'data-id="{kennung}"', html)

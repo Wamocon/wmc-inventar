@@ -44,8 +44,8 @@
     <button type="button" class="orte raumort"
             data-test="raumort"
             data-id="{{ o.kennung }}"
-            data-x="{{ o.position_x }}"
-            data-y="{{ o.position_y }}"
+            data-x="{{ o.position_x|stringformat:'g' }}"
+            data-y="{{ o.position_y|stringformat:'g' }}"
             data-pfad="/arbeitsplaetze/raum/{{ o.kennung }}/popup/">
       <span class="orts-name">{{ o.name }}</span>
     </button>
@@ -53,12 +53,12 @@
     {% for o in plaetze %}
     <button type="button" class="orte platz"
             data-test="platz"
-            data-id="{{ o.kennung }}"
+            data-id="{{ o.ort.kennung }}"
             data-soll-ist="{% if o.abgleich.ergebnis == 'vollstaendig' %}vollstaendig{% elif o.abgleich.ergebnis == 'unvollstaendig' %}unvollstaendig{% else %}mehr{% endif %}"
-            data-x="{{ o.position_x }}"
-            data-y="{{ o.position_y }}"
-            data-pfad="/arbeitsplaetze/{{ o.kennung }}/popup/">
-      <span class="orts-name">{{ o.kennung }}</span>
+            data-x="{{ o.ort.position_x|stringformat:'g' }}"
+            data-y="{{ o.ort.position_y|stringformat:'g' }}"
+            data-pfad="/arbeitsplaetze/{{ o.ort.kennung }}/popup/">
+      <span class="orts-name">{{ o.ort.kennung }}</span>
       <span class="orts-status">
         {% if o.abgleich.ergebnis == "vollstaendig" %}✓ vollständig
         {% elif o.abgleich.ergebnis == "unvollstaendig" %}✗ unvollständig

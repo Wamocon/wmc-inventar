@@ -169,7 +169,6 @@ class Command(BaseCommand):
             self._anlegen_kategorien()
             self._anlegen_profile()
             self._anlegen_orte()
-            self._anlegen_plan()
             self._anlegen_personen()
             self._anlegen_konten()
             self._anlegen_geraete()
@@ -230,6 +229,9 @@ class Command(BaseCommand):
         self.stdout.write(f"  {len(PROFILE)} Profile")
 
     def _anlegen_orte(self):
+        # A-0106: Plan erstellen, damit Orte ihm zugeordnet werden können
+        plan = self._anlegen_plan()
+
         for kennung, raum, person, profil_name, x, y in ARBEITSPLAETZE:
             profil = Ausstattungsprofil.objects.get(name=profil_name) if profil_name else None
             fest_person = None
@@ -245,6 +247,7 @@ class Command(BaseCommand):
                 feste_person=fest_person,
                 position_x=x,
                 position_y=y,
+                plan_id=plan.id,
             )
         for kennung, name, raum, x, y in RAEUME:
             Ort.objects.create(
@@ -255,6 +258,7 @@ class Command(BaseCommand):
                 raum=raum,
                 position_x=x,
                 position_y=y,
+                plan_id=plan.id,
             )
         kennung, name = LAGERORT
         Ort.objects.create(
@@ -286,12 +290,13 @@ class Command(BaseCommand):
             shutil.copy2(quelle, ziel)
 
         pfad_rel = f"{PLAN['ablage_ordner']}/{grundriss_name}"
-        Plan.objects.create(
+        plan = Plan.objects.create(
             standort=PLAN["standort"],
             etage=PLAN["etage"],
             grundriss=pfad_rel,
         )
         self.stdout.write(f"  1 Raumplan ({PLAN['standort']}, {PLAN['etage']})")
+        return plan
 
     def _anlegen_personen(self):
         eintritt = date(2024, 1, 1)

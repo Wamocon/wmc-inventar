@@ -864,18 +864,19 @@ def plaetze_des_plans(plan) -> list[dict]:
     """
     zeilen = []
     for ort in Ort.objects.filter(
-        typ=Ort.TYP_ARBEITSPLATZ, standort=plan.standort, etage=plan.etage
+        typ=Ort.TYP_ARBEITSPLATZ, plan_id=plan.id
     ).order_by("kennung"):
         zeilen.append({"ort": ort, "abgleich": soll_ist_abgleich(ort)})
     return zeilen
 
 
 def raumorte_des_plans(plan) -> list[Ort]:
-    """Räume eines Plans, die Geräte tragen, sortiert nach Kennung (F-68)."""
-    orte = Ort.objects.filter(
-        typ=Ort.TYP_RAUM, standort=plan.standort, etage=plan.etage
-    ).order_by("kennung")
-    return [o for o in orte if Gerat.objects.filter(ort=o, status__in=_ERFASST).exists()]
+    """Räume eines Plans, sortiert nach Kennung (F-68)."""
+    return list(
+        Ort.objects.filter(
+            typ=Ort.TYP_RAUM, plan_id=plan.id
+        ).order_by("kennung")
+    )
 
 
 def ohne_position(plan) -> list[dict]:
