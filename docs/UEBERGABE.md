@@ -11,6 +11,8 @@ M3 Nachbesserung (A-0099): F-52: Offboarding-Ansicht unter `/personen/<id>/offbo
 
 M4 Nachbesserung (A-0107, Teil 2): Plan pflegen (F-67): Admins laden unter `/arbeitsplaetze/plan/<id>/bearbeiten/` je Etage einen Grundriss hoch, als PNG, JPG, SVG oder die erste Seite eines PDF (mit pypdfium2 zum Bild); die Datei liegt unter DATEIABLAGE in `grundrisse/`. Arbeitsplätze und Räume lassen sich auf dem Plan an ihre Stelle ziehen; gespeichert wird die Position in Prozent von Breite und Höhe des Bildes, gemessen am Mittelpunkt. Plätze ohne Position stehen in `ohne-position` neben dem Plan. Rechte: it-admin@beispiel.test 200, gf@beispiel.test und anna.becker@beispiel.test 403. `geraete/tests.py:PlanPflegeTests` (8 Tests): Upload PNG und PDF, Position speichern, Position erscheint als data-x/data-y, ohne-position, 200/403. `stammdaten/views.py:plan_bearbeiten`, `stammdaten/views.py:_grundriss_speichern`, `stammdaten/models.py:Plan.grundriss` (FileField), `stammdaten/migrations/0004_grundriss_datei.py`.
 
+M4 Nachbesserung (A-0108, Teil 3): QR-Code und Etiketten (F-12, F-70 bis F-73, F-89): Das Gerätedetail trägt `data-test="qr"` mit `data-qr` = BASIS_URL + /g/<Inventarnummer> und einen QR-Code als SVG (segno). `/g/<Inventarnummer>` leitet Admin und Leser zum Gerätedetail weiter, Mitarbeiter erhalten 403 (F-112). Das Etikett trägt QR-Code, Inventarnummer in Klarschrift, Kategorie, Modell und „Eigentum der WAMOCON GmbH"; gedruckt als PDF mit weasyprint. Einzelnes Etikett über `data-test="aktion-etikett"` am Gerätedetail. Bogen (A4, 24 Etiketten zu 70 × 37 mm) über `data-test="auswahl"` je Zeile und `data-test="etiketten-drucken"` in der Geräteliste; die Startposition ist wählbar (`data-test="startposition"`, F-73). `/etiketten/?ort=<Kennung>` druckt die Etiketten je Ort, sortiert nach bisheriger Kennung (F-89); „Etiketten für den Platz" im Pop-up führt dorthin. „Speichern und Etikett drucken" am Erfassungsformular speichert das Gerät und liefert das PDF (F-12). Alle 187 Tests sind grün. `geraete/etiketten.py` (qr_svg, etikett_html, bogen_pdf, etiketten_fuer_ort), `geraete/views.py` (gerat_kurz, etikett_drucken, etiketten_auswahl, etiketten_ort, _qr_svg), `geraete/urls.py` und `inventar/urls.py` (neue Adressen), `templates/geraete/detail.html` (QR-Block), `templates/geraete/liste.html` (Auswahl + Etiketten drucken), `templates/geraete/neu.html` (Speichern und Etikett drucken), `templates/geraete/platz_popup.html` (Link zu /etiketten/), `geraete/tests.py` (19 neue Tests: QRCodeTests, EtikettenBogenTests, EtikettenOrtTests, SpeichernUndEtikettTests, ListEtikettenTests).
+
 **Nicht Teil dieser Karte (A-0099):**
 - **Protokoll in einem Vorgang (F-130):** Kommt mit M6; die Rückgabe-Ansicht im Offboarding zeigt keine Protokollfunktion.
 - **Deaktivieren des Kontos am Tag nach dem Austritt (F-53):** Ist ein Befehl für den Tageslauf und nicht Teil dieser Karte. `austritt_speichern` setzt `person.aktiv=False`, das Konto-Deaktivieren ist ein separater Tageslauf-Auftrag.
@@ -22,7 +24,7 @@ M4 Nachbesserung (A-0107, Teil 2): Plan pflegen (F-67): Admins laden unter `/arb
 | M1 Grundgerüst | fertig | 711ddd5 | 22.10.2026 | Projekt, Anmeldung, Konten, Stammdaten, beispieldaten |
 | M2 Bestand | fertig | | 23.10.2026 | Geräte erfassen, bearbeiten, prüfen, Suche, Konflikte, Arbeitsliste |
 | M3 Lebenszyklus | fertig | | 28.10.2026 | Ausgabe, Rückgabe, Umzug, Reparatur, Ausmusterung, Vorgang-Historie, Gerätedetail-Aktionen (A-0074), Vorgänge als Dialoge (A-0075), Formulare und Fehlermeldungen (A-0097), Historie/Suche/Zustand/Konten (A-0098), Offboarding/Austritt/Löschen (A-0099) |
-| M4 Arbeitsplätze | fertig | a13dc17 | 30.10.2026 | Soll-Ist-Abgleich (F-62), Bedarf (F-63), Feste Person (F-64), Erstinventur (F-89); Raumplan (F-65, F-66, F-68, F-69) mit Pop-up und `aktion-im-raumplan`; Plan pflegen (F-67) mit Upload und Position (A-0107); offen: QR-Code, Etiketten, Mobile |
+| M4 Arbeitsplätze | fertig | a13dc17 | 30.10.2026 | Soll-Ist-Abgleich (F-62), Bedarf (F-63), Feste Person (F-64), Erstinventur (F-89); Raumplan (F-65, F-66, F-68, F-69) mit Pop-up und `aktion-im-raumplan`; Plan pflegen (F-67) mit Upload und Position (A-0107); QR-Code, Etiketten, PDF-Druck (A-0108); offen: Mobile |
 | M5 Verleih | offen | | | |
 | M6 Signatur | offen | | | |
 | M7 Abschluss | offen | | | |
@@ -40,7 +42,7 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 | F-05 | S | M1 | Sitzungsende | erfüllt | `SESSION_COOKIE_AGE = 8h` in `inventar/settings.py` |
 | F-10 | M | M2 | Gerät erfassen | erfüllt | `geraete/services.py:gerat_anlegen`, Test: `test_neu_anlegen_klappt` |
 | F-11 | M | M2 | Mehrere gleiche Geräte auf einmal erfassen | teilweise | `gerat_anlegen` einmalig; Mehrfach-Aufnahme (Zählerfeld) noch offen |
-| F-12 | M | M4 | Etikett direkt nach dem Speichern drucken | offen | |
+| F-12 | M | M4 | Etikett direkt nach dem Speichern drucken | erfüllt | `geraete/views.py:neu_anlegen` mit `aktion=etikett`, Test: `test_speichern_und_etikett_drucken` |
 | F-13 | S | M2 | Gerät als Vorlage kopieren | offen | |
 | F-14 | M | M2 | Fehlerfassung löschen | erfüllt | `geraete/views.py:loeschen`, `geraete/views.py:loeschen_zeigen`, Test: `test_admin_ohne_vorgang_kann_loeschen`, `test_admin_mit_vorgang_kann_nicht_loeschen`, `test_mitarbeiter_kann_nicht_loeschen` |
 | F-20 | M | M3 | Ein oder mehrere Geräte an eine Person und/oder einen Arbeitsplatz ausgeben | erfüllt | `geraete/services.py:gerat_ausgeben`, Test: `test_ausgabe_an_person`, `test_ausgabe_an_ort` |
@@ -74,16 +76,16 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 | F-62 | M | M4 | Soll-Ist-Abgleich je Arbeitsplatz | erfüllt | `geraete/services.py:soll_ist_abgleich`, Test: `test_soll_ist_vollstaendig`, `test_soll_ist_unvollstaendig`, `test_soll_ist_mehr_als_soll` |
 | F-63 | M | M4 | Übersicht und Bedarf | erfüllt | `geraete/services.py:bedarf_uebersicht`, Test: `test_bedarf_zeigt_fehlende`, `test_bedarf_mit_lagerbestand` |
 | F-64 | S | M4 | Feste Person am Arbeitsplatz | erfüllt | `geraete/services.py:gerate_der_person`, Test: `test_gerate_der_person_getrennt` |
-| F-89 | M | M4 | Erstinventur per Scan | teilweise | `geraete/services.py:fortschritt_je_ort`, Test: `test_fortschritt_je_ort`, `test_fortschritt_nach_pruefen`; Scan-UI noch offen |
+| F-89 | M | M4 | Erstinventur per Scan | teilweise | `geraete/services.py:fortschritt_je_ort`, Test: `test_fortschritt_je_ort`, `test_fortschritt_nach_pruefen`; Etiketten je Ort (F-89) über `/etiketten/?ort=<Kennung>` (A-0108), Test: `test_etiketten_ort_admin_200`; Scan-UI noch offen (M5) |
 | F-65 | M | M4 | Raumplan | erfüllt | `geraete/views.py:arbeitsplaetze`, `geraete/services.py:plan_auswahl`, `plaetze_des_plans`, `raumorte_des_plans`, `ohne_position`, Test: `RaumplanTests` (5 Tests), Beispieldaten: 15 Plätze, 4 Räume mit `plan_id` (A-0106) |
 | F-66 | M | M4 | Pop-up je Arbeitsplatz | erfüllt | `geraete/views.py:platz_popup`, `raum_popup`, Test: `test_ort_pruefen_view` (URL), Pop-up zeigt Kennung, Raum, Person, Profil, Soll-Ist, Geräte |
 | F-67 | M | M4 | Plan pflegen | erfüllt | `stammdaten/views.py:plan_bearbeiten` (Upload PNG/JPG/SVG/PDF, Position speichern), `stammdaten/models.py:Plan.grundriss`, `geraete/tests.py:PlanPflegeTests` (8 Tests), Beispieldaten: Eschborn, 1. OG mit PNG (A-0107) |
 | F-68 | M | M4 | Räume ohne festen Platz | erfüllt | `geraete/views.py:raum_popup`, `raumorte_des_plans` (alle Räume des Plans, nicht nur mit Geräten), Test: `RaumplanTests.test_raumplan_admin_sieht_alle_plaetze` (4 `raumort` mit `data-id`, A-0106) |
 | F-69 | S | M4 | Gerät im Plan finden | erfüllt | `templates/geraete/detail.html` mit `aktion-im-raumplan`, Raumplan hebt Platz oder Raum hervor |
-| F-70 | M | M4 | QR-Code je Gerät | offen | |
-| F-71 | M | M4 | Etiketteninhalt | offen | |
-| F-72 | M | M4 | Druck als PDF | offen | |
-| F-73 | S | M4 | Angebrochene Bögen | offen | |
+| F-70 | M | M4 | QR-Code je Gerät | erfüllt | `geraete/etiketten.py:qr_svg`, `geraete/views.py:_qr_svg`, `templates/geraete/detail.html` mit `data-test="qr"` und `data-qr`, `/g/<Inventarnummer>` weiterleitet (F-70), Test: `test_detail_traegt_qr_mit_data_qr`, `test_kurzansicht_admin_weiterleitung` |
+| F-71 | M | M4 | Etiketteninhalt | erfüllt | `geraete/etiketten.py:etikett_html` (QR, Inventarnummer, Kategorie, Modell, „Eigentum der WAMOCON GmbH"), Test: `test_etikett_drucken_admin_200` |
+| F-72 | M | M4 | Druck als PDF | erfüllt | `geraete/etiketten.py:bogen_pdf` (weasyprint, A4, 24 × 70 × 37 mm), Test: `test_bogen_drei_geraete_admin_200`, `test_etikett_drucken_admin_200` |
+| F-73 | S | M4 | Angebrochene Bögen | erfüllt | `geraete/etiketten.py:bogen_pdf` mit `startposition`, `data-test="startposition"` in `templates/geraete/liste.html`, Test: `test_bogen_startposition_3_felder_davor_frei` |
 | F-74 | M | M4 | Mobile Gerätedetailseite | offen | |
 | F-80 | M | M2 | Datei hochladen | offen | |
 | F-81 | M | M2 | Spalten zuordnen | offen | |
@@ -140,7 +142,7 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 
 ## Wie getestet
 
-Befehle mit gekürzter Ausgabe: `python manage.py test` (160 Tests, alle grün), `python manage.py check` (keine Probleme), `python manage.py migrate` (keine neuen Migrationen), `python manage.py beispieldaten --neu` (21 Kategorien, 26 Geräte, 4 Konten, 1 Raumplan mit 15 Arbeitsplätzen und 4 Räumen). `testsiegel` und `tageslauf` sind noch nicht implementiert (M6/M7).
+Befehle mit gekürzter Ausgabe: `python manage.py test` (187 Tests, alle grün), `python manage.py check` (keine Probleme), `python manage.py migrate` (keine neuen Migrationen), `python manage.py beispieldaten --neu` (21 Kategorien, 26 Geräte, 4 Konten, 1 Raumplan mit 15 Arbeitsplätzen und 4 Räumen). `testsiegel` und `tageslauf` sind noch nicht implementiert (M6/M7).
 
 ## Offene Punkte (A-0099)
 

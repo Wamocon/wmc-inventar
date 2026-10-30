@@ -1849,3 +1849,235 @@ class PlanPflegeTests(TestCase):
         # sobald er eine Position hat.
         kennungen = self._ohne_position_kennungen(html)
         self.assertNotIn("WMC-WP-02", kennungen)
+
+
+# --- QR-Code und Etiketten (F-12, F-70 bis F-73, F-89) -------------------------
+
+class QRCodeTests(TestCase):
+    """F-70: QR-Code je Gerät, Inhalt BASIS_URL + /g/<Inventarnummer>."""
+
+    def setUp(self):
+        self.admin = konto_erstellen("it-admin", rolle="admin", email="it-admin@beispiel.test")
+        self.leser = konto_erstellen("gf", rolle="leser", email="gf@beispiel.test")
+        self.mitarbeiter = konto_erstellen("anna", rolle="mitarbeiter", email="anna.becker@beispiel.test")
+        self.kat, self.ort, self.person = stammdaten_erstellen()
+        self.gerat = services.gerat_anlegen(
+            kategorie=self.kat, hersteller="Lenovo", modell="ThinkPad"
+        )
+
+    def test_detail_traegt_qr_mit_data_qr(self):
+        """TESTSCHNITTSTELLE 4: detail trägt qr mit data-qr = BASIS_URL/g/<Inventarnummer>."""
+        from django.conf import settings
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get(f"/geraete/{self.gerat.inventarnummer}/")
+        html = antwort.content.decode()
+        erwarteter_inhalt = f"{settings.BASIS_URL}/g/{self.gerat.inventarnummer}"
+        self.assertIn('data-qr="', html)
+        self.assertIn(erwarteter_inhalt, html)
+        self.assertIn('<svg', html)
+
+    def test_kurzansicht_admin_weiterleitung(self):
+        """F-70: /g/<Inventarnummer> leitet Admin weiter zu /geraete/<Inventarnummer>/."""
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get(f"/g/{self.gerat.inventarnummer}/")
+        self.assertEqual(antwort.status_code, 302)
+        self.assertIn(f"/geraete/{self.gerat.inventarnummer}/", antwort.headers["Location"])
+
+    def test_kurzansicht_leser_weiterleitung(self):
+        """F-70: /g/<Inventarnummer> leitet Leser weiter."""
+        self.client.login(username=self.leser.email, password="test-passwort-123")
+        antwort = self.client.get(f"/g/{self.gerat.inventarnummer}/")
+        self.assertEqual(antwort.status_code, 302)
+        self.assertIn(f"/geraete/{self.gerat.inventarnummer}/", antwort.headers["Location"])
+
+    def test_kurzansicht_mitarbeiter_keine_berechtigung(self):
+        """F-112: Mitarbeiter erhalten auf /g/<Inventarnummer> 403."""
+        self.client.login(username=self.mitarbeiter.email, password="test-passwort-123")
+        antwort = self.client.get(f"/g/{self.gerat.inventarnummer}/")
+        self.assertEqual(antwort.status_code, 403)
+
+    def test_etikett_drucken_admin_200(self):
+        """F-72: /geraete/<Inventarnummer>/etikett/ liefert PDF für Admin."""
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get(f"/geraete/{self.gerat.inventarnummer}/etikett/")
+        self.assertEqual(antwort.status_code, 200)
+        self.assertEqual(antwort["Content-Type"], "application/pdf")
+        self.assertTrue(antwort.content.startswith(b"%PDF"))
+
+    def test_etikett_drucken_leser_200(self):
+        """F-72: Leser können Etikett drucken."""
+        self.client.login(username=self.leser.email, password="test-passwort-123")
+        antwort = self.client.get(f"/geraete/{self.gerat.inventarnummer}/etikett/")
+        self.assertEqual(antwort.status_code, 200)
+        self.assertEqual(antwort["Content-Type"], "application/pdf")
+
+    def test_etikett_drucken_mitarbeiter_403(self):
+        """F-112: Mitarbeiter können kein Etikett drucken."""
+        self.client.login(username=self.mitarbeiter.email, password="test-passwort-123")
+        antwort = self.client.get(f"/geraete/{self.gerat.inventarnummer}/etikett/")
+        self.assertEqual(antwort.status_code, 403)
+
+
+class EtikettenBogenTests(TestCase):
+    """F-72, F-73: Etikettenbogen als PDF, Startposition wählbar."""
+
+    def setUp(self):
+        self.admin = konto_erstellen("it-admin", rolle="admin", email="it-admin@beispiel.test")
+        self.leser = konto_erstellen("gf", rolle="leser", email="gf@beispiel.test")
+        self.mitarbeiter = konto_erstellen("anna", rolle="mitarbeiter", email="anna.becker@beispiel.test")
+        self.kat, self.ort, self.person = stammdaten_erstellen()
+        self.g1 = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="ThinkPad")
+        self.g2 = services.gerat_anlegen(kategorie=self.kat, hersteller="Dell", modell="XPS")
+        self.g3 = services.gerat_anlegen(kategorie=self.kat, hersteller="Apple", modell="MacBook")
+
+    def test_bogen_drei_geraete_admin_200(self):
+        """F-72: Bogen für 3 ausgewählte Geräte kommt als application/pdf."""
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        auswahl = ",".join([self.g1.inventarnummer, self.g2.inventarnummer, self.g3.inventarnummer])
+        antwort = self.client.post("/etiketten/auswahl/", {"auswahl": auswahl, "startposition": "1"})
+        self.assertEqual(antwort.status_code, 200)
+        self.assertEqual(antwort["Content-Type"], "application/pdf")
+        self.assertTrue(antwort.content.startswith(b"%PDF"))
+
+    def test_bogen_startposition_3_felder_davor_frei(self):
+        """F-73: Startposition 3 lässt die Felder 1 und 2 frei."""
+        from .etiketten import bogen_pdf
+        geraete = [self.g1, self.g2, self.g3]
+        pdf = bogen_pdf(geraete, startposition=3)
+        self.assertTrue(pdf.startswith(b"%PDF"))
+        # Ohne Startposition: 3 Etiketten in Feldern 1-3
+        pdf_start1 = bogen_pdf(geraete, startposition=1)
+        self.assertTrue(pdf_start1.startswith(b"%PDF"))
+        # Die PDFs sind unterschiedlich (verschiedene Startpositionen)
+        self.assertNotEqual(pdf, pdf_start1)
+
+    def test_bogen_mitarbeiter_403(self):
+        """F-112: Mitarbeiter können keinen Bogen drucken."""
+        self.client.login(username=self.mitarbeiter.email, password="test-passwort-123")
+        auswahl = self.g1.inventarnummer
+        antwort = self.client.post("/etiketten/auswahl/", {"auswahl": auswahl})
+        self.assertEqual(antwort.status_code, 403)
+
+    def test_bogen_leere_auswahl_redirect(self):
+        """Leere Auswahl führt zur Geräteliste zurück."""
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.post("/etiketten/auswahl/", {"auswahl": ""})
+        self.assertEqual(antwort.status_code, 302)
+        self.assertIn("/geraete/", antwort.headers["Location"])
+
+
+class EtikettenOrtTests(TestCase):
+    """F-89: /etiketten/?ort=<Kennung> druckt Etiketten je Ort, sortiert nach Kennung."""
+
+    def setUp(self):
+        self.admin = konto_erstellen("it-admin", rolle="admin", email="it-admin@beispiel.test")
+        self.leser = konto_erstellen("gf", rolle="leser", email="gf@beispiel.test")
+        self.mitarbeiter = konto_erstellen("anna", rolle="mitarbeiter", email="anna.becker@beispiel.test")
+        self.kat, self.ort, self.person = stammdaten_erstellen(ort_kennung="WMC-WP-01")
+        # Geräte an diesem Ort
+        for i, (hersteller, modell) in enumerate([("Lenovo", "ThinkPad"), ("Dell", "XPS"), ("Apple", "MacBook")]):
+            services.gerat_anlegen(
+                kategorie=self.kat, hersteller=hersteller, modell=modell,
+                ort=self.ort,
+            )
+
+    def test_etiketten_ort_admin_200(self):
+        """F-89: /etiketten/?ort=<Kennung> für Admin mit 200."""
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get("/etiketten/", {"ort": "WMC-WP-01"})
+        self.assertEqual(antwort.status_code, 200)
+        self.assertEqual(antwort["Content-Type"], "application/pdf")
+        self.assertTrue(antwort.content.startswith(b"%PDF"))
+
+    def test_etiketten_ort_leser_200(self):
+        """F-89: /etiketten/ für Leser mit 200."""
+        self.client.login(username=self.leser.email, password="test-passwort-123")
+        antwort = self.client.get("/etiketten/", {"ort": "WMC-WP-01"})
+        self.assertEqual(antwort.status_code, 200)
+        self.assertEqual(antwort["Content-Type"], "application/pdf")
+
+    def test_etiketten_ort_mitarbeiter_403(self):
+        """F-89: /etiketten/ für Mitarbeiter mit 403."""
+        self.client.login(username=self.mitarbeiter.email, password="test-passwort-123")
+        antwort = self.client.get("/etiketten/", {"ort": "WMC-WP-01"})
+        self.assertEqual(antwort.status_code, 403)
+
+    def test_etiketten_ort_fehlender_ort_redirect(self):
+        """Fehlender Ort führt zur Geräteliste zurück."""
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get("/etiketten/")
+        self.assertEqual(antwort.status_code, 302)
+        self.assertIn("/geraete/", antwort.headers["Location"])
+
+
+class SpeichernUndEtikettTests(TestCase):
+    """F-12: „Speichern und Etikett drucken“ anlegt das Gerät und liefert das PDF."""
+
+    def setUp(self):
+        self.admin = konto_erstellen("it-admin", rolle="admin", email="it-admin@beispiel.test")
+        self.kat, self.ort, self.person = stammdaten_erstellen()
+
+    def test_speichern_und_etikett_drucken(self):
+        """F-12: Gerät wird angelegt und PDF geliefert."""
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.post(
+            "/geraete/speichern/",
+            {
+                "kategorie": self.kat.pk,
+                "hersteller": "Lenovo",
+                "modell": "ThinkPad",
+                "zustand": 1,
+                "aktion": "etikett",
+            },
+        )
+        # PDF geliefert
+        self.assertEqual(antwort.status_code, 200)
+        self.assertEqual(antwort["Content-Type"], "application/pdf")
+        self.assertTrue(antwort.content.startswith(b"%PDF"))
+        # Gerät angelegt
+        self.assertTrue(Gerat.objects.filter(hersteller="Lenovo", modell="ThinkPad").exists())
+
+    def test_speichern_ohne_etikett_redirect(self):
+        """Ohne „aktion=etikett" wird zum Detail weitergeleitet."""
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.post(
+            "/geraete/speichern/",
+            {
+                "kategorie": self.kat.pk,
+                "hersteller": "Dell",
+                "modell": "XPS",
+                "zustand": 2,
+            },
+        )
+        self.assertEqual(antwort.status_code, 302)
+        self.assertIn("/geraete/", antwort.headers["Location"])
+        self.assertTrue(Gerat.objects.filter(hersteller="Dell", modell="XPS").exists())
+
+
+class ListEtikettenTests(TestCase):
+    """F-72: Liste trägt auswahl je Zeile und etiketten-drucken."""
+
+    def setUp(self):
+        self.admin = konto_erstellen("it-admin", rolle="admin", email="it-admin@beispiel.test")
+        self.kat, self.ort, self.person = stammdaten_erstellen()
+        self.g1 = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="ThinkPad")
+        self.g2 = services.gerat_anlegen(kategorie=self.kat, hersteller="Dell", modell="XPS")
+
+    def test_liste_traegt_auswahl_und_etiketten_drucken(self):
+        """Die Liste hat auswahl-Checkboxen und einen etiketten-drucken-Button."""
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get("/geraete/")
+        html = antwort.content.decode()
+        self.assertIn('data-test="auswahl"', html)
+        self.assertIn('data-test="etiketten-drucken"', html)
+        self.assertIn('data-test="startposition"', html)
+        self.assertIn(f'name="auswahl" value="{self.g1.inventarnummer}"', html)
+        self.assertIn(f'name="auswahl" value="{self.g2.inventarnummer}"', html)
+
+    def test_detail_traegt_aktion_etikett(self):
+        """F-72: Detail trägt aktion-etikett für Admin."""
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get(f"/geraete/{self.g1.inventarnummer}/")
+        html = antwort.content.decode()
+        self.assertIn('data-test="aktion-etikett"', html)
+        self.assertIn(f"/geraete/{self.g1.inventarnummer}/etikett/", html)

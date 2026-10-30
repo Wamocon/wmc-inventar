@@ -10,6 +10,11 @@ from stammdaten import views as stammdaten_views
 urlpatterns = [
     path("", include("konten.urls")),
     path("", include("stammdaten.urls")),
+    # QR-Code: /g/<Inventarnummer> leitet zu /geraete/<Inventarnummer>/ weiter (F-70)
+    path("g/<str:inventarnummer>/", geraete_views.gerat_kurz, name="gerat-kurz"),
+    # Etiketten (F-72, F-89): /etiketten/ und /etiketten/auswahl/
+    path("etiketten/", geraete_views.etiketten_ort, name="etiketten-ort"),
+    path("etiketten/auswahl/", geraete_views.etiketten_auswahl, name="etiketten-auswahl"),
     path("geraete/", include("geraete.urls")),
     # M4 Arbeitsplätze und Raumplan (F-65 bis F-69, A-0076 Teil 1):
     # direkt unter /arbeitsplaetze/, unter /geraete/arbeitsplaetze/ bleibt nichts.

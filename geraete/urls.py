@@ -26,4 +26,6 @@ urlpatterns = [
     path("<slug:inventarnummer>/ausmustern/", views.ausmustern, name="ausmustern"),
     path("<slug:inventarnummer>/loeschen/", views.loeschen_zeigen, name="loeschen-zeigen"),
     path("<slug:inventarnummer>/loeschen/bestaetigen/", views.loeschen, name="loeschen"),
+    # QR-Code und Etiketten (F-12, F-70 bis F-73, F-89)
+    path("<slug:inventarnummer>/etikett/", views.etikett_drucken, name="etikett-drucken"),
 ]

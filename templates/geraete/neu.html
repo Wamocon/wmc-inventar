@@ -29,7 +29,8 @@
     <div class="field full"><label for="id_notiz">Notiz</label>{{ form.notiz }}</div>
   </div>
   <div class="actions">
-    <button type="submit" class="btn primary" data-test="speichern">Anlegen</button>
+    <button type="submit" name="aktion" value="" class="btn primary" data-test="speichern">Anlegen</button>
+    <button type="submit" name="aktion" value="etikett" class="btn" data-test="speichern-und-etikett">Speichern und Etikett drucken</button>
     <a class="btn link" href="/geraete/">Abbrechen</a>
   </div>
 </form>

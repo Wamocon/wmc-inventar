@@ -38,6 +38,10 @@ class GeratForm(forms.ModelForm):
         widget=forms.Select(attrs={"data-test": "person-wahl"}),
         help_text="Person aus dem Verzeichnis oder später beim Verliehen.",
     )
+    # F-12: "Speichern und Etikett drucken" — kein Formularfeld, sondern
+    # ein Button im Formular, der im POST als data-Button durchkommt.
+    # Wir prüfen den Button-Namen im View.
+
 
     class Meta:
         model = Gerat

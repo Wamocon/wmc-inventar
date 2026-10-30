@@ -51,6 +51,19 @@
 </div>
 
 <div class="abschnitt">
+  <h2>QR-Code und Etikett</h2>
+  <div class="qr-zeile">
+    <span data-test="qr" data-qr="{{ qr_inhalt }}">{{ qr_svg }}</span>
+    <div>
+      <p class="muted small" data-test="qr-inhalt">{{ qr_inhalt }}</p>
+      {% if kann_etikett_sehen %}
+      <a class="btn" href="/geraete/{{ gerat.inventarnummer }}/etikett/" data-test="aktion-etikett">Etikett drucken</a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="abschnitt">
   <h2>Daten</h2>
   <dl class="detail-grid">
     <dt>Kategorie</dt><dd data-test="kategorie">{{ gerat.kategorie.name }}</dd>

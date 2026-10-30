@@ -10,8 +10,9 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.messages import error as meldung_error
 from django.contrib.messages import info as meldung_info
 from django.contrib.messages import success as meldung_success
-from django.db.models import Q
 from django.core.exceptions import PermissionDenied
+from django.conf import settings
+from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -31,6 +32,14 @@ from .forms import (
     GeratUmzugForm,
 )
 from .models import Gerat, GeratKonflikt, Vorgang
+
+
+def _qr_svg(gerat):
+    """QR-Code als SVG für das Gerätedetail (F-70)."""
+    from django.utils.safestring import mark_safe
+    from .etiketten import qr_svg
+    return mark_safe(qr_svg(gerat))
+
 
 # --- Rechte -----------------------------------------------------------------
 
@@ -175,6 +184,10 @@ def detail(request, inventarnummer: str):
             "koennen_aendern": _darf_ändern(request.user),
             "ist_admin": request.user.ist_admin,
             "kann_loeschen": kann_loeschen,
+            # F-70: QR-Code im Gerätedetail
+            "qr_inhalt": f"{settings.BASIS_URL}/g/{gerat.inventarnummer}",
+            "qr_svg": _qr_svg(gerat),
+            "kann_etikett_sehen": request.user.ist_admin or request.user.ist_leser,
         },
     )
 
@@ -201,6 +214,13 @@ def neu_anlegen(request):
             meldung_error(request, str(fehler))
             return redirect("/geraete/neu/")
         meldung_success(request, f"Gerät {gerat.inventarnummer} angelegt.")
+        # F-12: "Speichern und Etikett drucken" — Button-Name im POST prüfen.
+        if request.POST.get("aktion") == "etikett":
+            from .etiketten import etikett_pdf
+            pdf = etikett_pdf(gerat)
+            response = HttpResponse(pdf, content_type="application/pdf")
+            response["Content-Disposition"] = f'inline; filename="etikett-{gerat.inventarnummer}.pdf"'
+            return response
         return redirect("/geraete/" + gerat.inventarnummer + "/")
     return render(request, "geraete/neu.html", {"form": form})
 
@@ -743,3 +763,126 @@ def loeschen(request, inventarnummer: str):
     gerat.delete()
     meldung_success(request, f"Gerät {inventarnummer} gelöscht.")
     return redirect("/geraete/")
+
+
+# --- QR-Code und Etiketten (F-12, F-70 bis F-73, F-89) -------------------------
+
+@login_required
+def gerat_kurz(request, inventarnummer: str):
+    """/g/<Inventarnummer>: leitet Admin und Leser nach Anmeldung weiter (F-70).
+
+    Die Kurzansicht für Mitarbeiter (F-113) kommt mit M5.
+    Bis dahin: Admin und Leser → /geraete/<Inventarnummer>/,
+    Mitarbeiter → "keine Berechtigung" (F-112).
+    """
+    if not _darf_sehen(request.user):
+        meldung_error(request, "Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
+        return redirect("/")
+    if request.user.ist_mitarbeiter:
+        # F-112: Ein direkter Aufruf fremder Daten über die URL liefert
+        # "keine Berechtigung". F-113 (Kurzansicht) kommt mit M5.
+        raise PermissionDenied("Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
+    return redirect(f"/geraete/{inventarnummer}/")
+
+
+@login_required
+def etikett_drucken(request, inventarnummer: str):
+    """/geraete/<Inventarnummer>/etikett/: Einzelnes Etikett als PDF (F-72).
+
+    Für Admin und Leser.
+    """
+    if not _darf_sehen(request.user):
+        meldung_error(request, "Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
+        return redirect("/")
+    if request.user.ist_mitarbeiter:
+        raise PermissionDenied("Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
+    gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
+    from .etiketten import etikett_pdf
+    pdf = etikett_pdf(gerat)
+    response = HttpResponse(pdf, content_type="application/pdf")
+    response["Content-Disposition"] = f'inline; filename="etikett-{gerat.inventarnummer}.pdf"'
+    return response
+
+
+@login_required
+def etiketten_auswahl(request):
+    """Etikettenbogen für eine Auswahl aus der Geräteliste (F-72, F-73).
+
+    POST mit auswahl=Inventarnummern (kommagetrennt) und startposition.
+    Für Admin und Leser.
+    """
+    if not _darf_sehen(request.user):
+        meldung_error(request, "Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
+        return redirect("/")
+    if request.user.ist_mitarbeiter:
+        raise PermissionDenied("Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
+
+    if request.method != "POST":
+        meldung_error(request, "Bitte die Auswahl mit POST an /etiketten/auswahl/ übermitteln.")
+        return redirect("/geraete/")
+
+    auswahl = (request.POST.get("auswahl") or "").strip()
+    start = request.POST.get("startposition") or "1"
+
+    inventarnummern = [nr.strip() for nr in auswahl.split(",") if nr.strip()]
+    if not inventarnummern:
+        meldung_error(request, "Keine Geräte ausgewählt.")
+        return redirect("/geraete/")
+
+    geraete = list(
+        Gerat.objects.filter(inventarnummer__in=inventarnummern)
+        .select_related("kategorie")
+    )
+    # Reihenfolge wie im POST beibehalten
+    best = {g.inventarnummer: g for g in geraete}
+    geraete = [best[nr] for nr in inventarnummern if nr in best]
+
+    if not geraete:
+        meldung_error(request, "Die ausgewählten Geräte wurden nicht gefunden.")
+        return redirect("/geraete/")
+
+    try:
+        start_int = max(1, min(24, int(start)))
+    except (ValueError, TypeError):
+        start_int = 1
+
+    from .etiketten import bogen_pdf
+    pdf = bogen_pdf(geraete, startposition=start_int)
+    response = HttpResponse(pdf, content_type="application/pdf")
+    response["Content-Disposition"] = f'inline; filename="etiketten-bogen-{len(geraete)}.pdf"'
+    return response
+
+
+@login_required
+def etiketten_ort(request):
+    """/etiketten/: Etiketten je Ort, sortiert nach bisheriger Kennung (F-89).
+
+    Für Admin und Leser. Mitarbeiter: 403.
+    Ort über ?ort=<Kennung>.
+    """
+    if not _darf_sehen(request.user):
+        meldung_error(request, "Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
+        return redirect("/")
+    if request.user.ist_mitarbeiter:
+        raise PermissionDenied("Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
+
+    ort_kennung = (request.GET.get("ort") or "").strip()
+    if not ort_kennung:
+        meldung_error(request, "Bitte einen Ort angeben: /etiketten/?ort=<Kennung>")
+        return redirect("/geraete/")
+
+    ort = Ort.objects.filter(kennung=ort_kennung).first()
+    if ort is None:
+        meldung_error(request, f"Ort {ort_kennung} wurde nicht gefunden.")
+        return redirect("/geraete/")
+
+    from .etiketten import etiketten_fuer_ort, bogen_pdf
+    geraete = etiketten_fuer_ort(ort)
+    if not geraete:
+        meldung_error(request, f"Keine Geräte am Ort {ort.kennung}.")
+        return redirect("/geraete/")
+
+    pdf = bogen_pdf(geraete, startposition=1)
+    response = HttpResponse(pdf, content_type="application/pdf")
+    response["Content-Disposition"] = f'inline; filename="etiketten-{ort.kennung}.pdf"'
+    return response

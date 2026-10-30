@@ -50,15 +50,25 @@
 {% endif %}
 
 <div class="liste" data-test="geraete-liste">
-  {% for g in geraete %}
-  <div class="zeile"{% if suche %} data-test="suchtreffer"{% endif %}>
-    <span class="inv num" data-test="inventarnummer">{{ g.inventarnummer }}</span>
-    <span data-test="zeile-name">{{ g.geraetename|default:g.modell }} · {{ g.kategorie.name }}{% if g.ort %} · {{ g.ort.kennung }}{% elif g.person %} · {{ g.person.voller_name }}{% endif %}</span>
-    <span class="chip-status {{ g.status }}" data-test="status">{{ g.status_anzeige }}</span>
-    <a class="btn sm" href="/geraete/{{ g.inventarnummer }}/" data-test="detail-link">Ansehen</a>
-  </div>
-  {% empty %}
-  <div class="zeile muted">Keine Geräte gefunden.</div>
-  {% endfor %}
+  <form method="post" action="/etiketten/auswahl/" data-test="etiketten-formular">
+    {% csrf_token %}
+    <div class="etiketten-kopf">
+      <label><input type="checkbox" id="auswahl-alle" data-test="auswahl-alle" title="Alle auswählen"></label>
+      <input type="number" name="startposition" value="1" min="1" max="24" data-test="startposition" title="Startposition auf dem Bogen (F-73)">
+      <button type="submit" class="btn primary" data-test="etiketten-drucken" disabled>Etiketten drucken</button>
+      <span class="muted small" data-test="auswahl-anzahl">0 ausgewählt</span>
+    </div>
+    {% for g in geraete %}
+    <div class="zeile"{% if suche %} data-test="suchtreffer"{% endif %}>
+      <label class="auswahl"><input type="checkbox" name="auswahl" value="{{ g.inventarnummer }}" class="auswahl-box" data-test="auswahl" data-inventarnummer="{{ g.inventarnummer }}"></label>
+      <span class="inv num" data-test="inventarnummer">{{ g.inventarnummer }}</span>
+      <span data-test="zeile-name">{{ g.geraetename|default:g.modell }} · {{ g.kategorie.name }}{% if g.ort %} · {{ g.ort.kennung }}{% elif g.person %} · {{ g.person.voller_name }}{% endif %}</span>
+      <span class="chip-status {{ g.status }}" data-test="status">{{ g.status_anzeige }}</span>
+      <a class="btn sm" href="/geraete/{{ g.inventarnummer }}/" data-test="detail-link">Ansehen</a>
+    </div>
+    {% empty %}
+    <div class="zeile muted">Keine Geräte gefunden.</div>
+    {% endfor %}
+  </form>
 </div>
 {% endblock %}
