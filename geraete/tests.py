@@ -1989,12 +1989,17 @@ class EtikettenOrtTests(TestCase):
         self.assertEqual(antwort["Content-Type"], "application/pdf")
         self.assertTrue(antwort.content.startswith(b"%PDF"))
 
-    def test_etiketten_ort_leser_200(self):
-        """F-89: /etiketten/ für Leser mit 200."""
+    def test_etiketten_ort_leser_403(self):
+        """F-89: /etiketten/ für Leser mit 403 (Keine Berechtigung)."""
         self.client.login(username=self.leser.email, password="test-passwort-123")
         antwort = self.client.get("/etiketten/", {"ort": "WMC-WP-01"})
-        self.assertEqual(antwort.status_code, 200)
-        self.assertEqual(antwort["Content-Type"], "application/pdf")
+        self.assertEqual(antwort.status_code, 403)
+        self.assertIn("Keine Berechtigung", antwort.content.decode())
+        # Auch die Auswahlseite bleibt für den Leser 403.
+        antwort2 = self.client.get("/etiketten/")
+        self.assertEqual(antwort2.status_code, 403)
+        antwort3 = self.client.get("/etiketten/auswahl/")
+        self.assertEqual(antwort3.status_code, 403)
 
     def test_etiketten_ort_mitarbeiter_403(self):
         """F-89: /etiketten/ für Mitarbeiter mit 403."""
@@ -2002,12 +2007,16 @@ class EtikettenOrtTests(TestCase):
         antwort = self.client.get("/etiketten/", {"ort": "WMC-WP-01"})
         self.assertEqual(antwort.status_code, 403)
 
-    def test_etiketten_ort_fehlender_ort_redirect(self):
-        """Fehlender Ort führt zur Geräteliste zurück."""
+    def test_etiketten_ort_admin_auswahlseite(self):
+        """F-89: /etiketten/ ohne Parameter zeigt für Admin die Auswahl der Orte."""
         self.client.login(username=self.admin.email, password="test-passwort-123")
         antwort = self.client.get("/etiketten/")
-        self.assertEqual(antwort.status_code, 302)
-        self.assertIn("/geraete/", antwort.headers["Location"])
+        self.assertEqual(antwort.status_code, 200)
+        html = antwort.content.decode()
+        self.assertIn('data-test="etiketten-ort-auswahl"', html)
+        self.assertIn('value="WMC-WP-01"', html)
+        self.assertIn('data-test="startposition"', html)
+        self.assertIn('data-test="etiketten-drucken"', html)
 
 
 class SpeichernUndEtikettTests(TestCase):

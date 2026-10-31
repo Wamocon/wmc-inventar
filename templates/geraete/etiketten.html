@@ -1,0 +1,27 @@
+{% extends "basis.html" %}
+{% block titel %}Etiketten · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div>
+    <h1>Etiketten</h1>
+    <p class="muted lead">Bogen je Arbeitsplatz oder Lagerort, sortiert nach bisheriger Kennung (F-89). Startposition wählbar (F-73).</p>
+  </div>
+</div>
+
+<form method="get" action="/etiketten/" data-test="etiketten-ort-formular" class="filter-bar">
+  <div class="filter-row">
+    <label for="f-ort">Ort</label>
+    <select name="ort" id="f-ort" data-test="etiketten-ort-auswahl">
+      <option value="">— Ort wählen —</option>
+      {% for o in orte %}
+      <option value="{{ o.kennung }}" {% if o.kennung == ausgewaehlt %}selected{% endif %}>{{ o.kennung }}{% if o.name %} · {{ o.name }}{% endif %}</option>
+      {% endfor %}
+    </select>
+    <label for="f-startposition">Startposition</label>
+    <input type="number" name="startposition" id="f-startposition" value="1" min="1" max="24" data-test="startposition" title="Startposition auf dem Bogen (F-73)">
+    <button type="submit" class="btn primary" data-test="etiketten-drucken">Bogen drucken</button>
+  </div>
+</form>
+
+<p class="muted small" data-test="etiketten-ort-anzahl">{{ anzahl_orte }} Orte</p>
+{% endblock %}

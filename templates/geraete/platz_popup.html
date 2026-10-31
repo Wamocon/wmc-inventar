@@ -43,7 +43,7 @@
          href="/arbeitsplaetze/{{ ort.kennung }}/ausgeben/"
          data-test="popup-ausgeben">Fehlendes vom Lager ausgeben</a>
       <a class="btn sm"
-         href="/etiketten/?ort={{ ort.kennung|urlencode }}"
+         href="/etiketten/?ort={{ ort.kennung|urlencode }}&amp;startposition=1"
          data-test="popup-etiketten">Etiketten für den Platz</a>
     </div>
     {% endif %}

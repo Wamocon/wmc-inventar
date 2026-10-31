@@ -806,10 +806,11 @@ def etiketten_auswahl(request):
     """Etikettenbogen für eine Auswahl aus der Geräteliste (F-72, F-73).
 
     POST mit auswahl=Inventarnummern (kommagetrennt) und startposition.
-    Für Admin und Leser.
+    Für Admin (Kapitel 6 der Anforderungen: Bildschirm Etiketten nur für den Admin).
     """
-    if not (request.user.ist_admin or request.user.ist_leser):
-        _keine_berechtigung(request, "/etiketten/auswahl/")
+    if not request.user.ist_admin:
+        meldung_error(request, "Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
+        return render(request, "konten/keine_berechtigung.html", status=403)
 
     if request.method != "POST":
         meldung_error(request, "Bitte die Auswahl mit POST an /etiketten/auswahl/ übermitteln.")
@@ -851,29 +852,49 @@ def etiketten_auswahl(request):
 def etiketten_ort(request):
     """/etiketten/: Etiketten je Ort, sortiert nach bisheriger Kennung (F-89).
 
-    Für Admin und Leser. Mitarbeiter: 403.
-    Ort über ?ort=<Kennung>.
+    Für Admin (Kapitel 6 der Anforderungen: Bildschirm Etiketten nur für den
+    Admin). Leser und Mitarbeiter: 403 mit „Keine Berechtigung“.
+
+    Ohne Parameter: Auswahlseite mit den Arbeitsplätzen und Lagerorten,
+    wählbarer Startposition (F-73) und „Bogen drucken“.
+    Mit ?ort=<Kennung>: der Bogen für diesen Ort als application/pdf.
     """
-    if not (request.user.ist_admin or request.user.ist_leser):
-        _keine_berechtigung(request, "/etiketten/")
+    if not request.user.ist_admin:
+        meldung_error(request, "Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
+        return render(request, "konten/keine_berechtigung.html", status=403)
 
     ort_kennung = (request.GET.get("ort") or "").strip()
-    if not ort_kennung:
-        meldung_error(request, "Bitte einen Ort angeben: /etiketten/?ort=<Kennung>")
-        return redirect("/geraete/")
+    if ort_kennung:
+        ort = Ort.objects.filter(kennung=ort_kennung).first()
+        if ort is None:
+            meldung_error(request, f"Ort {ort_kennung} wurde nicht gefunden.")
+            return redirect("/geraete/")
 
-    ort = Ort.objects.filter(kennung=ort_kennung).first()
-    if ort is None:
-        meldung_error(request, f"Ort {ort_kennung} wurde nicht gefunden.")
-        return redirect("/geraete/")
+        from .etiketten import etiketten_fuer_ort, bogen_pdf
+        geraete = etiketten_fuer_ort(ort)
+        if not geraete:
+            meldung_error(request, f"Keine Geräte am Ort {ort.kennung}.")
+            return redirect("/etiketten/")
 
-    from .etiketten import etiketten_fuer_ort, bogen_pdf
-    geraete = etiketten_fuer_ort(ort)
-    if not geraete:
-        meldung_error(request, f"Keine Geräte am Ort {ort.kennung}.")
-        return redirect("/geraete/")
+        try:
+            start_int = max(1, min(24, int(request.GET.get("startposition") or "1")))
+        except (ValueError, TypeError):
+            start_int = 1
 
-    pdf = bogen_pdf(geraete, startposition=1)
-    response = HttpResponse(pdf, content_type="application/pdf")
-    response["Content-Disposition"] = f'inline; filename="etiketten-{ort.kennung}.pdf"'
-    return response
+        pdf = bogen_pdf(geraete, startposition=start_int)
+        response = HttpResponse(pdf, content_type="application/pdf")
+        response["Content-Disposition"] = f'inline; filename="etiketten-{ort.kennung}.pdf"'
+        return response
+
+    orte = list(
+        Ort.objects.filter(typ__in=(Ort.TYP_ARBEITSPLATZ, Ort.TYP_LAGER)).order_by("kennung")
+    )
+    return render(
+        request,
+        "geraete/etiketten.html",
+        {
+            "orte": orte,
+            "anzahl_orte": len(orte),
+            "ausgewaehlt": request.GET.get("ort", ""),
+        },
+    )
