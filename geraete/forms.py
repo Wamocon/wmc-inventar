@@ -24,7 +24,14 @@ STATUS_WAHL = [
 
 
 class GeratForm(forms.ModelForm):
-    """Neues Gerät (F-11 bis F-14) oder bestehendes (F-15)."""
+    """Neues Gerät (F-11 bis F-14) oder bestehendes (F-15).
+
+    A-0112 (F-11): Das zusätzliche Feld ``seriennummern`` trägt zeilenweise
+    Seriennummern. Es entsteht je Zeile ein Gerät. Fehlt das Feld oder ist
+    es leer, greift das Einzel-Feld ``seriennummer``.
+    A-0112 (F-13): Die Stammdaten werden per ``?vorlage=`` vorbelegt;
+    die Seriennummer bleibt leer.
+    """
 
     status = forms.CharField(
         required=False,
@@ -37,6 +44,15 @@ class GeratForm(forms.ModelForm):
         label="Zuweisende Person",
         widget=forms.Select(attrs={"data-test": "person-wahl"}),
         help_text="Person aus dem Verzeichnis oder später beim Verliehen.",
+    )
+    # F-11 (A-0112): zeilenweise Seriennummern für die Mehrfacherfassung.
+    seriennummern = forms.CharField(
+        required=False,
+        label="Seriennummern (eine pro Zeile)",
+        widget=forms.Textarea(
+            attrs={"rows": 4, "data-test": "seriennummern"},
+        ),
+        help_text="Eine Seriennummer pro Zeile. Leere Zeilen werden verworfen.",
     )
     # F-12: "Speichern und Etikett drucken" — kein Formularfeld, sondern
     # ein Button im Formular, der im POST als data-Button durchkommt.
@@ -70,13 +86,26 @@ class GeratForm(forms.ModelForm):
         self.fields["ort"].label = "Ort (optional)"
         if not kwargs.get("instance", None):
             self.fields["status"].widget.attrs.pop("data-ke-status", None)
+        else:
+            # A-0112 (F-11): Das Feld seriennummern gilt nur fürs Anlegen.
+            del self.fields["seriennummern"]
 
     def clean(self) -> dict:
         daten = super().clean()
         kategorie = daten.get("kategorie")
         seriennummer = (daten.get("seriennummer") or "").strip()
-        # F-14: Seriennummer nur Pflicht, wenn die Kategorie es verlangt.
-        if kategorie is not None and kategorie.seriennummer_pflicht and not seriennummer:
+        # F-11 (A-0112): Das Textfeld seriennummern trägt zeilenweise Werte.
+        # Wenn es ausgefüllt ist, genügt das (Seriennummer pro Gerät).
+        seriennummern_ruh = (daten.get("seriennummern") or "").strip()
+        hat_seriennummern = bool(seriennummern_ruh)
+        # F-14: Seriennummer nur Pflicht, wenn die Kategorie es verlangt
+        # und keine zeilenweise Liste vorliegt.
+        if (
+            kategorie is not None
+            and kategorie.seriennummer_pflicht
+            and not seriennummer
+            and not hat_seriennummern
+        ):
             self.add_error(
                 "seriennummer", "Diese Kategorie verlangt eine Seriennummer."
             )

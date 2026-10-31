@@ -333,15 +333,14 @@ class AnsichtsTests(TestCase):
         self.client.logout()
         self.client.login(username="leser.k@wamocon.de", password="test-passwort-123")
         antwort = self.client.get("/geraete/neu/")
-        self.assertEqual(antwort.status_code, 302)
-        self.assertNotIn("/geraete/neu/", antwort["Location"])
+        self.assertEqual(antwort.status_code, 403)
 
     def test_leser_kann_nicht_bearbeiten(self):
         konto_erstellen("leser.k", rolle="leser")
         self.client.logout()
         self.client.login(username="leser.k@wamocon.de", password="test-passwort-123")
         antwort = self.client.get(f"/geraete/{self.g1.inventarnummer}/aendern/")
-        self.assertEqual(antwort.status_code, 302)
+        self.assertEqual(antwort.status_code, 403)
 
     def test_ausgemustert_zeigt_keine_aktion_bearbeiten(self):
         """A-0097 F-58: Ausgemustertes Gerät zeigt weder „Ändern“ noch „Prüfung abhaken“."""
@@ -2202,3 +2201,256 @@ class GeprueftButtonTests(TestCase):
         self.assertEqual(antwort.status_code, 302)
         nachher = services.fortschritt_des_orts(self.ort.pk)
         self.assertEqual(nachher["geprueft"], gezaehlt_vorher + 1)
+
+
+# --- A-0112: F-40, F-11, F-13 -------------------------------------------------
+
+
+class AenderungsHistorieTests(TestCase):
+    """F-40, A-0112: Eine Änderung über /geraete/<Nr>/aendern/ legt einen
+    Vorgang „Änderung“ an, mit altem und neuem Wert als Text in der Historie.
+    """
+
+    def setUp(self):
+        self.admin = konto_erstellen("it-admin", rolle="admin", email="it-admin@beispiel.test")
+        self.leser = konto_erstellen("gf", rolle="leser", email="gf@beispiel.test")
+        self.kat, self.ort, self.person = stammdaten_erstellen()
+        self.gerat = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="ThinkPad")
+
+    def _anmelden(self, rolle="admin"):
+        if rolle == "admin":
+            self.client.login(username=self.admin.email, password="test-passwort-123")
+        else:
+            self.client.login(username=self.leser.email, password="test-passwort-123")
+
+    def test_aendern_zeugt_vorgang_aenderung_mit_alt_neu(self):
+        """F-40: Änderung des Herstellers erzeugt einen Vorgang „Änderung“
+        mit altem und neuem Wert, beide als Text sichtbar."""
+        self._anmelden()
+        antwort = self.client.post(
+            f"/geraete/{self.gerat.inventarnummer}/aendern/",
+            {
+                "kategorie": self.kat.pk,
+                "hersteller": "HP",
+                "modell": "ThinkPad",
+                "seriennummer": "",
+                "zustand": 2,
+            },
+        )
+        self.assertEqual(antwort.status_code, 302)
+        # Der Vorgang existiert und hat Typ „Änderung“.
+        vorgang = Vorgang.objects.filter(
+            gerat=self.gerat, typ=Vorgang.TYP_AENDERUNG
+        ).first()
+        self.assertIsNotNone(vorgang, "Kein Vorgang „Änderung“ angelegt.")
+        self.assertEqual(vorgang.aenderung_feld, "hersteller")
+        self.assertEqual(vorgang.aenderung_alter_wert, "Lenovo")
+        self.assertEqual(vorgang.aenderung_neuer_wert, "HP")
+        # In der Historie im Detail: altes und neues Wert stehen als Text.
+        antwort = self.client.get(f"/geraete/{self.gerat.inventarnummer}/")
+        html = antwort.content.decode()
+        self.assertIn('data-typ="Änderung"', html)
+        self.assertIn('data-feld="hersteller"', html)
+        self.assertIn('data-alt="Lenovo"', html)
+        self.assertIn('data-neu="HP"', html)
+        # Auch als sichtbarer Text, nicht nur in data-Attributen.
+        self.assertIn("hersteller: Lenovo → HP", html)
+
+    def test_aendern_kein_vorgang_wenn_kein_feld_geaendert(self):
+        """F-40: Gibt man denselben Wert ein, entsteht kein neuer Vorgang."""
+        self._anmelden()
+        vorher = self.gerat.vorgaenge.filter(typ=Vorgang.TYP_AENDERUNG).count()
+        antwort = self.client.post(
+            f"/geraete/{self.gerat.inventarnummer}/aendern/",
+            {
+                "kategorie": self.kat.pk,
+                "hersteller": "Lenovo",
+                "modell": "ThinkPad",
+                "seriennummer": "",
+                "zustand": 2,
+            },
+        )
+        self.assertEqual(antwort.status_code, 302)
+        nachher = self.gerat.vorgaenge.filter(typ=Vorgang.TYP_AENDERUNG).count()
+        self.assertEqual(nachher, vorher)
+
+    def test_aendern_leser_erhaelt_403(self):
+        """F-40: Leser kann nicht ändern; die Ansicht antwortet mit 403."""
+        self._anmelden(rolle="leser")
+        antwort = self.client.post(
+            f"/geraete/{self.gerat.inventarnummer}/aendern/",
+            {
+                "kategorie": self.kat.pk,
+                "hersteller": "HP",
+                "modell": "ThinkPad",
+                "seriennummer": "",
+                "zustand": 2,
+            },
+        )
+        self.assertEqual(antwort.status_code, 403)
+        # Kein neuer „Änderung“-Vorgang.
+        self.assertEqual(
+            self.gerat.vorgaenge.filter(typ=Vorgang.TYP_AENDERUNG).count(), 0
+        )
+
+
+class MehrfacherfassungTests(TestCase):
+    """F-11, A-0112: Zeilenweise Seriennummern in ``seriennummern`` erzeugen
+    so viele Geräte wie Zeilen, je mit eigener Inventarnummer und Vorgang
+    Aufnahme."""
+
+    def setUp(self):
+        self.admin = konto_erstellen("it-admin", rolle="admin", email="it-admin@beispiel.test")
+        self.kat, self.ort, self.person = stammdaten_erstellen()
+
+    def _anmelden(self):
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+
+    def test_drei_zeilen_erzeugen_drei_geraete(self):
+        """F-11: Drei Zeilen in seriennummern → drei Geräte, je mit eigener
+        Inventarnummer und Vorgang Aufnahme."""
+        self._anmelden()
+        antwort = self.client.post(
+            "/geraete/speichern/",
+            {
+                "kategorie": self.kat.pk,
+                "hersteller": "Lenovo",
+                "modell": "ThinkPad",
+                "seriennummer": "",
+                "seriennummern": "SN-001\nSN-002\nSN-003",
+                "zustand": 2,
+            },
+        )
+        self.assertEqual(antwort.status_code, 302)
+        self.assertIn("/geraete/", antwort.headers["Location"])
+        # Drei Geräte mit den drei Seriennummern.
+        gerate = Gerat.objects.filter(hersteller="Lenovo", modell="ThinkPad").order_by("inventarnummer")
+        self.assertEqual(gerate.count(), 3)
+        serien = sorted(g.seriennummer for g in gerate)
+        self.assertEqual(serien, ["SN-001", "SN-002", "SN-003"])
+        # Jedes Gerät hat einen eigenen Vorgang Aufnahme.
+        for g in gerate:
+            aufnahme = g.vorgaenge.filter(typ=Vorgang.TYP_AUFNAHME)
+            self.assertEqual(aufnahme.count(), 1, f"Gerät {g.inventarnummer} hat keinen Aufnahme-Vorgang.")
+
+    def test_leere_zeilen_werden_verworfen(self):
+        """F-11: Leere Zeilen in seriennummern werden verworfen."""
+        self._anmelden()
+        antwort = self.client.post(
+            "/geraete/speichern/",
+            {
+                "kategorie": self.kat.pk,
+                "hersteller": "Lenovo",
+                "modell": "ThinkPad",
+                "seriennummer": "",
+                "seriennummern": "SN-001\n\n  \nSN-002",
+                "zustand": 2,
+            },
+        )
+        self.assertEqual(antwort.status_code, 302)
+        gerate = Gerat.objects.filter(hersteller="Lenovo", modell="ThinkPad")
+        self.assertEqual(gerate.count(), 2)
+
+    def test_ohne_seriennummern_ein_geraet(self):
+        """F-11: Ohne Seriennummern entsteht ein Gerät wie bisher."""
+        self._anmelden()
+        vorher = Gerat.objects.count()
+        antwort = self.client.post(
+            "/geraete/speichern/",
+            {
+                "kategorie": self.kat.pk,
+                "hersteller": "Dell",
+                "modell": "XPS",
+                "seriennummer": "",
+                "seriennummern": "",
+                "zustand": 2,
+            },
+        )
+        self.assertEqual(antwort.status_code, 302)
+        self.assertEqual(Gerat.objects.count(), vorher + 1)
+
+    def test_seriennummer_einzel_feld_funktioniert_noch(self):
+        """F-11: Das Einzel-Feld seriennummer funktioniert noch."""
+        self._anmelden()
+        antwort = self.client.post(
+            "/geraete/speichern/",
+            {
+                "kategorie": self.kat.pk,
+                "hersteller": "Apple",
+                "modell": "MacBook",
+                "seriennummer": "SN-SINGLE-01",
+                "seriennummern": "",
+                "zustand": 2,
+            },
+        )
+        self.assertEqual(antwort.status_code, 302)
+        gerat = Gerat.objects.filter(seriennummer="SN-SINGLE-01").first()
+        self.assertIsNotNone(gerat)
+        self.assertEqual(gerat.vorgaenge.filter(typ=Vorgang.TYP_AUFNAHME).count(), 1)
+
+
+class VorlageTests(TestCase):
+    """F-13, A-0112: /geraete/neu/?vorlage=<Inventarnummer> übernimmt die
+    Stammdaten des Geräts; die Seriennummer bleibt leer."""
+
+    def setUp(self):
+        self.admin = konto_erstellen("it-admin", rolle="admin", email="it-admin@beispiel.test")
+        self.leser = konto_erstellen("gf", rolle="leser", email="gf@beispiel.test")
+        self.kat, self.ort, self.person = stammdaten_erstellen()
+        self.vorlage = services.gerat_anlegen(
+            kategorie=self.kat,
+            hersteller="Lenovo",
+            modell="ThinkPad",
+            seriennummer="SN-ORIGINAL",
+            geraetename="Pool-A",
+        )
+
+    def _anmelden(self, rolle="admin"):
+        if rolle == "admin":
+            self.client.login(username=self.admin.email, password="test-passwort-123")
+        else:
+            self.client.login(username=self.leser.email, password="test-passwort-123")
+
+    def test_vorlage_uebernaehmt_stammdaten(self):
+        """F-13: ?vorlage=<Nr> zeigt Hersteller und Modell vorbelegt."""
+        self._anmelden()
+        antwort = self.client.get("/geraete/neu/", {"vorlage": self.vorlage.inventarnummer})
+        self.assertEqual(antwort.status_code, 200)
+        html = antwort.content.decode()
+        # Hersteller und Modell stehen im Formular.
+        self.assertIn("Lenovo", html)
+        self.assertIn("ThinkPad", html)
+        # Das Feld seriennummer ist leer (kein value="SN-ORIGINAL").
+        self.assertNotIn('value="SN-ORIGINAL"', html)
+
+    def test_vorlage_detail_traegt_aktion_vorlage(self):
+        """F-13: Das Gerätedetail trägt aktion-vorlage für Admin."""
+        self._anmelden()
+        antwort = self.client.get(f"/geraete/{self.vorlage.inventarnummer}/")
+        html = antwort.content.decode()
+        self.assertIn('data-test="aktion-vorlage"', html)
+        self.assertIn(f"/geraete/neu/?vorlage={self.vorlage.inventarnummer}", html)
+
+    def test_neu_fuer_leser_403(self):
+        """F-11: /geraete/neu/ für gf@beispiel.test mit 403 antwortet."""
+        self._anmelden(rolle="leser")
+        antwort = self.client.get("/geraete/neu/")
+        self.assertEqual(antwort.status_code, 403)
+
+    def test_neu_anlegen_fuer_leser_403(self):
+        """F-11: POST auf /geraete/speichern/ für Leser → 403, kein Gerät."""
+        self._anmelden(rolle="leser")
+        vorher = Gerat.objects.count()
+        antwort = self.client.post(
+            "/geraete/speichern/",
+            {
+                "kategorie": self.kat.pk,
+                "hersteller": "HP",
+                "modell": "EliteBook",
+                "seriennummer": "",
+                "seriennummern": "",
+                "zustand": 2,
+            },
+        )
+        self.assertEqual(antwort.status_code, 403)
+        self.assertEqual(Gerat.objects.count(), vorher)

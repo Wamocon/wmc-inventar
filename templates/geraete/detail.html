@@ -10,6 +10,7 @@
     {% if kann_loeschen %}<a class="btn" href="/geraete/{{ gerat.inventarnummer }}/loeschen/" data-test="aktion-loeschen">Löschen</a>{% endif %}
     {% if ist_admin and gerat.status != "ausgemustert" %}
       <a class="btn" href="/geraete/{{ gerat.inventarnummer }}/aendern/" data-test="aktion-bearbeiten">Ändern</a>
+      <a class="btn" href="/geraete/neu/?vorlage={{ gerat.inventarnummer }}" data-test="aktion-vorlage">Als Vorlage kopieren</a>
       <a class="btn" href="/geraete/{{ gerat.inventarnummer }}/notiz/" data-test="aktion-notiz">Notiz</a>
       <form method="post" action="/geraete/{{ gerat.inventarnummer }}/pruefen/" data-test="pruefen-formular">
         {% csrf_token %}
@@ -205,7 +206,11 @@
   <div class="liste" data-test="historie">
     {% for v in gerat.vorgaenge.all %}
     <div class="zeile">
-      <span data-test="vorgang" data-typ="{{ v.get_typ_display }}"{% if v.get_typ_display == "Änderung" %} data-feld="{{ v.aenderung_feld }}" data-alt="{{ v.aenderung_alter_wert }}" data-neu="{{ v.aenderung_neuer_wert }}"{% endif %}>{{ v.get_typ_display }}</span>
+      <span data-test="vorgang" data-typ="{{ v.get_typ_display }}"{% if v.get_typ_display == "Änderung" %} data-feld="{{ v.aenderung_feld }}" data-alt="{{ v.aenderung_alter_wert }}" data-neu="{{ v.aenderung_neuer_wert }}"{% endif %}>
+        {{ v.get_typ_display }}{% if v.get_typ_display == "Änderung" %}
+        <span data-test="aenderung-detail">{{ v.aenderung_feld }}: {{ v.aenderung_alter_wert|default:"(leer)" }} → {{ v.aenderung_neuer_wert|default:"(leer)" }}</span>
+        {% endif %}
+      </span>
       <span data-test="zeitpunkt">{{ v.zeitpunkt|date:"d.m.Y H:i" }}</span>
       {% if v.erzeugt_von %}<span data-test="erzeugt-von">{{ v.erzeugt_von.bezeichnung }}</span>{% endif %}
       {% if v.notiz %}<span data-test="notiz-vorgang">{{ v.notiz }}</span>{% endif %}

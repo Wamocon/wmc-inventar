@@ -195,44 +195,120 @@ def detail(request, inventarnummer: str):
 
 # --- Neu anlegen (F-11 bis F-14) -------------------------------------------------
 
+def _stammdaten_aus_form(daten: dict) -> dict:
+    """Zieht die Stammdaten aus dem cleaned_data, ohne Seriennummer.
+
+    F-11 (A-0112): Die Seriennummer kommt aus dem Textfeld ``seriennummern``
+    (zeilenweise) oder aus dem Einzel-Feld ``seriennummer``. Hier bleiben
+    nur die übrigen Stammdaten.
+    """
+    daten.pop("status", None)
+    daten.pop("seriennummer", None)
+    daten.pop("seriennummern", None)
+    return daten
+
+
+def _seriennummern_auetzen(request) -> list[str]:
+    """Seriennummern aus dem POST auetzen (F-11, A-0112).
+
+    Das Textfeld ``seriennummern`` enthält zeilenweise die Seriennummern.
+    Leere Zeilen werden verworfen. Fehlt das Feld, fällt man auf das
+    Einzel-Feld ``seriennummer`` zurück (ein Element oder leere Liste).
+    """
+    roh = (request.POST.get("seriennummern") or "").strip()
+    if roh:
+        zeilen = [z.strip() for z in roh.splitlines()]
+        return [z for z in zeilen if z]
+    einzeilig = (request.POST.get("seriennummer") or "").strip()
+    return [einzeilig] if einzeilig else []
+
+
 @login_required
 @require_POST
 def neu_anlegen(request):
+    """Speichern (F-11, F-12, F-13, F-14, A-0112).
+
+    F-11: Das Textfeld ``seriennummern`` trägt zeilenweise Seriennummern;
+    es entstehen so viele Geräte wie Zeilen, je mit eigener Inventarnummer
+    und Vorgang Aufnahme. Ohne Seriennummer entsteht ein Gerät wie bisher.
+    F-13: Die Stammdaten werden aus der Vorlage übernommen (``?vorlage=``).
+    """
     if not _darf_ändern(request.user):
         meldung_error(request, "Zugriff verweigert: Anlegen ist Ihnen nicht erlaubt.")
-        return redirect("/geraete/")
+        raise PermissionDenied("Zugriff verweigert: Anlegen ist Ihnen nicht erlaubt.")
     form = GeratForm(request.POST, request.FILES)
     if form.is_valid():
-        daten = dict(form.cleaned_data)
-        daten.pop("status", None)
+        daten = _stammdaten_aus_form(dict(form.cleaned_data))
+        serienliste = _seriennummern_auetzen(request)
         try:
-            gerat = services.gerat_anlegen(
-                erzeugt_von=request.user,
-                pruefen=True,
-                **{k: v for k, v in daten.items()},
-            )
+            erstellte = []
+            for seriennummer in (serienliste if serienliste else [""]):
+                gerat = services.gerat_anlegen(
+                    erzeugt_von=request.user,
+                    pruefen=True,
+                    seriennummer=seriennummer,
+                    **daten,
+                )
+                erstellte.append(gerat)
         except services.GeratFehler as fehler:
             meldung_error(request, str(fehler))
             return redirect("/geraete/neu/")
-        meldung_success(request, f"Gerät {gerat.inventarnummer} angelegt.")
-        # F-12: "Speichern und Etikett drucken" — Button-Name im POST prüfen.
-        if request.POST.get("aktion") == "etikett":
-            from .etiketten import etikett_pdf
-            pdf = etikett_pdf(gerat)
-            response = HttpResponse(pdf, content_type="application/pdf")
-            response["Content-Disposition"] = f'inline; filename="etikett-{gerat.inventarnummer}.pdf"'
-            return response
-        return redirect("/geraete/" + gerat.inventarnummer + "/")
+        if len(erstellte) == 1:
+            meldung_success(request, f"Gerät {erstellte[0].inventarnummer} angelegt.")
+            # F-12: "Speichern und Etikett drucken" — Button-Name im POST prüfen.
+            if request.POST.get("aktion") == "etikett":
+                from .etiketten import etikett_pdf
+                pdf = etikett_pdf(erstellte[0])
+                response = HttpResponse(pdf, content_type="application/pdf")
+                response["Content-Disposition"] = (
+                    f'inline; filename="etikett-{erstellte[0].inventarnummer}.pdf"'
+                )
+                return response
+            return redirect("/geraete/" + erstellte[0].inventarnummer + "/")
+        meldung_success(request, f"{len(erstellte)} Geräte angelegt.")
+        return redirect("/geraete/")
     return render(request, "geraete/neu.html", {"form": form})
 
 
 @login_required
 def neu_anzeigen(request):
-    """Formularseite für ein neues Gerät (F-11 bis F-14)."""
+    """Formularseite für ein neues Gerät (F-11 bis F-14, A-0112).
+
+    F-13: ``?vorlage=<Inventarnummer>`` übernimmt die Stammdaten des
+    genannten Geräts; die Seriennummer bleibt leer.
+    """
     if not _darf_ändern(request.user):
         meldung_error(request, "Zugriff verweigert: Anlegen ist Ihnen nicht erlaubt.")
-        return redirect("/")
-    return render(request, "geraete/neu.html", {"form": GeratForm()})
+        raise PermissionDenied("Zugriff verweigert: Anlegen ist Ihnen nicht erlaubt.")
+    vorlage_inventarnummer = (request.GET.get("vorlage") or "").strip()
+    initial = {}
+    if vorlage_inventarnummer:
+        vorlage = Gerat.objects.filter(inventarnummer=vorlage_inventarnummer).first()
+        if vorlage:
+            initial = {
+                "kategorie": vorlage.kategorie,
+                "hersteller": vorlage.hersteller,
+                "modell": vorlage.modell,
+                "seriennummer": "",
+                "zustand": vorlage.zustand,
+                "leihpool": vorlage.leihpool,
+                "person": None,
+                "ort": vorlage.ort,
+                "geraetename": vorlage.geraetename,
+                "standardzuehoer": vorlage.standardzuehoer,
+                "technische_daten": vorlage.technische_daten,
+                "kaufdatum": vorlage.kaufdatum,
+                "kaufpreis_netto": vorlage.kaufpreis_netto,
+                "lieferant": vorlage.lieferant,
+                "rechnungsnummer": vorlage.rechnungsnummer,
+                "garantie_bis": vorlage.garantie_bis,
+                "notiz": vorlage.notiz,
+            }
+    return render(
+        request,
+        "geraete/neu.html",
+        {"form": GeratForm(initial=initial or None), "vorlage": vorlage_inventarnummer},
+    )
 
 
 # --- Bearbeiten (F-15) ------------------------------------------------------------
@@ -247,15 +323,21 @@ def bearbeiten(request, inventarnummer: str):
         return redirect("/geraete/" + gerat.inventarnummer + "/")
     if not _darf_ändern(request.user):
         meldung_error(request, "Zugriff verweigert: Ändern ist Ihnen nicht erlaubt.")
-        return redirect("/geraete/" + gerat.inventarnummer + "/")
+        raise PermissionDenied("Zugriff verweigert: Ändern ist Ihnen nicht erlaubt.")
     if request.method == "POST":
         form = GeratForm(request.POST, instance=gerat)
         if form.is_valid():
             try:
                 werte = dict(form.cleaned_data)
                 werte.pop("status", None)
+                werte.pop("seriennummern", None)
+                # A-0112 (F-40): form.is_valid() schreibt die neuen Werte schon
+                # in die Instanz (construct_instance). Wir holen ein frisches
+                # Exemplar aus der Datenbank, damit gerat_bearbeiten den alten
+                # Stand vergleicht.
+                gerat_frisch = Gerat.objects.get(pk=gerat.pk)
                 services.gerat_bearbeiten(
-                    gerat,
+                    gerat_frisch,
                     werte=werte,
                     erzeugt_von=request.user,
                 )
