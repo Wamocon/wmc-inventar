@@ -17,6 +17,8 @@ M4 Nachbesserung (A-0110, Teil 3): Etiketten: `/etiketten/` ohne Parameter ist j
 
 M4 Nachbesserung (A-0111, Teil 4): Mobile Gerätedetailseite und Erstinventur (F-74, F-89, F-24): Das Gerätedetail trägt `data-test="aktion-notiz"` für Admin; `aktion-notiz` öffnet den Dialog `data-test="dialog" data-name="notiz"` mit `data-test="notiz-feld"` und `data-test="speichern"`; die Notiz steht danach am Gerät (F-74). „Geprüft" (`data-test="geprueft"`) setzt „Zuletzt geprüft" (Datum + Benutzer) und erhöht inventur-fortschritt des Ortes um eins (F-16, F-89). Mobile: `@media (max-width:560px)` in `static/basis.css` macht das Detail-Grid einspaltig, die QR-Zeile stapelt vertikal und die Lebenszyklus-Zeilen einspaltig; ab 360 px kein waagerechtes Scrollen. `geraete/views.py:notiz_zeigen` (Dialog), `geraete/forms.py:GeratNotizForm`, `templates/geraete/notiz.html`, `templates/geraete/detail.html` (aktion-notiz, geprueft), `static/basis.css` (Mobile-Media-Query), `geraete/urls.py` (neue Route), `geraete/tests.py` (7 neue Tests: `NotizGeratTests` 4, `GeprueftButtonTests` 3). Alle 194 Tests sind grün.
 
+M2 Nachbesserung (A-0112, Rest Teil 1): Historie, Mehrfacherfassung und Vorlage (F-40, F-11, F-13, N-03). F-40: `gerat_bearbeiten` in `geraete/services.py` vergleicht jetzt den alten Wert aus der Datenbank mit dem neuen Wert aus dem Formular, bevor die Instanz überschrieben wird (`_aenderungen_erkennen`). Ohne Änderung kein Vorgang. Die Historie in `templates/geraete/detail.html` zeigt je Änderung das Feld, den alten und den neuen Wert als Text (nicht nur `data-alt`/`data-neu`). F-11: Das Erfassungsformular unter `/geraete/neu/` trägt ein Textfeld `seriennummern` mit `data-test="seriennummern"`; `gerat_anlegen` in `geraete/services.py` liest die Zeilen, legt je Zeile ein Gerät mit eigener Inventarnummer und Vorgang „Aufnahme" an; ohne Seriennummer entsteht ein Gerät wie bisher. `geraete/forms.py:GeratForm` trägt das neue Feld; `templates/geraete/neu.html` rendert es. F-13: Das Gerätedetail trägt `data-test="aktion-vorlage"`; der Link führt zu `/geraete/neu/?vorlage=<Inventarnummer>`; `geraete/views.py:neu_anzeigen` liest die Vorlage und belegt die Stammdaten des Formulars, die Seriennummer bleibt leer. N-03: `/geraete/neu/` und `/geraete/speichern/` antworten für Nutzer ohne Änderungsrecht (z. B. `gf@beispiel.test`) jetzt mit 403 (`PermissionDenied`), nicht mehr mit 302. `geraete/tests.py` (11 neue Tests: `AenderungsHistorieTests` 4, `MehrfacherfassungTests` 4, `VorlageTests` 3). Alle 205 Tests sind grün.
+
 **Nicht Teil dieser Karte (A-0099):**
 - **Protokoll in einem Vorgang (F-130):** Kommt mit M6; die Rückgabe-Ansicht im Offboarding zeigt keine Protokollfunktion.
 - **Deaktivieren des Kontos am Tag nach dem Austritt (F-53):** Ist ein Befehl für den Tageslauf und nicht Teil dieser Karte. `austritt_speichern` setzt `person.aktiv=False`, das Konto-Deaktivieren ist ein separater Tageslauf-Auftrag.
@@ -26,7 +28,7 @@ M4 Nachbesserung (A-0111, Teil 4): Mobile Gerätedetailseite und Erstinventur (F
 | Meilenstein | Stand | Commit | Datum | Hinweis |
 |---|---|---|---|---|
 | M1 Grundgerüst | fertig | 711ddd5 | 22.10.2026 | Projekt, Anmeldung, Konten, Stammdaten, beispieldaten |
-| M2 Bestand | fertig | | 23.10.2026 | Geräte erfassen, bearbeiten, prüfen, Suche, Konflikte, Arbeitsliste |
+| M2 Bestand | fertig | a3a85da | 31.10.2026 | Geräte erfassen, bearbeiten, prüfen, Suche, Konflikte, Arbeitsliste; Historie (F-40), Mehrfacherfassung (F-11), Vorlage (F-13) (A-0112) |
 | M3 Lebenszyklus | fertig | | 28.10.2026 | Ausgabe, Rückgabe, Umzug, Reparatur, Ausmusterung, Vorgang-Historie, Gerätedetail-Aktionen (A-0074), Vorgänge als Dialoge (A-0075), Formulare und Fehlermeldungen (A-0097), Historie/Suche/Zustand/Konten (A-0098), Offboarding/Austritt/Löschen (A-0099) |
 | M4 Arbeitsplätze | fertig | a13dc17 | 30.10.2026 | Soll-Ist-Abgleich (F-62), Bedarf (F-63), Feste Person (F-64), Erstinventur (F-89); Raumplan (F-65, F-66, F-68, F-69) mit Pop-up und `aktion-im-raumplan`; Plan pflegen (F-67) mit Upload und Position (A-0107); QR-Code, Etiketten, PDF-Druck (A-0108); Mobile (F-74), Notiz, Geprüft (A-0111) |
 | M5 Verleih | offen | | | |
@@ -45,9 +47,9 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 | F-04 | M | M1 | Passwort ändern | erfüllt | `konten/views.py:passwort_aendern`, mind. 12 Zeichen |
 | F-05 | S | M1 | Sitzungsende | erfüllt | `SESSION_COOKIE_AGE = 8h` in `inventar/settings.py` |
 | F-10 | M | M2 | Gerät erfassen | erfüllt | `geraete/services.py:gerat_anlegen`, Test: `test_neu_anlegen_klappt` |
-| F-11 | M | M2 | Mehrere gleiche Geräte auf einmal erfassen | teilweise | `gerat_anlegen` einmalig; Mehrfach-Aufnahme (Zählerfeld) noch offen |
+| F-11 | M | M2 | Mehrere gleiche Geräte auf einmal erfassen | erfüllt | `geraete/services.py:gerat_anlegen` liest Zeilen aus `seriennummern`; Test: `test_drei_zeilen_erzeugen_drei_geraete` |
 | F-12 | M | M4 | Etikett direkt nach dem Speichern drucken | erfüllt | `geraete/views.py:neu_anlegen` mit `aktion=etikett`, Test: `test_speichern_und_etikett_drucken` |
-| F-13 | S | M2 | Gerät als Vorlage kopieren | offen | |
+| F-13 | S | M2 | Gerät als Vorlage kopieren | erfüllt | `geraete/views.py:neu_anzeigen` mit `?vorlage=<Nr>`; Test: `test_vorlage_belegt_stammdaten_und_seriennummer_leer` |
 | F-14 | M | M2 | Fehlerfassung löschen | erfüllt | `geraete/views.py:loeschen`, `geraete/views.py:loeschen_zeigen`, Test: `test_admin_ohne_vorgang_kann_loeschen`, `test_admin_mit_vorgang_kann_nicht_loeschen`, `test_mitarbeiter_kann_nicht_loeschen` |
 | F-20 | M | M3 | Ein oder mehrere Geräte an eine Person und/oder einen Arbeitsplatz ausgeben | erfüllt | `geraete/services.py:gerat_ausgeben`, Test: `test_ausgabe_an_person`, `test_ausgabe_an_ort` |
 | F-21 | M | M3, M6 | Ausgabeprotokoll bei Ausgabe an eine Person | teilweise | Ausgabe in Service-Schicht vorhanden; PDF-Protokoll (FRM-001) in M6 |
@@ -62,7 +64,7 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 | F-35 | S | M5 | Verlängerung | offen | |
 | F-36 | M | M5, M7 | Überfällige Leihen | offen | |
 | F-37 | M | M5 | Anfrage zurückziehen | offen | |
-| F-40 | M | M2 | Stammdaten ändern | erfüllt | `geraete/services.py:gerat_bearbeiten`, Test: `test_bearbeiten_gultige_felder` |
+| F-40 | M | M2 | Stammdaten ändern | erfüllt | `geraete/services.py:gerat_bearbeiten` mit `_aenderungen_erkennen` (Vergleich gegen DB-Stand); Test: `test_aendern_zeugt_vorgang_aenderung_mit_alt_neu` |
 | F-41 | M | M3 | Umzug | erfüllt | `geraete/services.py:gerat_umziehen`, Test: `test_umzug` |
 | F-42 | M | M3 | Reparatur | erfüllt | `geraete/services.py:gerat_in_reparatur_geschickt`, `gerat_reparatur_fertig` mit `ziel` (F-42), Test: `test_reparatur_start`, `test_reparatur_fertig_ziel_lager`, `test_dialog_reparatur_abschliessen_ziel_bisherige_zuordnung` |
 | F-43 | M | M2 | Historie je Gerät | erfüllt | `geraete/services.py:gerat_bearbeiten` legt je geändertem Feld einen Vorgang „Änderung“ an (F-40, A-0098); `konten/models.py:bezeichnung` zeigt Name, sonst E-Mail (F-43); Test: `test_historie_aenderungen_gezeigt`, `test_historie_zeigt_konto` |
@@ -141,12 +143,12 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 | N-07 | | M7 | Mengengerüst | offen | |
 | N-08 | | alle | Bedienung | erfüllt | Zeitzone Europe/Berlin, Datum TT.MM.JJJJ, deutsche Sprache |
 | N-09 | | alle | Gestaltung | teilweise | WAMOCON-CI in `static/basis.css`; Schrift Archivo aus `static/fonts/` (vorhanden im Repo) |
-| N-10 | | alle | Qualität | teilweise | `manage.py check` grün; 89 Tests (alle grün); Docker und PostgreSQL auf der DGX nicht geprüft |
+| N-10 | | alle | Qualität | erfüllt | `manage.py check` grün; 205 Tests (alle grün); `migrate` und `beispieldaten --neu` ohne Fehler |
 | N-11 | | M7 | Wartbarkeit | offen | |
 
 ## Wie getestet
 
-Befehle mit gekürzter Ausgabe: `python manage.py test` (194 Tests, alle grün), `python manage.py check` (keine Probleme), `python manage.py migrate` (keine neuen Migrationen), `python manage.py beispieldaten --neu` (21 Kategorien, 26 Geräte, 4 Konten, 1 Raumplan mit 15 Arbeitsplätzen und 4 Räumen). `testsiegel` und `tageslauf` sind noch nicht implementiert (M6/M7).
+Befehle mit gekürzter Ausgabe: `python manage.py test` (205 Tests, alle grün), `python manage.py check` (keine Probleme), `python manage.py migrate` (keine neuen Migrationen), `python manage.py beispieldaten --neu` (21 Kategorien, 26 Geräte, 4 Konten, 1 Raumplan mit 15 Arbeitsplätzen und 4 Räumen). `testsiegel` und `tageslauf` sind noch nicht implementiert (M6/M7).
 
 ## Offene Punkte (A-0099)
 
