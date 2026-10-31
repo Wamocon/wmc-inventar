@@ -15,6 +15,8 @@ M4 Nachbesserung (A-0108, Teil 3): QR-Code und Etiketten (F-12, F-70 bis F-73, F
 
 M4 Nachbesserung (A-0110, Teil 3): Etiketten: `/etiketten/` ohne Parameter ist jetzt eine Auswahlseite für den Admin (Kapitel 6 der Anforderungen: Bildschirm Etiketten nur für den Admin): dort wählt er einen Arbeitsplatz oder Lagerort und die Startposition (F-73) und druckt mit „Bogen drucken" den Bogen, sortiert nach bisheriger Kennung (F-89). `templates/geraete/etiketten.html` (`data-test="etiketten-ort-formular"`, `etiketten-ort-auswahl`, `startposition`, `etiketten-drucken`); `geraete/views.py:etiketten_ort` rendert die Auswahl und liefert mit `?ort=<Kennung>` weiter das PDF. `/etiketten/auswahl/` ist jetzt nur für Admin; Leser und Mitarbeiter erhalten auf `/etiketten/`, `/etiketten/auswahl/` und `/etiketten/?ort=…` 403 mit „Keine Berechtigung" (TESTSCHNITTSTELLE Kapitel 3). „Etiketten für den Platz" im Pop-up führt mit `startposition=1` zum Bogen. `geraete/tests.py:EtikettenOrtTests`: `test_etiketten_ort_admin_200` (?ort= → PDF), `test_etiketten_ort_admin_auswahlseite` (Auswahl mit Startposition und Bogen drucken), `test_etiketten_ort_leser_403`, `test_etiketten_ort_mitarbeiter_403`. Alle 187 Tests sind grün.
 
+M4 Nachbesserung (A-0111, Teil 4): Mobile Gerätedetailseite und Erstinventur (F-74, F-89, F-24): Das Gerätedetail trägt `data-test="aktion-notiz"` für Admin; `aktion-notiz` öffnet den Dialog `data-test="dialog" data-name="notiz"` mit `data-test="notiz-feld"` und `data-test="speichern"`; die Notiz steht danach am Gerät (F-74). „Geprüft" (`data-test="geprueft"`) setzt „Zuletzt geprüft" (Datum + Benutzer) und erhöht inventur-fortschritt des Ortes um eins (F-16, F-89). Mobile: `@media (max-width:560px)` in `static/basis.css` macht das Detail-Grid einspaltig, die QR-Zeile stapelt vertikal und die Lebenszyklus-Zeilen einspaltig; ab 360 px kein waagerechtes Scrollen. `geraete/views.py:notiz_zeigen` (Dialog), `geraete/forms.py:GeratNotizForm`, `templates/geraete/notiz.html`, `templates/geraete/detail.html` (aktion-notiz, geprueft), `static/basis.css` (Mobile-Media-Query), `geraete/urls.py` (neue Route), `geraete/tests.py` (7 neue Tests: `NotizGeratTests` 4, `GeprueftButtonTests` 3). Alle 194 Tests sind grün.
+
 **Nicht Teil dieser Karte (A-0099):**
 - **Protokoll in einem Vorgang (F-130):** Kommt mit M6; die Rückgabe-Ansicht im Offboarding zeigt keine Protokollfunktion.
 - **Deaktivieren des Kontos am Tag nach dem Austritt (F-53):** Ist ein Befehl für den Tageslauf und nicht Teil dieser Karte. `austritt_speichern` setzt `person.aktiv=False`, das Konto-Deaktivieren ist ein separater Tageslauf-Auftrag.
@@ -26,7 +28,7 @@ M4 Nachbesserung (A-0110, Teil 3): Etiketten: `/etiketten/` ohne Parameter ist j
 | M1 Grundgerüst | fertig | 711ddd5 | 22.10.2026 | Projekt, Anmeldung, Konten, Stammdaten, beispieldaten |
 | M2 Bestand | fertig | | 23.10.2026 | Geräte erfassen, bearbeiten, prüfen, Suche, Konflikte, Arbeitsliste |
 | M3 Lebenszyklus | fertig | | 28.10.2026 | Ausgabe, Rückgabe, Umzug, Reparatur, Ausmusterung, Vorgang-Historie, Gerätedetail-Aktionen (A-0074), Vorgänge als Dialoge (A-0075), Formulare und Fehlermeldungen (A-0097), Historie/Suche/Zustand/Konten (A-0098), Offboarding/Austritt/Löschen (A-0099) |
-| M4 Arbeitsplätze | fertig | a13dc17 | 30.10.2026 | Soll-Ist-Abgleich (F-62), Bedarf (F-63), Feste Person (F-64), Erstinventur (F-89); Raumplan (F-65, F-66, F-68, F-69) mit Pop-up und `aktion-im-raumplan`; Plan pflegen (F-67) mit Upload und Position (A-0107); QR-Code, Etiketten, PDF-Druck (A-0108); offen: Mobile |
+| M4 Arbeitsplätze | fertig | a13dc17 | 30.10.2026 | Soll-Ist-Abgleich (F-62), Bedarf (F-63), Feste Person (F-64), Erstinventur (F-89); Raumplan (F-65, F-66, F-68, F-69) mit Pop-up und `aktion-im-raumplan`; Plan pflegen (F-67) mit Upload und Position (A-0107); QR-Code, Etiketten, PDF-Druck (A-0108); Mobile (F-74), Notiz, Geprüft (A-0111) |
 | M5 Verleih | offen | | | |
 | M6 Signatur | offen | | | |
 | M7 Abschluss | offen | | | |
@@ -51,7 +53,7 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 | F-21 | M | M3, M6 | Ausgabeprotokoll bei Ausgabe an eine Person | teilweise | Ausgabe in Service-Schicht vorhanden; PDF-Protokoll (FRM-001) in M6 |
 | F-22 | M | M3, M7 | Papierweg | teilweise | Vorgang „Unterschrift offen" in Service-Schicht; Scan-Upload in M7 |
 | F-23 | M | M3 | Ausgabe nur an einen Arbeitsplatz | erfüllt | `geraete/services.py:gerat_ausgeben`, Test: `test_ausgabe_an_ort` |
-| F-24 | K | M4 | Neue Person ausstatten | offen | |
+| F-24 | K | M4 | Neue Person ausstatten | erfüllt | `geraete/services.py:bedarf_uebersicht` schlägt fehlende Geräte aus dem Profil vom Lager vor (F-24, Kann); Test: `test_bedarf_zeigt_fehlende`, `test_bedarf_mit_lagerbestand`; `templates/geraete/bedarf.html` |
 | F-30 | M | M5, M6 | Admin verleiht direkt | offen | |
 | F-31 | M | M5 | Mitarbeiter fragt Leihgerät an | offen | |
 | F-32 | M | M5 | Admin entscheidet | offen | |
@@ -88,7 +90,7 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 | F-71 | M | M4 | Etiketteninhalt | erfüllt | `geraete/etiketten.py:etikett_html` (QR, Inventarnummer, Kategorie, Modell, „Eigentum der WAMOCON GmbH"), Test: `test_etikett_drucken_admin_200` |
 | F-72 | M | M4 | Druck als PDF | erfüllt | `geraete/etiketten.py:bogen_pdf` (weasyprint, A4, 24 × 70 × 37 mm), Test: `test_bogen_drei_geraete_admin_200`, `test_etikett_drucken_admin_200` |
 | F-73 | S | M4 | Angebrochene Bögen | erfüllt | `geraete/etiketten.py:bogen_pdf` mit `startposition`, `data-test="startposition"` in `templates/geraete/liste.html`, Test: `test_bogen_startposition_3_felder_davor_frei` |
-| F-74 | M | M4 | Mobile Gerätedetailseite | offen | |
+| F-74 | M | M4 | Mobile Gerätedetailseite | erfüllt | `static/basis.css` `@media (max-width:560px)` (Detail-Grid einspaltig, QR-zeile stapelt, Lebenszyklus einspaltig); `templates/geraete/detail.html` mit `aktion-notiz` und `geprueft`; `templates/geraete/notiz.html` (Dialog `data-name="notiz"`); Test: `NotizGeratTests` (4 Tests), `GeprueftButtonTests` (3 Tests) |
 | F-80 | M | M2 | Datei hochladen | offen | |
 | F-81 | M | M2 | Spalten zuordnen | offen | |
 | F-82 | M | M2 | Werte zuordnen | offen | |
@@ -144,7 +146,7 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 
 ## Wie getestet
 
-Befehle mit gekürzter Ausgabe: `python manage.py test` (187 Tests, alle grün), `python manage.py check` (keine Probleme), `python manage.py migrate` (keine neuen Migrationen), `python manage.py beispieldaten --neu` (21 Kategorien, 26 Geräte, 4 Konten, 1 Raumplan mit 15 Arbeitsplätzen und 4 Räumen). `testsiegel` und `tageslauf` sind noch nicht implementiert (M6/M7).
+Befehle mit gekürzter Ausgabe: `python manage.py test` (194 Tests, alle grün), `python manage.py check` (keine Probleme), `python manage.py migrate` (keine neuen Migrationen), `python manage.py beispieldaten --neu` (21 Kategorien, 26 Geräte, 4 Konten, 1 Raumplan mit 15 Arbeitsplätzen und 4 Räumen). `testsiegel` und `tageslauf` sind noch nicht implementiert (M6/M7).
 
 ## Offene Punkte (A-0099)
 

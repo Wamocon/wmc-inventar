@@ -26,6 +26,7 @@ from .forms import (
     GeratAusmusterungForm,
     GeratBearbeitungsForm,
     GeratForm,
+    GeratNotizForm,
     GeratReparaturFertigForm,
     GeratReparaturStartForm,
     GeratRueckgabeForm,
@@ -509,6 +510,31 @@ def platz_popup(request, kennung: str):
             "koennen_aendern": _darf_ändern(request.user),
         },
     )
+
+
+# --- Notiz am Gerät (F-74, A-0111 Teil 4) ------------------------------------
+
+@login_required
+def notiz_zeigen(request, inventarnummer: str):
+    """Notiz am Gerät eintragen (F-74, A-0111 Teil 4).
+
+    Dialog ``data-name="notiz"`` mit ``speichern`` (TESTSCHNITTSTELLE
+    Kapitel 4). Die Notiz steht danach am Gerät (F-74).
+    """
+    gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
+    if not _darf_ändern(request.user):
+        meldung_error(request, "Zugriff verweigert: Notiz eintragen ist Ihnen nicht erlaubt.")
+        return redirect("/geraete/" + gerat.inventarnummer + "/")
+    if request.method == "POST":
+        form = GeratNotizForm(request.POST)
+        if form.is_valid():
+            gerat.notiz = form.cleaned_data.get("notiz", "")
+            gerat.save(update_fields=["notiz"])
+            meldung_success(request, f"Notiz für {gerat.inventarnummer} gespeichert.")
+            return redirect("/geraete/" + gerat.inventarnummer + "/")
+    else:
+        form = GeratNotizForm(initial={"notiz": gerat.notiz})
+    return render(request, "geraete/notiz.html", {"gerat": gerat, "form": form})
 
 
 # --- Prüfung (F-16) -------------------------------------------------------------

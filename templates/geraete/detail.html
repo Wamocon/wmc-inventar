@@ -10,9 +10,10 @@
     {% if kann_loeschen %}<a class="btn" href="/geraete/{{ gerat.inventarnummer }}/loeschen/" data-test="aktion-loeschen">Löschen</a>{% endif %}
     {% if ist_admin and gerat.status != "ausgemustert" %}
       <a class="btn" href="/geraete/{{ gerat.inventarnummer }}/aendern/" data-test="aktion-bearbeiten">Ändern</a>
+      <a class="btn" href="/geraete/{{ gerat.inventarnummer }}/notiz/" data-test="aktion-notiz">Notiz</a>
       <form method="post" action="/geraete/{{ gerat.inventarnummer }}/pruefen/" data-test="pruefen-formular">
         {% csrf_token %}
-        <button type="submit" class="btn" data-test="pruefen">Prüfung abhaken</button>
+        <button type="submit" class="btn" data-test="geprueft">Geprüft</button>
       </form>
     {% endif %}
   </div>

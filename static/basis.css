@@ -133,6 +133,15 @@ form .actions{margin-top:8px}
 .detail-grid dt{font-size:12.5px;color:var(--fg-2);font-weight:600}
 .detail-grid dd{margin:0;font-size:14px;font-weight:500}
 
+/* Mobile: 360 px, kein waagerechtes Scrollen (F-74, A-0111 Teil 4) */
+@media (max-width:560px){
+  .detail-grid{grid-template-columns:1fr}
+  .qr-zeile{flex-direction:column;align-items:flex-start}
+  .liste .zeile{grid-template-columns:1fr;gap:4px 0}
+  .liste .zeile .actions{margin-top:6px}
+  .page-head .lead{max-width:none}
+}
+
 /* Status-Chip */
 .chip-status{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;font-weight:600;font-size:12.5px;border:1px solid var(--line)}
 .chip-status.auf-lager{background:var(--info-bg);color:var(--info);border-color:var(--info)}

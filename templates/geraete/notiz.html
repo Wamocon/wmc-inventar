@@ -1,0 +1,25 @@
+{% extends "basis.html" %}
+{% block titel %}Notiz · {{ gerat.inventarnummer }} · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div>
+    <h1>Notiz</h1>
+    <p class="muted lead">{{ gerat.inventarnummer }} · {{ gerat.geraetename|default:gerat.modell }} (F-74)</p>
+  </div>
+</div>
+<div data-test="dialog" data-name="notiz">
+  <form method="post" novalidate data-test="notiz-formular">
+    {% csrf_token %}
+    <div class="meldungen">
+      {% include "fragmente/fehler.html" %}
+    </div>
+    <div class="form-grid">
+      <div class="field full"><label for="id_notiz">Notiz</label>{{ form.notiz }}{% if form.notiz.errors %}<div class="meldung error">{% for e in form.notiz.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+    </div>
+    <div class="actions">
+      <button type="submit" class="btn primary" data-test="speichern">Speichern</button>
+      <a class="btn link" href="/geraete/{{ gerat.inventarnummer }}/" data-test="abbrechen">Abbrechen</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

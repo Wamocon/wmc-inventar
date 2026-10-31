@@ -384,3 +384,17 @@ def kategorie_wahl() -> forms.ChoiceField:
     for k in sorted(Kategorie.objects.all(), key=lambda k: k.name):
         auswahl.append((str(k.pk), k.name))
     return forms.ChoiceField(choices=auswahl, label="Kategorie")
+
+
+class GeratNotizForm(forms.Form):
+    """Notiz am Gerät eintragen (F-74, A-0111 Teil 4).
+
+    Dialog ``data-name="notiz"`` mit ``speichern`` (TESTSCHNITTSTELLE
+    Kapitel 4). Die Notiz steht danach am Gerät.
+    """
+
+    notiz = forms.CharField(
+        required=False,
+        label="Notiz",
+        widget=forms.Textarea(attrs={"rows": 3, "data-test": "notiz-feld"}),
+    )

@@ -249,7 +249,7 @@ class AnsichtsTests(TestCase):
         text = antwort.content.decode()
         self.assertIn('data-test="hersteller"', text)
         self.assertIn("Lenovo", text)
-        self.assertIn('data-test="pruefen"', text)
+        self.assertIn('data-test="geprueft"', text)
 
     def test_pruefen_aktualisiert_datum(self):
         antwort = self.client.post(f"/geraete/{self.g1.inventarnummer}/pruefen/")
@@ -2090,3 +2090,115 @@ class ListEtikettenTests(TestCase):
         html = antwort.content.decode()
         self.assertIn('data-test="aktion-etikett"', html)
         self.assertIn(f"/geraete/{self.g1.inventarnummer}/etikett/", html)
+
+
+# --- M4 Teil 4: Notiz am Gerät und Geprüft (F-74, F-16) -----------------------
+
+
+class NotizGeratTests(TestCase):
+    """F-74, A-0111 Teil 4: Notiz am Gerät (TESTSCHNITTSTELLE Kapitel 4).
+
+    Dialog ``data-name="notiz"`` mit ``speichern``. Die Notiz steht
+    danach am Gerät.
+    """
+
+    def setUp(self):
+        self.admin = konto_erstellen("it-admin", rolle="admin", email="it-admin@beispiel.test")
+        self.kat, self.ort, self.person = stammdaten_erstellen()
+        self.gerat = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="ThinkPad")
+
+    def _anmelden(self):
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+
+    def test_detail_traegt_aktion_notiz(self):
+        """F-74: Detail trägt aktion-notiz für Admin."""
+        self._anmelden()
+        antwort = self.client.get(f"/geraete/{self.gerat.inventarnummer}/")
+        html = antwort.content.decode()
+        self.assertIn('data-test="aktion-notiz"', html)
+        self.assertIn(f"/geraete/{self.gerat.inventarnummer}/notiz/", html)
+
+    def test_notiz_dialog_oeffnet_mit_feld_und_speichern(self):
+        """TESTSCHNITTSTELLE Kapitel 4: dialog data-name=notiz mit speichern."""
+        self._anmelden()
+        antwort = self.client.get(f"/geraete/{self.gerat.inventarnummer}/notiz/")
+        self.assertEqual(antwort.status_code, 200)
+        html = antwort.content.decode()
+        self.assertIn('data-test="dialog" data-name="notiz"', html)
+        self.assertIn('data-test="speichern"', html)
+        self.assertIn('data-test="notiz-feld"', html)
+
+    def test_notiz_speichern_stellt_notiz_am_gerat(self):
+        """F-74: Notiz speichern → Notiz steht am Gerät."""
+        self._anmelden()
+        antwort = self.client.post(
+            f"/geraete/{self.gerat.inventarnummer}/notiz/",
+            {"notiz": "Akku schwach, Ersatz bestellt"},
+        )
+        self.assertEqual(antwort.status_code, 302)
+        self.gerat.refresh_from_db()
+        self.assertEqual(self.gerat.notiz, "Akku schwach, Ersatz bestellt")
+        # Die Notiz steht am Gerät: Detail zeigt sie an.
+        antwort = self.client.get(f"/geraete/{self.gerat.inventarnummer}/")
+        self.assertIn("Akku schwach, Ersatz bestellt", antwort.content.decode())
+
+    def test_notiz_leer_aeustern_loescht_notiz(self):
+        """F-74: Leere Notiz speichern entfernt den alten Text."""
+        self._anmelden()
+        self.gerat.notiz = "Alter Text"
+        self.gerat.save(update_fields=["notiz"])
+        antwort = self.client.post(
+            f"/geraete/{self.gerat.inventarnummer}/notiz/",
+            {"notiz": ""},
+        )
+        self.assertEqual(antwort.status_code, 302)
+        self.gerat.refresh_from_db()
+        self.assertEqual(self.gerat.notiz, "")
+
+
+class GeprueftButtonTests(TestCase):
+    """F-16, A-0111 Teil 4: „Geprüft“ setzt „Zuletzt geprüft“.
+
+    TESTSCHNITTSTELLE Kapitel 4: ``geprueft``-Button im Detail.
+    Abnahme: Geprüft an einem Gerät von WMC-WP-01 setzt „Zuletzt
+    geprüft“ und erhöht inventur-fortschritt um eins.
+    """
+
+    def setUp(self):
+        self.admin = konto_erstellen("it-admin", rolle="admin", email="it-admin@beispiel.test")
+        self.kat, self.ort, self.person = stammdaten_erstellen()
+        self.gerat = services.gerat_anlegen(
+            kategorie=self.kat, hersteller="Lenovo", modell="ThinkPad", ort=self.ort
+        )
+
+    def _anmelden(self):
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+
+    def test_detail_traegt_geprueft_button(self):
+        """F-74: Detail trägt geprueft-Button für Admin."""
+        self._anmelden()
+        antwort = self.client.get(f"/geraete/{self.gerat.inventarnummer}/")
+        html = antwort.content.decode()
+        self.assertIn('data-test="geprueft"', html)
+        self.assertIn("Geprüft", html)
+
+    def test_geprueft_setzt_zuletzt_geprueft(self):
+        """F-16: Geprüft setzt „Zuletzt geprüft“ (Datum + Benutzer)."""
+        self._anmelden()
+        self.gerat.refresh_from_db()
+        self.assertIsNone(self.gerat.zuletzt_geprueft_am)
+        antwort = self.client.post(f"/geraete/{self.gerat.inventarnummer}/pruefen/")
+        self.assertEqual(antwort.status_code, 302)
+        self.gerat.refresh_from_db()
+        self.assertIsNotNone(self.gerat.zuletzt_geprueft_am)
+        self.assertEqual(str(self.gerat.zuletzt_geprueft_von), "it-admin@beispiel.test")
+
+    def test_geprueft_erhoht_fortschritt_orts(self):
+        """F-16: Geprüft erhöht inventur-fortschritt des Ortes um eins."""
+        self._anmelden()
+        vorher = services.fortschritt_des_orts(self.ort.pk)
+        gezaehlt_vorher = vorher["geprueft"]
+        antwort = self.client.post(f"/geraete/{self.gerat.inventarnummer}/pruefen/")
+        self.assertEqual(antwort.status_code, 302)
+        nachher = services.fortschritt_des_orts(self.ort.pk)
+        self.assertEqual(nachher["geprueft"], gezaehlt_vorher + 1)

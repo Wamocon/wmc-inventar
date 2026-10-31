@@ -16,6 +16,7 @@ urlpatterns = [
     path("<slug:inventarnummer>/", views.detail, name="detail"),
     path("<slug:inventarnummer>/aendern/", views.bearbeiten, name="aendern"),
     path("<slug:inventarnummer>/pruefen/", views.pruefen, name="pruefen"),
+    path("<slug:inventarnummer>/notiz/", views.notiz_zeigen, name="notiz"),
     path("<slug:inventarnummer>/konflikt/<int:konflikt_id>/loesen/", views.konflikt_loesen, name="konflikt-loesen"),
     # M3 Lebenszyklus
     path("<slug:inventarnummer>/ausgeben/", views.ausgeben, name="ausgeben"),
