@@ -117,3 +117,108 @@ class ImportTests(TestCase):
         client.force_login(konto)
         antwort = client.get("/import/")
         self.assertEqual(antwort.status_code, 403)
+
+    def test_speichern_neu_und_ergaenzt(self):
+        """Speichern: neu angelegt, bestehendes ergänzt, kein Doppeltes (F-84, F-85, F-87)."""
+        from .services import import_speichern
+        csv_inhalt = (
+            "Typ;Gerät;Seriennummer;Verliehen an;Arbeitsplatz\n"
+            "Notebook;Modell-A;SN-001;;\n"
+            "Notebook;Modell-B;SN-002;Miriam Schulz;\n"
+        )
+        vorlage = self._vorlage_aus_csv(csv_inhalt)
+        spalten_ziel = {
+            "Typ": "Kategorie",
+            "Gerät": "Modell",
+            "Seriennummer": "Seriennummer",
+            "Verliehen an": "Person",
+            "Arbeitsplatz": "Arbeitsplatz",
+        }
+        kat_map = {"Notebook": "Notebook"}
+        pers_map = {"Miriam Schulz": "Miriam Schulz"}
+        arbp_map = {}
+        zeilen = import_parser.vorschau_berechnen(
+            vorlage, spalten_ziel, kat_map, pers_map, arbp_map)
+
+        anzahl_vor = Gerat.objects.count()
+        konto = _konto("it-admin", Konto.ROLLE_ADMIN)
+        ergebnis = import_speichern(
+            vorlage, zeilen, spalten_ziel, kat_map, pers_map, arbp_map,
+            "liste.csv", "", konto)
+
+        self.assertEqual(ergebnis["neu"], 1)
+        self.assertEqual(ergebnis["ergaenzt"], 1)
+        self.assertEqual(Gerat.objects.count(), anzahl_vor + 1)
+
+        # Das neue Gerät
+        neues = Gerat.objects.filter(seriennummer="SN-002").first()
+        self.assertIsNotNone(neues)
+        self.assertEqual(neues.status, Gerat.STATUS_IN_BENUTZUNG)
+        self.assertEqual(neues.person.vorname, "Miriam")
+        self.assertTrue(neues.altbestand_ohne_protokoll)
+        self.assertTrue(neues.zustand_ungeprueft)
+        self.assertEqual(neues.zustand, Gerat.ZUSTAND_GUT)
+
+        # Vorgang „Import“ mit Herkunft
+        from .models import Vorgang
+        import_vorgaenge = Vorgang.objects.filter(gerat=neues, typ="import")
+        self.assertEqual(import_vorgaenge.count(), 1)
+        vorgang = import_vorgaenge.first()
+        self.assertIn("liste.csv", vorgang.notiz)
+
+    def test_speichern_konflikt(self):
+        """Speichern: gleicher Seriennummer, abweichender Gerätenamen → Konflikt (F-84).
+
+        Das vorhandene Gerät hat SN-001 und Gerätenamen „Notebook-A“.
+        Die CSV-Zeile nennt dieselbe SN, aber einen anderen Namen → Konflikt.
+        """
+        from .services import import_speichern
+        csv_inhalt = (
+            "Typ;Gerätename;Seriennummer\n"
+            "Notebook;Anderes-Name;SN-001\n"
+        )
+        vorlage = self._vorlage_aus_csv(csv_inhalt)
+        spalten_ziel = {
+            "Typ": "Kategorie", "Gerätename": "Gerätename", "Seriennummer": "Seriennummer",
+        }
+        kat_map = {"Notebook": "Notebook"}
+        zeilen = import_parser.vorschau_berechnen(vorlage, spalten_ziel, kat_map, {}, {})
+        # Gleiche SN, aber abweichender Gerätenamen → Konflikt
+        self.assertEqual(zeilen[0].ergebnis, "konflikt")
+
+        konto = _konto("it-admin", Konto.ROLLE_ADMIN)
+        ergebnis = import_speichern(
+            vorlage, zeilen, spalten_ziel, kat_map, {}, {}, "liste.csv", "", konto)
+        self.assertEqual(ergebnis["konflikt"], 1)
+        self.assertEqual(ergebnis["neu"], 0)
+
+        konflikt = self.gerat.konflikte.first()
+        self.assertIsNotNone(konflikt)
+        self.assertEqual(konflikt.feld, "geraetename")
+        self.assertEqual(konflikt.alter_wert, "Notebook-A")
+        self.assertEqual(konflikt.neuer_wert, "Anderes-Name")
+
+    def test_speichern_kein_doppelt_anlegen(self):
+        """Zweiter Import desselben Blatts: kein Gerät doppelt angelegt (F-84)."""
+        from .services import import_speichern
+        csv_inhalt = (
+            "Typ;Gerät;Seriennummer\n"
+            "Notebook;Modell-X;SN-555\n"
+        )
+        vorlage = self._vorlage_aus_csv(csv_inhalt)
+        spalten_ziel = {"Typ": "Kategorie", "Gerät": "Modell", "Seriennummer": "Seriennummer"}
+        kat_map = {"Notebook": "Notebook"}
+        konto = _konto("it-admin", Konto.ROLLE_ADMIN)
+
+        # Erster Import: neu
+        zeilen1 = import_parser.vorschau_berechnen(vorlage, spalten_ziel, kat_map, {}, {})
+        import_speichern(vorlage, zeilen1, spalten_ziel, kat_map, {}, {}, "liste.csv", "", konto)
+        anzahl_nach1 = Gerat.objects.count()
+        self.assertEqual(anzahl_nach1, anzahl_nach1)  # sanity
+
+        # Zweiter Import: ergaenzt (SN-555 existiert jetzt)
+        vorlage2 = self._vorlage_aus_csv(csv_inhalt)
+        zeilen2 = import_parser.vorschau_berechnen(vorlage2, spalten_ziel, kat_map, {}, {})
+        self.assertEqual(zeilen2[0].ergebnis, "ergaenzt")
+        import_speichern(vorlage2, zeilen2, spalten_ziel, kat_map, {}, {}, "liste.csv", "", konto)
+        self.assertEqual(Gerat.objects.count(), anzahl_nach1)

@@ -210,3 +210,39 @@ def import_vorschau_csv(request: HttpRequest):
     antwort = HttpResponse(csv_vorschau(vorschau), content_type="text/csv; charset=utf-8")
     antwort["Content-Disposition"] = 'attachment; filename="import-vorschau.csv"'
     return antwort
+
+
+@require_POST
+def import_speichern_view(request: HttpRequest):
+    """Speichern nach Bestätigung (F-86 bis F-87, A-0114 Teil 3).
+
+    POST: ruft die Service-Funktion ``import_speichern`` auf und zeigt
+    eine Erfolgsmeldung mit den Zahlen neu, ergänzt, Konflikt, übersprungen.
+    """
+    if not _darf_import(request.user):
+        raise PermissionDenied("Zugriff verweigert: Der Import ist nur für IT-Admin erlaubt.")
+    stand = _stand_aus_sitzung(request)
+    if stand is None:
+        return redirect("/import/")
+
+    vorlage = _vorlage_bauen(stand)
+    vorschau = _vorschau_aufladen(stand)
+    from . import services
+    ergebnis = services.import_speichern(
+        vorlage=vorlage,
+        vorschau=vorschau,
+        spalten_ziel=stand.get("spalten_ziel", {}),
+        wert_zu_kategorie=stand.get("wert_zu_kategorie", {}),
+        wert_zu_person=stand.get("wert_zu_person", {}),
+        wert_zu_arbeitsplatz=stand.get("wert_zu_arbeitsplatz", {}),
+        dateiname=stand.get("dateiname", ""),
+        blatt=stand.get("blatt", ""),
+        konto=request.user,
+    )
+    # Sitzung bereinigen
+    request.session.pop(SCHLUESSEL, None)
+    meldung = (
+        f"Import gespeichert: {ergebnis['neu']} neu, {ergebnis['ergaenzt']} ergänzt, "
+        f"{ergebnis['konflikt']} Konflikt, {ergebnis['uebersprungen']} übersprungen."
+    )
+    return redirect("/geraete/?meldung=import-speichern")

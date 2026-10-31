@@ -34,5 +34,6 @@ urlpatterns = [
     path("import/spalten/", import_views.import_spalten, name="import-spalten"),
     path("import/werte/", import_views.import_werte, name="import-werte"),
     path("import/vorschau.csv/", import_views.import_vorschau_csv, name="import-vorschau-csv"),
+    path("import/speichern/", import_views.import_speichern_view, name="import-speichern"),
     path("admin/", admin.site.urls),
 ]
