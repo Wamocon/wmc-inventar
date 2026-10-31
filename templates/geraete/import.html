@@ -1,0 +1,154 @@
+{% extends "basis.html" %}
+{% block titel %}Import · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div><h1>Import</h1><p class="muted lead">Bestandsliste einlesen, zuordnen und die Vorschau prüfen (F-80 bis F-86).</p></div>
+</div>
+
+<div class="schritte" data-test="import-schritte">
+  <span class="schritt {% if schritt >= 1 %}aktiv{% endif %}">1 Datei</span>
+  <span class="schritt {% if schritt >= 2 %}aktiv{% endif %}">2 Spalten</span>
+  <span class="schritt {% if schritt >= 3 %}aktiv{% endif %}">3 Werte</span>
+  <span class="schritt {% if schritt >= 4 %}aktiv{% endif %}">4 Vorschau</span>
+</div>
+
+{% if fehler %}
+<p class="fehler" data-test="fehler">{{ fehler }}</p>
+{% endif %}
+
+{% if schritt == 1 %}
+<section class="abschnitt" data-test="import-schritt" data-nr="1">
+  <h2>1. Datei hochladen</h2>
+  <p class="muted">Eine .xlsx-Datei mit Blatt und Kopfzeile wählen oder eine .csv-Datei in UTF-8 mit Semikolon oder Komma (F-80).</p>
+  <form method="post" action="/import/datei/" enctype="multipart/form-data" data-test="import-dateiformular">
+    {% csrf_token %}
+    <input type="file" name="datei" accept=".xlsx,.csv" data-test="datei">
+    <label>Blatt
+      <select name="blatt" data-test="blatt">
+        <option value="Inventar">Inventar</option>
+        <option value="Notebooks">Notebooks</option>
+        <option value="Smartphones">Smartphones</option>
+        <option value="Raumliste Hardware">Raumliste Hardware</option>
+      </select>
+    </label>
+    <label>Kopfzeile (Zeile)
+      <select name="kopfzeile" data-test="kopfzeile">
+        <option value="3">3</option>
+        <option value="4">4</option>
+        <option value="1">1</option>
+      </select>
+    </label>
+    <button type="submit" class="btn primary" data-test="weiter-spalten">Weiter: Spalten zuordnen</button>
+  </form>
+</section>
+{% endif %}
+
+{% if schritt == 2 and vorlage %}
+<section class="abschnitt" data-test="import-schritt" data-nr="2">
+  <h2>2. Spalten zuordnen</h2>
+  <p class="muted">Jede Quellspalte einem Zielfeld zuordnen oder ignorieren. Die Vorschläge gehen über gleichnamige Spalten (F-81).</p>
+  <form method="post" action="/import/spalten/" data-test="import-spaltenformular">
+    {% csrf_token %}
+    <table class="tabelle" data-test="spalten">
+      <thead><tr><th>Quellspalte</th><th>Beispiel</th><th>Zielfeld</th></tr></thead>
+      <tbody>
+      {% for s in vorlage.spalten %}
+      <tr data-test="spalte" data-name="{{ s.name }}">
+        <td>{{ s.name }}</td>
+        <td class="muted">{{ s.beispiel }}</td>
+        <td>
+          <select name="ziel_{{ s.name }}" data-test="ziel" value="ignorieren">
+            <option value="ignorieren">ignorieren</option>
+            {% for z in ziele %}
+            <option value="{{ z }}">{{ z }}</option>
+            {% endfor %}
+          </select>
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <button type="submit" class="btn primary" data-test="weiter-werte">Weiter: Werte zuordnen</button>
+  </form>
+</section>
+{% endif %}
+
+{% if schritt == 3 and vorlage %}
+<section class="abschnitt" data-test="import-schritt" data-nr="3">
+  <h2>3. Werte zuordnen</h2>
+  <p class="muted">Für Kategorie, Person und Arbeitsplatz jeden vorkommenden Wert einmal zuordnen, oder nicht übernehmen (F-82).</p>
+  <form method="post" action="/import/werte/" data-test="import-werteformular">
+    {% csrf_token %}
+
+    <h3>Kategorie</h3>
+    <table class="tabelle" data-test="werte-kategorie">
+      <thead><tr><th>Wert in der Datei</th><th>Zielfeld</th></tr></thead>
+      <tbody>
+      {% for wert in werte_kategorie %}
+      <tr data-test="wert" data-name="{{ wert }}">
+        <td>{{ wert }}</td>
+        <td><input type="text" name="wert_zu_kategorie_{{ wert }}" data-test="ziel-kategorie" value=""></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+
+    <h3>Person</h3>
+    <table class="tabelle" data-test="werte-person">
+      <thead><tr><th>Wert in der Datei</th><th>Person</th></tr></thead>
+      <tbody>
+      {% for wert in werte_person %}
+      <tr data-test="wert" data-name="{{ wert }}">
+        <td>{{ wert }}</td>
+        <td><input type="text" name="wert_zu_person_{{ wert }}" data-test="ziel-person" value=""></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <p>Neue Person ohne Konto: <input type="text" name="neuer_person_name" data-test="neuer-person" value="{{ neuer_person_name }}"></p>
+
+    <h3>Arbeitsplatz</h3>
+    <table class="tabelle" data-test="werte-arbeitsplatz">
+      <thead><tr><th>Wert in der Datei</th><th>Arbeitsplatz</th></tr></thead>
+      <tbody>
+      {% for wert in werte_arbeitsplatz %}
+      <tr data-test="wert" data-name="{{ wert }}">
+        <td>{{ wert }}</td>
+        <td><input type="text" name="wert_zu_arbeitsplatz_{{ wert }}" data-test="ziel-arbeitsplatz" value=""></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <button type="submit" class="btn primary" data-test="weiter-vorschau">Weiter: Vorschau</button>
+  </form>
+</section>
+{% endif %}
+
+{% if schritt == 4 and vorschau %}
+<section class="abschnitt" data-test="import-schritt" data-nr="4">
+  <h2>4. Vorschau</h2>
+  <p class="muted">Je Zeile: neu, ergänzt, Konflikt oder übersprungen mit Grund (F-86). Gespeichert wird erst nach Bestätigung.</p>
+  {% if hinweis_flag %}
+  <p class="hinweis" data-test="hinweis">Hinweis: doppelte Geräte- oder Seriennummer in der Datei.</p>
+  {% endif %}
+  <div class="anzahl" data-test="zusammenfassung">
+    {{ zusammenfassung.neu }} neu · {{ zusammenfassung.ergaenzt }} ergänzt ·
+    {{ zusammenfassung.konflikt }} Konflikt · {{ zusammenfassung.uebersprungen }} übersprungen
+  </div>
+  <a class="btn" href="/import/vorschau.csv/" data-test="vorschau-csv">Vorschau als CSV</a>
+  <table class="tabelle" data-test="import-vorschau">
+    <thead><tr><th>Excel-Zeile</th><th>Ergebnis</th><th>Grund</th><th>Hinweis</th></tr></thead>
+    <tbody>
+    {% for z in vorschau %}
+    <tr data-test="vorschau-zeile" data-zeile="{{ z.zeile }}" data-ergebnis="{{ z.ergebnis }}">
+      <td>{{ z.zeile }}</td>
+      <td><span class="chip-status">{{ z.ergebnis }}</span></td>
+      <td>{{ z.grund }}</td>
+      <td class="muted">{{ z.hinweise|join:", " }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+{% endblock %}

@@ -94,15 +94,15 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 | F-73 | S | M4 | Angebrochene Bögen | erfüllt | `geraete/etiketten.py:bogen_pdf` mit `startposition`, `data-test="startposition"` in `templates/geraete/liste.html`, Test: `test_bogen_startposition_3_felder_davor_frei` |
 | F-74 | M | M4 | Mobile Gerätedetailseite | erfüllt | `static/basis.css` `@media (max-width:560px)` (Detail-Grid einspaltig, QR-zeile stapelt, Lebenszyklus einspaltig); `templates/geraete/detail.html` mit `aktion-notiz` und `geprueft`; `templates/geraete/notiz.html` (Dialog `data-name="notiz"`); Test: `NotizGeratTests` (4 Tests), `GeprueftButtonTests` (3 Tests) |
 | F-80 | M | M2 | Datei hochladen | offen | |
-| F-81 | M | M2 | Spalten zuordnen | offen | |
-| F-82 | M | M2 | Werte zuordnen | offen | |
-| F-83 | M | M2 | Lücken zulassen | offen | |
-| F-84 | M | M2 | Zusammenführen statt doppelt anlegen | teilweise | `GeratKonflikt`-Modell und `konflikt_anlegen/loesen` vorhanden; Import-Logik (Zusammenführen über Seriennummer) noch offen |
-| F-85 | M | M2 | Status und Verbleib ableiten | teilweise | `altbestand_ohne_protokoll` und `zustand_ungeprueft` in Modell; Import-Ableitung noch offen |
-| F-86 | M | M2 | Vorschau und Bestätigung | teilweise | `konflikt_loesen`-View vorhanden; Import-Vorschau mit CSV-Download noch offen |
-| F-87 | M | M2 | Nachvollziehbarkeit | teilweise | `Importlauf`-Modell mit `dateiname`, `blatt`, `erzeugt_von` vorhanden; Import-Logik noch offen |
+| F-81 | M | M2 | Spalten zuordnen | erfüllt | `/import/` Schritt 2, `geraete/import_views.py:import_spalten`, Vorschläge über gleichnamige Spalten in `geraete/import_parser.py:NAMEN_ZU_ZIEL` |
+| F-82 | M | M2 | Werte zuordnen | erfüllt | `/import/` Schritt 3, `geraete/import_views.py:import_werte`, jeder Wert einmal, leer = nicht übernehmen |
+| F-83 | M | M2 | Lücken zulassen | erfüllt | `geraete/import_parser.py:vorschau_berechnen`, ohne Person/Arbeitsplatz an Lagerort LAGER-EG |
+| F-84 | M | M2 | Zusammenführen statt doppelt anlegen | erfüllt | `geraete/import_parser.py:vorschau_berechnen` mit `bestands_sn` (Seriennummer geht vor) und `doppelt_sn` (keine Blatts), Hinweis `seriennummer-doppelt` |
+| F-85 | M | M2 | Status und Verbleib ableiten | teilweise | `altbestand_ohne_protokoll` und `zustand_ungeprueft` in Modell; Ableitung beim Speichern in Teil 3 |
+| F-86 | M | M2 | Vorschau und Bestätigung | teilweise | `geraete/import_parser.py:csv_vorschau` (eine Zeile je Excel-Zeile), `/import/vorschau.csv/`; Bestätigung und Speichern in Teil 3 |
+| F-87 | M | M2 | Nachvollziehbarkeit | teilweise | `Importlauf`-Modell mit `dateiname`, `blatt`, `erzeugt_von` vorhanden; Eintrag beim Speichern in Teil 3 |
 | F-88 | M | M2, M7 | Arbeitsliste „Daten unvollständig“ | erfüllt | `gerat.datenluecken()`, Filter `?unvollstaendig=1` in `geraete/views.py:liste`, Test: `test_arbeitsliste_zeigt_unvollstaendige` |
-| F-80 | M | M2 | Datei hochladen | offen | |
+| F-80 | M | M2 | Datei hochladen | erfüllt | `/import/` Schritt 1, `geraete/import_views.py:import_datei`, `geraete/import_parser.py:lade_datei` (.xlsx mit Blatt/Kopfzeile, .csv UTF-8 Semikolon/Komma) |
 | F-90 | M | M7 | Mailversand einrichten | offen | |
 | F-92 | M | M7 | Leihe überfällig | offen | |
 | F-93 | M | M7 | Leihanfrage eingegangen / entschieden | offen | |

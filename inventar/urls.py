@@ -5,6 +5,7 @@ TESTSCHNITTSTELLE Abschnitt 3 (Adressen).
 from django.contrib import admin
 from django.urls import path, include
 from geraete import views as geraete_views
+from geraete import import_views
 from stammdaten import views as stammdaten_views
 
 urlpatterns = [
@@ -27,5 +28,11 @@ urlpatterns = [
     path("arbeitsplaetze/<slug:kennung>/pruefen/", geraete_views.ort_pruefen, name="ort-pruefen"),
     path("arbeitsplaetze/<slug:kennung>/popup/", geraete_views.platz_popup, name="platz-popup"),
     path("arbeitsplaetze/raum/<slug:kennung>/popup/", geraete_views.raum_popup, name="raum-popup"),
+    # Import (A-0113, F-80 bis F-84, F-86): Folge von Schritten, keine Ablage
+    path("import/", import_views.import_seite, name="import"),
+    path("import/datei/", import_views.import_datei, name="import-datei"),
+    path("import/spalten/", import_views.import_spalten, name="import-spalten"),
+    path("import/werte/", import_views.import_werte, name="import-werte"),
+    path("import/vorschau.csv/", import_views.import_vorschau_csv, name="import-vorschau-csv"),
     path("admin/", admin.site.urls),
 ]
