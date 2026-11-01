@@ -1014,6 +1014,11 @@ def _ist_admin(request) -> bool:
     return bool(request.user.ist_admin)
 
 
+def _ist_mitarbeiter(request) -> bool:
+    """Kapitel 3: Mitarbeiter sehen /meine-geraete/… (F-95, F-112)."""
+    return bool(request.user.ist_mitarbeiter)
+
+
 @login_required
 def verleih_zeige(request, inventarnummer):
     """Dialog „Gerät verleihen" am Gerätedetail (F-30, TESTSCHNITTSTELLE 4).
@@ -1077,8 +1082,8 @@ def verleih_liste(request):
         raise PermissionDenied
 
     leihen = list(
-        Leihe.objects.filter(status=Leihe.STATUS_AUSGEGEBEN)
-        .select_related("gerat", "person")
+        Leihe.objects.all()
+        .select_related("gerat", "person", "kat")
         .order_by("-zeitpunkt")
     )
     ueberfaellige = {l.id for l in leihen_ueberfaellig()}
@@ -1089,5 +1094,237 @@ def verleih_liste(request):
         {
             "leihen": leihen,
             "ueberfaellige": ueberfaellige,
+        },
+    )
+
+
+# --- M5 Teil 2: Anfrage und Entscheidung (A-0118) ---------------------------
+
+def _freie_je_kategorie(beginn, ende, pool_qs):
+    """F-31: Freie Geräte je Kategorie im Leihpool im Zeitraum.
+
+    Ein Gerät ist frei, wenn es im Leihpool steht und in dem Zeitraum
+    nicht schon genehmigt (O-12, F-34).
+    """
+    from .services import _gerat_ist_reserviert
+
+    freie = {}
+    for gerat in pool_qs.select_related("kategorie"):
+        if _gerat_ist_reserviert(gerat, beginn, ende):
+            continue
+        kat = gerat.kategorie
+        if kat is None:
+            continue
+        freie[kat.id] = (kat, freie.get(kat.id, (None, 0))[1] + 1)
+    return [
+        (kat, anzahl)
+        for (kat, anzahl) in sorted(freie.values(), key=lambda t: t[0].name)
+    ]
+
+
+@login_required
+def meine_geraete_zeige(request):
+    """/meine-geraete/ – Geräte des Mitarbeiters (F-95, F-112)."""
+    if not _ist_mitarbeiter(request):
+        raise PermissionDenied
+    geräte = Gerat.objects.filter(person=request.user.person).order_by("inventarnummer")
+    return render(
+        request,
+        "geraete/meine_geraete.html",
+        {"geraete": geräte},
+    )
+
+
+@login_required
+def meine_geraete_alle_zeige(request):
+    """/meine-geraete/alle/ – Alle Geräte (F-112)."""
+    if not _ist_mitarbeiter(request):
+        raise PermissionDenied
+    geräte = Gerat.objects.all().order_by("inventarnummer")
+    return render(
+        request,
+        "geraete/alle_geraete.html",
+        {"geraete": geräte},
+    )
+
+
+@login_required
+def meine_geraete_leihe_neu(request):
+    """/meine-geraete/leihe/neu/ – Leihgerät anfragen (F-31, Kapitel 3).
+
+    GET: Formular mit Leihkategorien und freien Geräten je Kategorie
+    im Leihpool im gewählten Zeitraum. POST: Anfrage speichern,
+    danach mit data-stand „angefragt\" in /verleih/ (O-12).
+    """
+    from stammdaten.models import Person
+
+    from .forms import LeiheAnfrageForm
+    from .services import GeratFehler, leihe_anfragen
+
+    if not _ist_mitarbeiter(request):
+        raise PermissionDenied
+
+    person = (
+        request.user.person
+        or Person.objects.filter(konten=request.user).first()
+    )
+    if person is None:
+        raise PermissionDenied
+
+    pool_qs = Gerat.objects.filter(
+        leihpool=True
+    ).select_related("kategorie")
+
+    form = LeiheAnfrageForm(request.POST or None, leihpool_geraete=pool_qs)
+    freie = []
+    if form.is_bound and form.is_valid():
+        beginn = form.cleaned_data.get("beginn")
+        ende = form.cleaned_data.get("ende")
+        if beginn and ende and beginn <= ende:
+            freie = _freie_je_kategorie(beginn, ende, pool_qs)
+
+    meldung = ""
+    if request.method == "POST" and form.is_valid():
+        try:
+            leihe_anfragen(
+                person=person,
+                kat=form.cleaned_data["kat"],
+                beginn=form.cleaned_data["beginn"],
+                ende=form.cleaned_data["ende"],
+                zweck=form.cleaned_data["zweck"],
+                gerat=form.cleaned_data.get("gerat"),
+                erzeugt_von=request.user,
+            )
+            return redirect("verleih-liste")
+        except GeratFehler as fehler_vorgang:
+            meldung = str(fehler_vorgang)
+
+    return render(
+        request,
+        "geraete/leihe_neu.html",
+        {
+            "form": form,
+            "freie": freie,
+            "meldung": meldung,
+        },
+    )
+
+
+@login_required
+def meine_geraete_leihe_zurueckziehen(request, leihe_id):
+    """Leihe zurückziehen (F-37, Kapitel 3).
+
+    POST: Leihe auf „zurueckgezogen\" setzen; die Reservierung endet
+    damit. GET: Formular mit Bestätigung.
+    """
+    from .forms import LeiheZurueckziehenForm
+    from .models import Leihe
+    from .services import GeratFehler, leihe_zurueckziehen
+
+    if not _ist_mitarbeiter(request):
+        raise PermissionDenied
+
+    leihe = get_object_or_404(Leihe, id=leih_id)
+    if leihe.person_id != request.user.person_id:
+        raise PermissionDenied
+    form = LeiheZurueckziehenForm(request.POST or None)
+
+    meldung = ""
+    if request.method == "POST" and form.is_valid():
+        try:
+            leihe_zurueckziehen(leihe, ausgefuehrt_von=request.user)
+            return redirect("meine_geraete")
+        except GeratFehler as fehler:
+            meldung = str(fehler)
+
+    return render(
+        request,
+        "geraete/leihe_zurueckziehen.html",
+        {
+            "form": form,
+            "leihe": leihe,
+            "meldung": meldung,
+        },
+    )
+
+
+@login_required
+def leihe_genehmigen_zeige(request, leihe_id):
+    """Dialog „Leihe genehmigen" in /verleih/ (F-32, Kapitel 4).
+
+    GET: Formular mit Geräten aus dem Leihpool der Kategorie.
+    POST: Leihe genehmigen – Überschneidung schlägt in fehler fehl (F-34).
+    """
+    from .forms import LeiheGenehmigenForm
+    from .models import Leihe
+    from .services import GeratFehler, leihe_genehmigen
+
+    if not _ist_admin(request):
+        raise PermissionDenied
+
+    leihe = get_object_or_404(Leihe, id=leih_id)
+    if leihe.kat is None:
+        raise PermissionDenied
+    pool_qs = Gerat.objects.filter(
+        kategorie=leih.kat, leihpool=True
+    ).order_by("inventarnummer")
+    form = LeiheGenehmigenForm(request.POST or None, leihpool_geraete=pool_qs)
+    fehler = ""
+    if request.method == "POST" and form.is_valid():
+        try:
+            leihe_genehmigen(
+                leihe,
+                gerat=form.cleaned_data["gerat"],
+                ausgefuehrt_von=request.user,
+            )
+            return redirect("verleih-liste")
+        except GeratFehler as fehler_vorgang:
+            fehler = str(fehler_vorgang)
+
+    return render(
+        request,
+        "geraete/leihe_genehmigen.html",
+        {
+            "form": form,
+            "leihe": leihe,
+            "fehler": fehler,
+        },
+    )
+
+
+@login_required
+def leihe_ablehnen_zeige(request, leihe_id):
+    """Dialog „Leihe ablehnen\" in /verleih/ (F-32, Kapitel 4).
+
+    POST mit leerer Begründung wird nicht gespeichert (F-32).
+    """
+    from .forms import LeiheAblehnenForm
+    from .models import Leihe
+    from .services import GeratFehler, leihe_ablehnen
+
+    if not _ist_admin(request):
+        raise PermissionDenied
+
+    leihe = get_object_or_404(Leihe, id=leih_id)
+    form = LeiheAblehnenForm(request.POST or None)
+    fehler = ""
+    if request.method == "POST" and form.is_valid():
+        try:
+            leihe_ablehnen(
+                leihe,
+                begruendung=form.cleaned_data["begrundung"],
+                ausgefuehrt_von=request.user,
+            )
+            return redirect("verleih-liste")
+        except GeratFehler as fehler_vorgang:
+            fehler = str(fehler_vorgang)
+
+    return render(
+        request,
+        "geraete/leihe_ablehnen.html",
+        {
+            "form": form,
+            "leihe": leihe,
+            "fehler": fehler,
         },
     )

@@ -17,7 +17,8 @@ from konten.models import Konto
 from stammdaten.models import Kategorie, Ort, Person
 
 from . import services
-from .models import Gerat, GeratKonflikt, Importlauf, Vorgang
+from .models import Gerat, GeratKonflikt, Importlauf, Leihe, Vorgang
+from .services import GeratFehler, leihe_ablehnen, leihe_anfragen, leihe_genehmigen, leihe_zurueckziehen
 
 
 # --- Konten-Helfer -----------------------------------------------------------
@@ -2579,3 +2580,321 @@ class VerleihViewTests(TestCase):
         protokoll = Protokoll.objects.filter(geraet=self.gerat).first()
         self.assertIsNotNone(protokoll)
         self.assertEqual(protokoll.stand, Protokoll.STAND_SCAN_OFFEN)
+
+
+# ---------------------------------------------------------------------------
+# M5 Teil 2: Anfrage und Entscheidung
+# ---------------------------------------------------------------------------
+
+class LeiheAnfrageServiceTests(TestCase):
+    """F-31: Mitarbeiter fragt ein Leihgerät an."""
+
+    def setUp(self):
+        self.kategorie, self.ablage, self.person = stammdaten_erstellen()
+        self.mitarbeiter = konto_erstellen("anna", "mitarbeiter")
+        self.admin = konto_erstellen("admin", "admin")
+        self.gerat = services.gerat_anlegen(
+            kategorie=self.kategorie, hersteller="Lenovo", modell="ThinkPad"
+        )
+        self.gerat.leihpool = True
+        self.gerat.save()
+        self.beginn = date(2026, 11, 2)
+        self.ende = date(2026, 11, 10)
+
+    def test_anfrage_ohne_gerat(self):
+        leihe = leihe_anfragen(
+            person=self.person,
+            kat=self.kategorie,
+            beginn=self.beginn,
+            ende=self.ende,
+            zweck="Vorführung",
+            gerat=None,
+            erzeugt_von=self.mitarbeiter,
+        )
+        self.assertEqual(leihe.status, Leihe.STATUS_ANGEFRAGT)
+        self.assertIsNone(leihe.gerat)
+        self.assertEqual(leihe.zweck, "Vorführung")
+
+    def test_anfrage_mit_gerat(self):
+        leihe = leihe_anfragen(
+            person=self.person,
+            kat=self.kategorie,
+            beginn=self.beginn,
+            ende=self.ende,
+            zweck="Vorführung",
+            gerat=self.gerat,
+            erzeugt_von=self.mitarbeiter,
+        )
+        self.assertEqual(leihe.status, Leihe.STATUS_ANGEFRAGT)
+        self.assertEqual(leihe.gerat, self.gerat)
+
+    def test_anfrage_gerat_nicht_im_leihpool(self):
+        self.gerat.leihpool = False
+        self.gerat.save()
+        with self.assertRaises(GeratFehler):
+            leihe_anfragen(
+                person=self.person,
+                kat=self.kategorie,
+                beginn=self.beginn,
+                ende=self.ende,
+                zweck="Test",
+                gerat=self.gerat,
+                erzeugt_von=self.mitarbeiter,
+            )
+
+
+class LeiheEntscheidungServiceTests(TestCase):
+    """F-32, F-34: IT genehmigt oder lehnt ab."""
+
+    def setUp(self):
+        self.kategorie, self.ablage, self.person = stammdaten_erstellen()
+        self.mitarbeiter = konto_erstellen("anna", "mitarbeiter")
+        self.admin = konto_erstellen("admin", "admin")
+        self.gerat = services.gerat_anlegen(
+            kategorie=self.kategorie, hersteller="Lenovo", modell="ThinkPad"
+        )
+        self.gerat.leihpool = True
+        self.gerat.save()
+        self.beginn = date(2026, 11, 2)
+        self.ende = date(2026, 11, 10)
+
+    def _anfrage_erstellen(self, beginn=None, ende=None):
+        return leihe_anfragen(
+            person=self.person,
+            kat=self.kategorie,
+            beginn=beginn or self.beginn,
+            ende=ende or self.ende,
+            zweck="Test",
+            gerat=None,
+            erzeugt_von=self.mitarbeiter,
+        )
+
+    def test_genehmigen(self):
+        leihe = self._anfrage_erstellen()
+        leihe_genehmigen(
+            leihe, gerat=self.gerat, ausgefuehrt_von=self.admin
+        )
+        leihe.refresh_from_db()
+        self.assertEqual(leihe.status, Leihe.STATUS_GENEHMIGT)
+        self.assertEqual(leihe.gerat, self.gerat)
+        self.gerat.refresh_from_db()
+        self.assertTrue(self.gerat.reserviert)
+
+    def test_ablehnen_mit_begrundung(self):
+        leihe = self._anfrage_erstellen()
+        leihe_ablehnen(
+            leihe, begruendung="Kein Gerät verfügbar", ausgefuehrt_von=self.admin
+        )
+        leihe.refresh_from_db()
+        self.assertEqual(leihe.status, Leihe.STATUS_ABGELEHNT)
+        self.assertTrue(leihe.abgelehnt)
+        self.assertEqual(leihe.abgelehnt_bis, "Kein Gerät verfügbar")
+
+    def test_ablehnen_ohne_begrundung_scheitert(self):
+        leihe = self._anfrage_erstellen()
+        with self.assertRaises(GeratFehler):
+            leihe_ablehnen(leihe, begruendung="", ausgefuehrt_von=self.admin)
+
+    def test_ueberschneidung_lehnt_ab(self):
+        """F-34: Zweites Genehmigen desselben Geräts im selben Zeitraum."""
+        leihe1 = self._anfrage_erstellen()
+        leihe_genehmigen(
+            leihe1, gerat=self.gerat, ausgefuehrt_von=self.admin
+        )
+        leihe2 = self._anfrage_erstellen()
+        with self.assertRaises(GeratFehler):
+            leihe_genehmigen(
+                leihe2, gerat=self.gerat, ausgefuehrt_von=self.admin
+            )
+
+
+class LeiheZurueckziehenServiceTests(TestCase):
+    """F-37: Mitarbeiter zieht die Leihe zurück."""
+
+    def setUp(self):
+        self.kategorie, self.ablage, self.person = stammdaten_erstellen()
+        self.mitarbeiter = konto_erstellen("anna", "mitarbeiter")
+        self.admin = konto_erstellen("admin", "admin")
+        self.gerat = services.gerat_anlegen(
+            kategorie=self.kategorie, hersteller="Lenovo", modell="ThinkPad"
+        )
+        self.gerat.leihpool = True
+        self.gerat.save()
+        self.beginn = date(2026, 11, 2)
+        self.ende = date(2026, 11, 10)
+
+    def _anfrage_erstellen(self):
+        return leihe_anfragen(
+            person=self.person,
+            kat=self.kategorie,
+            beginn=self.beginn,
+            ende=self.ende,
+            zweck="Test",
+            gerat=None,
+            erzeugt_von=self.mitarbeiter,
+        )
+
+    def test_zurueckziehen_angefragt(self):
+        leihe = self._anfrage_erstellen()
+        leihe_zurueckziehen(leihe, ausgefuehrt_von=self.mitarbeiter)
+        leihe.refresh_from_db()
+        self.assertEqual(leihe.status, Leihe.STATUS_ZURUECKGEZOGEN)
+
+    def test_zurueckziehen_genehmigt_hebt_reservierung_auf(self):
+        leihe = self._anfrage_erstellen()
+        leihe_genehmigen(
+            leihe, gerat=self.gerat, ausgefuehrt_von=self.admin
+        )
+        self.gerat.refresh_from_db()
+        self.assertTrue(self.gerat.reserviert)
+        leihe_zurueckziehen(leihe, ausgefuehrt_von=self.mitarbeiter)
+        leihe.refresh_from_db()
+        self.assertEqual(leihe.status, Leihe.STATUS_ZURUECKGEZOGEN)
+        self.gerat.refresh_from_db()
+        self.assertEqual(self.gerat.status, Gerat.STATUS_AUF_LAGER)
+
+
+class LeiheAnfrageViewTests(TestCase):
+    """F-31: /geraete/meine-geraete/leihe/neu/ für Mitarbeiter."""
+
+    def setUp(self):
+        self.kategorie, self.ablage, self.person = stammdaten_erstellen()
+        self.mitarbeiter = konto_erstellen("anna", "mitarbeiter")
+        self.client.force_login(self.mitarbeiter)
+        self.gerat = services.gerat_anlegen(
+            kategorie=self.kategorie, hersteller="Lenovo", modell="ThinkPad"
+        )
+        self.gerat.leihpool = True
+        self.gerat.save()
+
+    def test_leihe_neu_antwortet_200(self):
+        answer = self.client.get("/geraete/meine-geraete/leihe/neu/")
+        self.assertEqual(answer.status_code, 200)
+        self.assertContains(answer, "Leihe anfragen")
+
+    def test_leihe_neu_zeigt_freie_geraete(self):
+        answer = self.client.get("/geraete/meine-geraete/leihe/neu/")
+        self.assertContains(answer, "freie")
+
+    def test_admin_darf_nicht(self):
+        admin = konto_erstellen("admin", "admin")
+        self.client.force_login(admin)
+        answer = self.client.get("/geraete/meine-geraete/leihe/neu/")
+        self.assertEqual(answer.status_code, 403)
+
+    def test_anfrage_wird_erstellt(self):
+        answer = self.client.post("/geraete/meine-geraete/leihe/neu/", {
+            "kat": self.kategorie.id,
+            "beginn": "2026-11-02",
+            "ende": "2026-11-10",
+            "zweck": "Vorführung",
+        })
+        self.assertEqual(answer.status_code, 302)
+        leihe = Leihe.objects.filter(person=self.person).first()
+        self.assertIsNotNone(leihe)
+        self.assertEqual(leihe.status, Leihe.STATUS_ANGEFRAGT)
+
+
+class LeiheEntscheidungViewTests(TestCase):
+    """F-32: Genehmigen und Ablehnen über die Ansicht."""
+
+    def setUp(self):
+        self.kategorie, self.ablage, self.person = stammdaten_erstellen()
+        self.mitarbeiter = konto_erstellen("anna", "mitarbeiter")
+        self.admin = konto_erstellen("admin", "admin")
+        self.gerat = services.gerat_anlegen(
+            kategorie=self.kategorie, hersteller="Lenovo", modell="ThinkPad"
+        )
+        self.gerat.leihpool = True
+        self.gerat.save()
+        self.leihe = Leihe.objects.create(
+            kat=self.kategorie,
+            beginn=date(2026, 11, 2),
+            ende=date(2026, 11, 10),
+            zweck="Test",
+            person=self.person,
+            status=Leihe.STATUS_ANGEFRAGT,
+        )
+
+    def test_genehmigen_ansicht(self):
+        self.client.force_login(self.admin)
+        answer = self.client.post(
+            f"/geraete/verleih/{self.leihe.id}/genehmigen/",
+            {"gerat": self.gerat.id},
+        )
+        self.assertEqual(answer.status_code, 302)
+        self.leihe.refresh_from_db()
+        self.assertEqual(self.leihe.status, Leihe.STATUS_GENEHMIGT)
+
+    def test_ablehnen_ohne_begrundung_nicht_gespeichert(self):
+        self.client.force_login(self.admin)
+        answer = self.client.post(
+            f"/geraete/verleih/{self.leihe.id}/ablehnen/",
+            {"begründung": ""},
+        )
+        self.assertEqual(answer.status_code, 200)
+        self.leihe.refresh_from_db()
+        self.assertEqual(self.leihe.status, Leihe.STATUS_ANGEFRAGT)
+
+    def test_mitarbeiter_darf_nicht_genehmigen(self):
+        self.client.force_login(self.mitarbeiter)
+        answer = self.client.get(
+            f"/geraete/verleih/{self.leihe.id}/genehmigen/"
+        )
+        self.assertEqual(answer.status_code, 403)
+
+
+class LeiheZurueckziehenViewTests(TestCase):
+    """F-37: Zurückziehen über die Ansicht."""
+
+    def setUp(self):
+        self.kategorie, self.ablage, self.person = stammdaten_erstellen()
+        self.mitarbeiter = konto_erstellen("anna", "mitarbeiter")
+        self.admin = konto_erstellen("admin", "admin")
+        self.gerat = services.gerat_anlegen(
+            kategorie=self.kategorie, hersteller="Lenovo", modell="ThinkPad"
+        )
+        self.gerat.leihpool = True
+        self.gerat.save()
+        self.leihe = Leihe.objects.create(
+            kat=self.kategorie,
+            beginn=date(2026, 11, 2),
+            ende=date(2026, 11, 10),
+            zweck="Test",
+            person=self.person,
+            status=Leihe.STATUS_ANGEFRAGT,
+        )
+
+    def test_zurueckziehen_angefragt(self):
+        self.client.force_login(self.mitarbeiter)
+        answer = self.client.post(
+            f"/geraete/meine-geraete/leihe/{self.leihe.id}/zurueckziehen/",
+            {"bestätigung": "on"},
+        )
+        self.assertEqual(answer.status_code, 302)
+        self.leihe.refresh_from_db()
+        self.assertEqual(self.leihe.status, Leihe.STATUS_ZURUECKGEZOGEN)
+
+    def test_zurueckziehen_genehmigt_hebt_reservierung_auf(self):
+        leihe_genehmigen(
+            self.leihe, gerat=self.gerat, ausgefuehrt_von=self.admin
+        )
+        self.gerat.refresh_from_db()
+        self.assertTrue(self.gerat.reserviert)
+        self.client.force_login(self.mitarbeiter)
+        answer = self.client.post(
+            f"/geraete/meine-geraete/leihe/{self.leihe.id}/zurueckziehen/",
+            {"bestätigung": "on"},
+        )
+        self.assertEqual(answer.status_code, 302)
+        self.leihe.refresh_from_db()
+        self.assertEqual(self.leihe.status, Leihe.STATUS_ZURUECKGEZOGEN)
+        self.gerat.refresh_from_db()
+        self.assertEqual(self.gerat.status, Gerat.STATUS_AUF_LAGER)
+
+    def test_admin_darf_nicht_zurueckziehen(self):
+        self.client.force_login(self.admin)
+        answer = self.client.get(
+            f"/geraete/meine-geraete/leihe/{self.leihe.id}/zurueckziehen/"
+        )
+        self.assertEqual(answer.status_code, 403)

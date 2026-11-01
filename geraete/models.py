@@ -392,26 +392,73 @@ class Leihe(models.Model):
     Genehmigt: Reservierung – das Gerät bleibt „Auf Lager" mit dem
     Zusatz „reserviert" (F-20, Kapitel 4). Genehmigt wird erst in Teil 2.
     """
+    STATUS_ANGEFRAGT = "angefragt"
+    STATUS_GENEHMIGT = "genehmigt"
+    STATUS_ABGELEHNT = "abgelehnt"
     STATUS_AUSGEGEBEN = "ausgegeben"
     STATUS_ZURUECKGEGEBEN = "zurueckgegeben"
+    STATUS_ZURUECKGEZOGEN = "zurueckgezogen"
     STATUSES = [
-        (STATUS_AUSGEGEBEN, "Ausgegeben"),
-        (STATUS_ZURUECKGEGEBEN, "Zurückgegeben"),
+        (STATUS_ANGEFRAGT, "angefragt"),
+        (STATUS_GENEHMIGT, "genehmigt"),
+        (STATUS_ABGELEHNT, "abgelehnt"),
+        (STATUS_AUSGEGEBEN, "ausgegeben"),
+        (STATUS_ZURUECKGEGEBEN, "zurückgegeben"),
+        (STATUS_ZURUECKGEZOGEN, "zurückgezogen"),
     ]
+    # A-0118: Anzeigetext des Stands für die Leihliste (TESTSCHNITTSTELLE 5).
+    STAND_ANZEIGE = {
+        STATUS_ANGEFRAGT: "angefragt",
+        STATUS_GENEHMIGT: "genehmigt",
+        STATUS_ABGELEHNT: "abgelehnt",
+        STATUS_AUSGEGEBEN: "ausgegeben",
+        STATUS_ZURUECKGEGEBEN: "zurückgegeben",
+        STATUS_ZURUECKGEZOGEN: "zurückgezogen",
+    }
+    # A-0118 (F-37): Aus diesen Zuständen darf die Leihe zurückgezogen werden.
+    ZURUECKZIEHBAR = (STATUS_ANGEFRAGT, STATUS_GENEHMIGT)
+
+    def stand_anzeige(self, ueberfaellig: bool = False) -> str:
+        """Anzeigetext des Stands (TESTSCHNITTSTELLE 5).
+
+        Eine ausgegebene Leihe zeigt nach Ablauf der Frist „überfällig“
+        (F-36), sonst „ausgegeben“.
+        """
+        if self.status == self.STATUS_AUSGEGEBEN and ueberfaellig:
+            return "überfällig"
+        return self.STAND_ANZEIGE.get(self.status, self.status)
+
+    def ist_zurueckziehbar(self) -> bool:
+        """F-37: Rückziehbar, solange die Leihe nicht ausgegeben ist."""
+        return self.status in self.ZURUECKZIEHBAR
 
     nr = models.CharField("Leihnummer", max_length=16, blank=True, default="")
     gerat = models.ForeignKey(
-        Gerat, on_delete=models.CASCADE, related_name="leihen"
+        Gerat, on_delete=models.CASCADE, null=True, blank=True,
+        related_name="leihen",
     )
     person = models.ForeignKey(
         "stammdaten.Person", on_delete=models.CASCADE,
         related_name="leihen", verbose_name="Person",
     )
+    kat = models.ForeignKey(
+        "stammdaten.Kategorie", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="leihen", verbose_name="Kategorie",
+    )
+    beginn = models.DateField("Leihbeginn", null=True, blank=True)
+    ende = models.DateField("Leihende", null=True, blank=True)
     rueckgabe_bis = models.DateField("Rückgabe bis", null=True, blank=True)
     zweck = models.CharField("Zweck", max_length=240, blank=True, default="")
     status = models.CharField("Status", max_length=24, choices=STATUSES,
                               default=STATUS_AUSGEGEBEN)
     genehmigt = models.BooleanField("Genehmigt (Reservierung)", default=False)
+    abgelehnt = models.BooleanField("Abgelehnt", default=False)
+    abgelehnt_bis = models.CharField("Ablehnungsbegründung", max_length=240, blank=True, default="")
+    abgelehnt_von = models.ForeignKey(
+        "konten.Konto", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="abgelehnte_leihen", verbose_name="Abgelehnt von",
+    )
+    decided_at = models.DateTimeField("Entschieden am", null=True, blank=True)
     zeitpunkt = models.DateTimeField("Zeitpunkt", default=timezone.now)
     erzeugt_von = models.ForeignKey(
         "konten.Konto", on_delete=models.SET_NULL, null=True, blank=True,
@@ -435,3 +482,21 @@ class Leihe(models.Model):
             from konten.zeit import jetzt_wie_im_entwicklungsmodus
             return "ueberfaellig" if self.rueckgabe_bis < jetzt_wie_im_entwicklungsmodus().date() else "ausgegeben"
         return "ausgegeben"
+
+    @property
+    def status_anzeige(self) -> str:
+        """Anzeigetext des Stands für die Leihliste (TESTSCHNITTSTELLE 5)."""
+        return self.STAND_ANZEIGE.get(self.status, self.status)
+
+    @property
+    def status_class(self) -> str:
+        """CSS-Klasse für den Status-Pill in der Leihliste."""
+        mapping = {
+            self.STATUS_ANGEFRAGT: "warn",
+            self.STATUS_GENEHMIGT: "ok",
+            self.STATUS_ABGELEHNT: "err",
+            self.STATUS_AUSGEGEBEN: "ok",
+            self.STATUS_ZURUECKGEGEBEN: "muted",
+            self.STATUS_ZURUECKGEZOGEN: "muted",
+        }
+        return mapping.get(self.status, "muted")

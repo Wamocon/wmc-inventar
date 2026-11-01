@@ -12,7 +12,7 @@ from django import forms
 from stammdaten.models import Kategorie, Person
 
 from . import services
-from .models import Gerat
+from .models import Gerat, Leihe
 
 STATUS_WAHL = [
     ("", "Status wählen …"),
@@ -452,4 +452,91 @@ class VerleihForm(forms.Form):
         label="Zweck",
         required=True,
         widget=forms.TextInput(attrs={"data-test": "zweck", "class": "req"}),
+    )
+
+
+# --- M5 Teil 2: Anfrage, Genehmigung, Ablehnung, Zurückziehen (A-0118) ----
+
+class LeiheAnfrageForm(forms.ModelForm):
+    """M5 Teil 2 (F-31): Mitarbeiter fragt ein Leihgerät an.
+
+    Kategorie, Zeitraum und Zweck sind Pflicht; das konkrete Gerät ist
+    optional und wird mit dem Genehmigen festgelegt (F-32).
+    """
+
+    class Meta:
+        model = Leihe
+        fields = ["kat", "beginn", "ende", "zweck", "gerat"]
+        labels = {
+            "kat": "Kategorie",
+            "beginn": "Leihbeginn",
+            "ende": "Leihende",
+            "zweck": "Zweck",
+            "gerat": "Konkretes Gerät (optional)",
+        }
+        widgets = {
+            "kat": forms.Select(attrs={"data-test": "kategorie"}),
+            "beginn": forms.DateInput(attrs={"data-test": "beginn", "type": "date"}),
+            "ende": forms.DateInput(attrs={"data-test": "ende", "type": "date"}),
+            "zweck": forms.Textarea(attrs={"data-test": "zweck", "rows": 3}),
+            "gerat": forms.Select(attrs={"data-test": "gerat"}),
+        }
+
+    def __init__(self, *args, leihpool_geraete=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["gerat"].required = False
+        if leihpool_geraete is not None:
+            self.fields["gerat"].queryset = leihpool_geraete
+        self.fields["kat"].required = True
+        self.fields["beginn"].required = True
+        self.fields["ende"].required = True
+        self.fields["zweck"].required = True
+
+    def clean(self):
+        data = super().clean()
+        beginn = data.get("beginn")
+        ende = data.get("ende")
+        if beginn and ende and beginn > ende:
+            self.add_error("ende", "Leihende ist vor dem Leihbeginn.")
+        gerat = data.get("gerat")
+        kat = data.get("kat")
+        if gerat is not None and kat is not None and gerat.kategorie_id != kat.id:
+            self.add_error("gerat", "Das Gerät steht nicht in der Kategorie.")
+        return data
+
+
+class LeiheGenehmigenForm(forms.Form):
+    """M5 Teil 2 (F-32): IT genehmigt mit Zuweisung eines Leihpool-Geräts."""
+
+    gerat = forms.ModelChoiceField(
+        label="Gerät aus dem Leihpool",
+        queryset=Gerat.objects.none(),
+        widget=forms.Select(attrs={"data-test": "gerat"}),
+    )
+
+    def __init__(self, *args, leihpool_geraete=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if leihpool_geraete is not None:
+            self.fields["gerat"].queryset = leihpool_geraete
+
+
+class LeiheAblehnenForm(forms.Form):
+    """M5 Teil 2 (F-32): IT lehnt mit Pflichtbegründung ab."""
+
+    begruendung = forms.CharField(
+        label="Begründung (Pflicht)",
+        required=True,
+        widget=forms.Textarea(
+            attrs={"data-test": "begrundung", "rows": 2}
+        ),
+    )
+
+
+class LeiheZurueckziehenForm(forms.Form):
+    """M5 Teil 2 (F-37): Mitarbeiter zieht die Leihe zurück."""
+
+    bestaetigung = forms.BooleanField(
+        label="Zurückziehen bestätigen",
+        required=True,
+        widget=forms.CheckboxInput(attrs={"data-test": "bestaetigung"}),
     )

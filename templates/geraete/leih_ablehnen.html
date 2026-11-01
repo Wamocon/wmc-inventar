@@ -1,0 +1,42 @@
+{% extends "basis.html" %}
+
+{% block titel %}Leihe ablehnen · WMC Inventar{% endblock %}
+
+{% block inhalt %}
+<div class="page-head">
+    <div><h1>Leihe ablehnen</h1>
+        <p class="lead">Eine Anfrage mit Begründung ablehnen (F-32).</p>
+    </div>
+</div>
+
+<div class="card" data-test="dialog" data-name="ablehnen">
+    <div class="card-head">
+        <h2>Leihe {{ leihe.nr or leihe.id }} ablehnen</h2>
+    </div>
+    <div class="card-body">
+        <p class="muted">
+            Anfrage von {{ leihe.person.vorname }} {{ leihe.person.nachname }} ·
+            Kategorie: {{ leihe.kat.name }} ·
+            {{ leihe.beginn|date:"d.m.Y" }} – {{ leihe.ende|date:"d.m.Y" }} ·
+            Zweck: {{ leihe.zweck }}
+        </p>
+
+        {% if fehler %}
+        <div data-test="fehler" class="error-box">{{ fehler }}</div>
+        {% endif %}
+
+        <form method="post" novalidate>
+            {% csrf_token %}
+            <label class="field">
+                <span>Begründung <span class="erforderlich">*</span></span>
+                <textarea name="begründung" required rows="3" data-test="begründung"
+                          placeholder="Warum wird die Anfrage abgelehnt?">{{ form.begründung.value }}</textarea>
+            </label>
+            <div class="form-actions">
+                <a href="{% url 'geraete:verleih-liste' %}" class="btn">Abbrechen</a>
+                <button type="submit" class="btn danger" data-test="ablehnen">Ablehnen</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

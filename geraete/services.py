@@ -1324,16 +1324,32 @@ def leih_gerat_ausgeben(
     return leihe
 
 
-def _gerat_ist_reserviert(gerat: Gerat) -> bool:
-    """Ist das Gerät reserviert? (F-20, Kapitel 4)
+def _gerat_ist_reserviert(
+    gerat: Gerat, beginn: date | None = None, ende: date | None = None
+) -> bool:
+    """Ist das Gerät reserviert? (F-20, Kapitel 4, F-34)
 
-    Ein genehmigter, noch nicht ausgegebener Verleih reserviert das Gerät.
+    Ohne Zeitraum: es gibt eine genehmigte Leihe für das Gerät. Mit
+    Zeitraum: Überschneidung mit einer genehmigten Leihe desselben
+    Geräts – ein Gerät gehört in einem Zeitraum nur zu einer
+    genehmigten Leihe (F-34, O-12).
     """
-    from .models import Leihe
-    return (
-        Leihe.objects.filter(gerat=gerat, genehmigt=True, status=Leihe.STATUS_AUSGEGEBEN)
-        .exists()
+    from django.db.models import Q
+
+    qs = Leihe.objects.filter(
+        gerat=gerat, genehmigt=True, status=Leihe.STATUS_GENEHMIGT
     )
+    if beginn is not None and ende is not None:
+        qs = qs.filter(
+            Q(
+                beginn__isnull=False,
+                beginn__lte=ende,
+                ende__isnull=False,
+                ende__gte=beginn,
+            )
+            | Q(beginn__isnull=True)
+        )
+    return qs.exists()
 
 
 def leihe_zurueckgeben(
@@ -1373,10 +1389,210 @@ def leihe_zurueckgeben(
             abschliesst=True,
         )
 
+
+def leihe_anfragen(
+    person: Person,
+    kat: Kategorie,
+    beginn: date,
+    ende: date,
+    zweck: str,
+    gerat: Gerat | None,
+    erzeugt_von: Konto,
+) -> Leihe:
+    """M5 Teil 2 (F-31, F-34, F-37): Mitarbeiter fragt ein Leihgerät an.
+
+    Speichert die Leihe im Status „angefragt\" (O-12). Ein konkretes Gerät
+    wird erst mit dem Genehmigen zugewiesen (F-32); wurde eines gewählt,
+    muss es in der Kategorie und im Leihpool stehen (F-31). Eine
+    Überschneidung mit einer genehmigten Leihe desselben Geräts lehnt
+    diese Anfrage ab (F-34).
+    """
+    if not zweck or not zweck.strip():
+        raise GeratFehler("Zweck ist Pflicht (F-31).")
+    if beginn > ende:
+        raise GeratFehler("Beginn ist nach dem Ende.")
+    if gerat is not None:
+        if gerat.kategorie_id != kat.id:
+            raise GeratFehler("Das gewählte Gerät steht nicht in dieser Kategorie.")
+        if not gerat.leihpool:
+            raise GeratFehler("Das gewählte Gerät steht nicht im Leihpool.")
+        if _gerat_ist_reserviert(gerat, beginn, ende):
+            raise GeratFehler(
+                "Das Gerät ist in diesem Zeitraum bereits für eine genehmigte "
+                "Leihe reserviert (F-34)."
+            )
+    with transaction.atomic():
+        leihe = Leihe.objects.create(
+            nr=_naechste_leihnummer(),
+            gerat=gerat,
+            person=person,
+            kat=kat,
+            beginn=beginn,
+            ende=ende,
+            rueckgabe_bis=ende,
+            zweck=zweck.strip(),
+            status=Leihe.STATUS_ANGEFRAGT,
+            erzeugt_von=erzeugt_von,
+        )
+        if gerat is not None:
+            _gerat_reserve_halten(gerat, beginn, ende)
+        return leihe
+
+
+def leihe_genehmigen(
+    leihe: Leihe,
+    gerat: Gerat,
+    ausgefuehrt_von: Konto,
+) -> Leihe:
+    """M5 Teil 2 (F-32, F-34): IT genehmigt mit Zuweisung eines Geräts.
+
+    Das Gerät muss in der Leihkategorie stehen und im Leihpool verfügbar
+    sein. Ein Gerät gehört in einem Zeitraum nur zu einer genehmigten
+    Leihe; eine Überschneidung schlägt mit einer Meldung fehl (F-34).
+    Bei Erfolg: Leihe „genehmigt\", Gerät „Auf Lager\" mit reserviert
+    bis zum Leihende (F-20).
+    """
+    from .models import Vorgang
+
+    if leihe.status != Leihe.STATUS_ANGEFRAGT:
+        raise GeratFehler("Diese Leihe ist nicht angefragt.")
+    if gerat.kategorie_id != leihe.kat.id:
+        raise GeratFehler("Das Gerät steht nicht in der angefragten Kategorie.")
+    if not gerat.leihpool:
+        raise GeratFehler("Das Gerät steht nicht im Leihpool.")
+    if _gerat_ist_reserviert(gerat, leihe.beginn, leihe.ende):
+        raise GeratFehler(
+            "Das Gerät ist in diesem Zeitraum bereits für eine genehmigte "
+            "Leihe reserviert (F-34)."
+        )
+    with transaction.atomic():
+        leihe.gerat = gerat
+        leihe.genehmigt = True
+        leihe.status = Leihe.STATUS_GENEHMIGT
+        leihe.decided_at = timezone.now()
+        leihe.save(
+            update_fields=["gerat", "genehmigt", "status", "decided_at"]
+        )
+        _gerat_reserve_halten(gerat, leihe.beginn, leihe.ende)
+        Vorgang.objects.create(
+            gerat=gerat,
+            typ=Vorgang.TYP_AENDERUNG,
+            erzeugt_von=ausgefuehrt_von,
+            notiz="Leihe genehmigt und Gerät reserviert (F-32).",
+            abschliesst=False,
+        )
+        return leihe
+
+
+def leihe_ablehnen(
+    leihe: Leihe,
+    begruendung: str,
+    ausgefuehrt_von: Konto,
+) -> Leihe:
+    """M5 Teil 2 (F-32): IT lehnt mit Pflichtbegründung ab.
+
+    Ohne Begründung wird die Ablehnung nicht gespeichert.
+    """
+    from .models import Vorgang
+
+    if leihe.status != Leihe.STATUS_ANGEFRAGT:
+        raise GeratFehler("Diese Leihe ist nicht angefragt.")
+    if not begruendung or not begruendung.strip():
+        raise GeratFehler("Begründung ist Pflicht (F-32).")
+    with transaction.atomic():
+        leihe.abgelehnt = True
+        leihe.abgelehnt_bis = begruendung.strip()
+        leihe.abgelehnt_von = ausgefuehrt_von
+        leihe.genehmigt = False
+        leihe.status = Leihe.STATUS_ABGELEHNT
+        leihe.decided_at = timezone.now()
+        leihe.save(
+            update_fields=[
+                "abgelehnt",
+                "abgelehnt_bis",
+                "abgelehnt_von",
+                "genehmigt",
+                "status",
+                "decided_at",
+            ]
+        )
+        if leihe.gerat_id is not None:
+            Vorgang.objects.create(
+                gerat=leihe.gerat,
+                typ=Vorgang.TYP_AENDERUNG,
+                erzeugt_von=ausgefuehrt_von,
+                notiz="Leihe abgelehnt (F-32).",
+                abschliesst=False,
+            )
+        return leihe
+
+
+def leihe_zurueckziehen(
+    leihe: Leihe,
+    ausgefuehrt_von: Konto,
+) -> Leihe:
+    """M5 Teil 2 (F-37): Mitarbeiter zieht die Leihe zurück.
+
+    Solange die Leihe nicht ausgegeben ist, endet damit auch eine
+    Reservierung: reserviert und reserviert_bis werden geleert.
+    """
+    from .models import Vorgang
+
+    if not leihe.ist_zurueckziehbar():
+        raise GeratFehler(
+            "Diese Leihe ist nicht zurückziehbar – sie ist ausgegeben "
+            "(F-37)."
+        )
+    with transaction.atomic():
+        leihe.status = Leihe.STATUS_ZURUECKGEZOGEN
+        leihe.decided_at = timezone.now()
+        leihe.save(update_fields=["status", "decided_at"])
+        if leihe.gerat_id is not None:
+            gerat = leihe.gerat
+            if _gerat_reserve_ist_leihe(gerat, leihe):
+                gerat.reserviert = False
+                gerat.reserviert_bis = None
+                gerat.save(update_fields=["reserviert", "reserviert_bis"])
+            Vorgang.objects.create(
+                gerat=gerat,
+                typ=Vorgang.TYP_AENDERUNG,
+                erzeugt_von=ausgefuehrt_von,
+                notiz="Leihe zurückgezogen, Reservierung aufgehoben (F-37).",
+                abschliesst=False,
+            )
+        return leihe
+
+
+def _gerat_reserve_halten(gerat: Gerat, beginn: date, ende: date) -> None:
+    """Reservierung setzen oder verlängern (F-20, Kapitel 4).
+
+    reserviert_bis ist das Maximum aller genehmigten Leihen (O-12).
+    """
+    from konten.zeit import jetzt_wie_im_entwicklungsmodus
+
+    heute = jetzt_wie_im_entwicklungsmodus().date()
+    bis = max(ende, heute)
+    if not gerat.reserviert_bis or gerat.reserviert_bis < bis:
+        gerat.reserviert = True
+        gerat.reserviert_bis = bis
+        gerat.save(update_fields=["reserviert", "reserviert_bis"])
+
+
+def _gerat_reserve_ist_leihe(gerat: Gerat, leihe: Leihe) -> bool:
+    """Gehört die aktuelle Reservierung nur zu dieser Leihe?
+
+    Nur dann darf Zurückziehen sie aufheben, sonst bliebe die
+    Reservierung für eine andere genehmigte Leihe bestehen (O-12).
+    """
+    if gerat.reserviert_bis is None or leihe.ende is None:
+        return gerat.reserviert is True and leihe.ist_zurueckziehbar()
+    return gerat.reserviert_bis == leihe.ende and gerat.reserviert is True
+
 def leihen_ueberfaellig() -> list:
     """Alle Leihen, die überfällig sind (F-36)."""
     from .models import Leihe
     from konten.zeit import jetzt_wie_im_entwicklungsmodus
+
     heute = jetzt_wie_im_entwicklungsmodus().date()
     return [
         l for l in Leihe.objects.filter(

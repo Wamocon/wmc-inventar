@@ -3,7 +3,7 @@
 {% block inhalt %}
 <div class="page-head">
     <div><h1>Verleih</h1>
-        <p class="lead">Aktive und überfällige Leihen</p>
+        <p class="lead">Alle Leihen: angefragt, genehmigt, ausgegeben, zurückgegeben, abgelehnt, zurückgezogen</p>
     </div>
 </div>
 
@@ -15,9 +15,10 @@
                     <th>Nr.</th>
                     <th>Gerät</th>
                     <th>Person</th>
-                    <th>Rückgabe bis</th>
+                    <th>Zeitraum</th>
                     <th>Zweck</th>
-                    <th>Status</th>
+                    <th>Stand</th>
+                    <th>Aktionen</th>
                 </tr>
             </thead>
             <tbody>
@@ -25,29 +26,48 @@
                 <tr data-test="zeile" data-id="{{ leihe.id }}">
                     <td class="mono">{{ leihe.nr }}</td>
                     <td>
-                        <a href="{% url 'geraete:detail' leihe.gerat.inventarnummer %}" class="linkish inv">
-                            {{ leihe.gerat.inventarnummer }}
-                        </a>
-                        <span class="sub">{{ leihe.gerat.hersteller }} {{ leihe.gerat.modell }}</span>
+                        {% if leihe.gerat %}
+                            <a href="{% url 'geraete:detail' leihe.gerat.inventarnummer %}" class="linkish inv">
+                                {{ leihe.gerat.inventarnummer }}
+                            </a>
+                            <span class="sub">{{ leihe.gerat.hersteller }} {{ leihe.gerat.modell }}</span>
+                        {% else %}
+                            <span class="muted">{{ leihe.kat.name }}</span>
+                        {% endif %}
                     </td>
                     <td>{{ leihe.person.vorname }} {{ leihe.person.nachname }}</td>
-                    <td class="nowrap">{{ leihe.rueckgabe_bis|date:"d.m.Y" }}</td>
+                    <td class="nowrap">
+                        {% if leihe.beginn %}
+                            {{ leihe.beginn|date:"d.m.Y" }} – {{ leihe.ende|date:"d.m.Y" }}
+                        {% else %}
+                            {{ leihe.rueckgabe_bis|date:"d.m.Y" }}
+                        {% endif %}
+                    </td>
                     <td>{{ leihe.zweck }}</td>
                     <td>
-                        {% if leihe.id in ueberfaellige %}
-                            <span class="pill err" data-test="leihe" data-id="{{ leihe.id }}" data-stand="ueberfaellig">
-                                ⏰ überfällig
-                            </span>
+                        <span class="pill {{ leihe.status_class }}" data-test="leihe" data-id="{{ leihe.id }}" data-stand="{{ leihe.status }}">
+                            {{ leihe.status_anzeige }}
+                        </span>
+                        {% if leihe.abgelehnt and leihe.abgelehnt_bis %}
+                            <div class="sub" title="Ablehnungsbegründung">{{ leihe.abgelehnt_bis }}</div>
+                        {% endif %}
+                    </td>
+                    <td class="aktionen">
+                        {% if leihe.status == "angefragt" %}
+                            <a href="{% url 'geraete:leih_genehmigen' leihe.id %}" class="btn small primary" data-test="genehmigen">Genehmigen</a>
+                            <a href="{% url 'geraete:leih_ablehnen' leihe.id %}" class="btn small" data-test="ablehnen">Ablehnen</a>
+                        {% elif leihe.status == "genehmigt" %}
+                            <span class="muted">ausstehend</span>
+                        {% elif leihe.status == "zurückgezogen" %}
+                            <span class="muted">—</span>
                         {% else %}
-                            <span class="pill ok" data-test="leihe" data-id="{{ leihe.id }}" data-stand="ausgegeben">
-                                ausgegeben
-                            </span>
+                            <span class="muted">—</span>
                         {% endif %}
                     </td>
                 </tr>
             {% empty %}
                 <tr>
-                    <td colspan="6">
+                    <td colspan="7">
                         <div class="empty-state">Keine Leihen in dieser Ansicht.</div>
                     </td>
                 </tr>
