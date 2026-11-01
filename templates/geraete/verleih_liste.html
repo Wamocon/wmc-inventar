@@ -9,7 +9,7 @@
 
 <div class="card">
     <div class="tbl-wrap">
-        <table>
+        <table data-test="liste">
             <thead>
                 <tr>
                     <th>Nr.</th>
@@ -22,7 +22,7 @@
             </thead>
             <tbody>
             {% for leihe in leihen %}
-                <tr>
+                <tr data-test="zeile" data-id="{{ leihe.id }}">
                     <td class="mono">{{ leihe.nr }}</td>
                     <td>
                         <a href="{% url 'geraete:detail' leihe.gerat.inventarnummer %}" class="linkish inv">
