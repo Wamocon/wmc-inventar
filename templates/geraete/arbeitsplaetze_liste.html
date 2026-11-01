@@ -12,9 +12,10 @@
 
 <p class="anzahl" data-test="anzahl">{{ zeilen|length }} Arbeitsplätze</p>
 
-<div class="liste" data-test="arbeitsplaetze-liste">
+<div class="liste" data-test="liste" data-liste="arbeitsplaetze-liste">
+  <div data-test="arbeitsplaetze-liste"></div>
   {% for z in zeilen %}
-  <div class="zeile">
+  <div class="zeile" data-test="zeile" data-id="{{ z.ort.kennung }}">
     <span data-test="ort-kennung">{{ z.ort.kennung }}</span>
     <span data-test="abgleich-ergebnis">
       {% if z.abgleich.ergebnis == "vollstaendig" %}

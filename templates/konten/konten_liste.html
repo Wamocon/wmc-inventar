@@ -10,9 +10,10 @@
     <a class="btn primary" href="/konten/neu/" data-test="konto-anlegen">Neues Konto</a>
   </div>
 </div>
-<div class="liste" data-test="konten-liste">
+<div class="liste" data-test="liste" data-liste="konten-liste">
+  <div data-test="konten-liste"></div>
   {% for k in konten %}
-  <div class="zeile">
+  <div class="zeile" data-test="zeile" data-id="{{ k.pk }}">
     <a href="/konten/{{ k.pk }}/">{{ k.email }}</a>
     <span class="muted">{{ k.get_rolle_display }}{% if not k.aktiv %} · inaktiv{% endif %}{% if k.person %} · {{ k.person.nachname }} {{ k.person.vorname }}{% endif %}</span>
     <a class="btn sm" href="/konten/{{ k.pk }}/">Ändern</a>

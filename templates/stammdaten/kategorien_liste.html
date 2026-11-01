@@ -5,9 +5,10 @@
   <div><h1>Kategorien</h1><p class="muted lead">Kategorien pflegen (F-120).</p></div>
   {% if ist_admin %}<div class="actions"><a class="btn primary" href="/kategorien/neu/" data-test="kategorie-anlegen">Neue Kategorie</a></div>{% endif %}
 </div>
-<div class="liste" data-test="kategorien-liste">
+<div class="liste" data-test="liste" data-liste="kategorien-liste">
+  <div data-test="kategorien-liste"></div>
   {% for k in kategorien %}
-  <div class="zeile">
+  <div class="zeile" data-test="zeile" data-id="{{ k.pk }}">
     <a href="#">{{ k.name }}</a>
     <span class="muted">{% if k.hat_datentraeger %}hat Datenträger{% else %}kein Datenträger{% endif %}{% if k.seriennummer_pflicht %} · Seriennummer Pflicht{% endif %}</span>
     {% if ist_admin %}<a class="btn sm" href="/kategorien/{{ k.pk }}/aendern/">Ändern</a>{% endif %}

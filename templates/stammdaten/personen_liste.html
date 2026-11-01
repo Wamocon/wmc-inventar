@@ -5,9 +5,10 @@
   <div><h1>Personen</h1><p class="muted lead">Personen pflegen (F-121).</p></div>
   {% if user.ist_admin %}<div class="actions"><a class="btn primary" href="/personen/neu/" data-test="person-anlegen">Neue Person</a></div>{% endif %}
 </div>
-<div class="liste" data-test="personen-liste">
+<div class="liste" data-test="liste" data-liste="personen-liste">
+  <div data-test="personen-liste"></div>
   {% for p in personen %}
-  <div class="zeile">
+  <div class="zeile" data-test="zeile" data-id="{{ p.pk }}">
     <a href="/personen/{{ p.pk }}/">{{ p.nachname }} {{ p.vorname }}</a>
     <span class="muted">{{ p.email }}{% if p.abteilung %} · {{ p.abteilung }}{% endif %}</span>
     {% if user.ist_admin %}<a class="btn sm" href="/personen/{{ p.pk }}/aendern/">Ändern</a>{% endif %}

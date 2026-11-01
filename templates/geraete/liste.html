@@ -41,15 +41,18 @@
 <p class="anzahl" data-test="anzahl">{{ anzahl }} {% if anzahl == 1 %}Gerät{% else %}Geräte{% endif %}</p>
 
 {% if fortschritt %}
-<div class="abschnitt" data-test="inventur-fortschritt" data-ist="{{ fortschritt.geprueft }}" data-gesamt="{{ fortschritt.alle }}">
-<p data-test="ist">{{ fortschritt.geprueft }} von {{ fortschritt.alle }} geprüft</p>
+<div class="abschnitt" data-test="inventur-fortschritt">
+  <span data-test="ist">{{ fortschritt.geprueft }}</span>
+  <span data-test="gesamt">{{ fortschritt.alle }}</span>
+  <p>{{ fortschritt.geprueft }} von {{ fortschritt.alle }} geprüft</p>
   {% if fortschritt.vollstaendig %}
   <p><span class="chip-status in-benutzung">✓ vollständig geprüft</span></p>
   {% endif %}
 </div>
 {% endif %}
 
-<div class="liste" data-test="geraete-liste">
+<div class="liste" data-test="liste" data-liste="geraete-liste">
+  <div data-test="geraete-liste"></div>
   <form method="post" action="/etiketten/auswahl/" data-test="etiketten-formular">
     {% csrf_token %}
     <div class="etiketten-kopf">
@@ -59,7 +62,7 @@
       <span class="muted small" data-test="auswahl-anzahl">0 ausgewählt</span>
     </div>
     {% for g in geraete %}
-    <div class="zeile"{% if suche %} data-test="suchtreffer"{% endif %}>
+    <div class="zeile" data-test="zeile" data-id="{{ g.inventarnummer }}"{% if suche %} data-test="suchtreffer"{% endif %}>
       <label class="auswahl"><input type="checkbox" name="auswahl" value="{{ g.inventarnummer }}" class="auswahl-box" data-test="auswahl" data-inventarnummer="{{ g.inventarnummer }}"></label>
       <span class="inv num" data-test="inventarnummer">{{ g.inventarnummer }}</span>
       <span data-test="zeile-name">{{ g.geraetename|default:g.modell }} · {{ g.kategorie.name }}{% if g.ort %} · {{ g.ort.kennung }}{% elif g.person %} · {{ g.person.voller_name }}{% endif %}</span>

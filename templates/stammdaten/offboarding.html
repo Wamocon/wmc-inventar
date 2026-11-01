@@ -10,9 +10,10 @@
 <div class="abschnitt" data-test="offboarding-ansicht">
   <h2>Geräte der Person</h2>
   {% if gerate %}
-  <div class="liste" data-test="offboarding-geraete">
-    {% for g in gerate %}
-    <div class="zeile" data-test="offboarding-geraet" data-inventarnummer="{{ g.inventarnummer }}">
+  <div class="liste" data-test="liste" data-liste="offboarding-geraete">
+  <div data-test="offboarding-geraete"></div>
+  {% for g in gerate %}
+    <div class="zeile" data-test="zeile" data-id="{{ g.inventarnummer }}" data-offboarding-geraet="1">
       <span data-test="offboarding-inventarnummer">{{ g.inventarnummer }}</span>
       <span data-test="offboarding-modell">{{ g.geraetename|default:g.modell }}</span>
       <span data-test="offboarding-status">{{ g.status_anzeige }}</span>
