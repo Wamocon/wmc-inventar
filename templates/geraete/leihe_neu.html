@@ -51,9 +51,9 @@
             </label>
         </div>
 
-        {% if freie %}
         <div class="freie-info" data-test="freie-geraete">
             <h3>Freie Geräte im Leihpool</h3>
+            {% if freie %}
             <ul>
                 {% for kat_name, anzahl in freie %}
                 <li>
@@ -62,8 +62,10 @@
                 </li>
                 {% endfor %}
             </ul>
+            {% else %}
+            <p class="muted">Zeitraum wählen, um die freien Geräte zu sehen.</p>
+            {% endif %}
         </div>
-        {% endif %}
 
         <div class="form-actions">
             <button type="submit" class="btn primary" data-test="anfragen">Anfragen</button>

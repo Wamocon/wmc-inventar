@@ -535,7 +535,7 @@ class LeiheAblehnenForm(forms.Form):
 class LeiheZurueckziehenForm(forms.Form):
     """M5 Teil 2 (F-37): Mitarbeiter zieht die Leihe zurück."""
 
-    bestaetigung = forms.BooleanField(
+    bestätigung = forms.BooleanField(
         label="Zurückziehen bestätigen",
         required=True,
         widget=forms.CheckboxInput(attrs={"data-test": "bestaetigung"}),

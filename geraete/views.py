@@ -1164,10 +1164,9 @@ def meine_geraete_leihe_neu(request):
     if not _ist_mitarbeiter(request):
         raise PermissionDenied
 
-    person = (
-        request.user.person
-        or Person.objects.filter(konten=request.user).first()
-    )
+    person = request.user.person
+    if person is None:
+        person = Person.objects.filter(konten=request.user).first()
     if person is None:
         raise PermissionDenied
 
@@ -1211,7 +1210,7 @@ def meine_geraete_leihe_neu(request):
 
 
 @login_required
-def meine_geraete_leihe_zurueckziehen(request, leihe_id):
+def meine_geraete_leihe_zurueckziehen(request, leih_id):
     """Leihe zurückziehen (F-37, Kapitel 3).
 
     POST: Leihe auf „zurueckgezogen\" setzen; die Reservierung endet
@@ -1233,7 +1232,7 @@ def meine_geraete_leihe_zurueckziehen(request, leihe_id):
     if request.method == "POST" and form.is_valid():
         try:
             leihe_zurueckziehen(leihe, ausgefuehrt_von=request.user)
-            return redirect("meine_geraete")
+            return redirect("geraete:meine_geraete")
         except GeratFehler as fehler:
             meldung = str(fehler)
 
@@ -1249,7 +1248,7 @@ def meine_geraete_leihe_zurueckziehen(request, leihe_id):
 
 
 @login_required
-def leihe_genehmigen_zeige(request, leihe_id):
+def leihe_genehmigen_zeige(request, leih_id):
     """Dialog „Leihe genehmigen" in /verleih/ (F-32, Kapitel 4).
 
     GET: Formular mit Geräten aus dem Leihpool der Kategorie.
@@ -1266,7 +1265,7 @@ def leihe_genehmigen_zeige(request, leihe_id):
     if leihe.kat is None:
         raise PermissionDenied
     pool_qs = Gerat.objects.filter(
-        kategorie=leih.kat, leihpool=True
+        kategorie=leihe.kat, leihpool=True
     ).order_by("inventarnummer")
     form = LeiheGenehmigenForm(request.POST or None, leihpool_geraete=pool_qs)
     fehler = ""
@@ -1293,7 +1292,7 @@ def leihe_genehmigen_zeige(request, leihe_id):
 
 
 @login_required
-def leihe_ablehnen_zeige(request, leihe_id):
+def leihe_ablehnen_zeige(request, leih_id):
     """Dialog „Leihe ablehnen\" in /verleih/ (F-32, Kapitel 4).
 
     POST mit leerer Begründung wird nicht gespeichert (F-32).
@@ -1312,7 +1311,7 @@ def leihe_ablehnen_zeige(request, leihe_id):
         try:
             leihe_ablehnen(
                 leihe,
-                begruendung=form.cleaned_data["begrundung"],
+                begruendung=form.cleaned_data["begründung"],
                 ausgefuehrt_von=request.user,
             )
             return redirect("verleih-liste")

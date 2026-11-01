@@ -2760,6 +2760,8 @@ class LeiheAnfrageViewTests(TestCase):
     def setUp(self):
         self.kategorie, self.ablage, self.person = stammdaten_erstellen()
         self.mitarbeiter = konto_erstellen("anna", "mitarbeiter")
+        self.mitarbeiter.person = self.person
+        self.mitarbeiter.save()
         self.client.force_login(self.mitarbeiter)
         self.gerat = services.gerat_anlegen(
             kategorie=self.kategorie, hersteller="Lenovo", modell="ThinkPad"
@@ -2801,6 +2803,8 @@ class LeiheEntscheidungViewTests(TestCase):
     def setUp(self):
         self.kategorie, self.ablage, self.person = stammdaten_erstellen()
         self.mitarbeiter = konto_erstellen("anna", "mitarbeiter")
+        self.mitarbeiter.person = self.person
+        self.mitarbeiter.save()
         self.admin = konto_erstellen("admin", "admin")
         self.gerat = services.gerat_anlegen(
             kategorie=self.kategorie, hersteller="Lenovo", modell="ThinkPad"
@@ -2850,6 +2854,8 @@ class LeiheZurueckziehenViewTests(TestCase):
     def setUp(self):
         self.kategorie, self.ablage, self.person = stammdaten_erstellen()
         self.mitarbeiter = konto_erstellen("anna", "mitarbeiter")
+        self.mitarbeiter.person = self.person
+        self.mitarbeiter.save()
         self.admin = konto_erstellen("admin", "admin")
         self.gerat = services.gerat_anlegen(
             kategorie=self.kategorie, hersteller="Lenovo", modell="ThinkPad"
