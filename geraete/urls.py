@@ -29,4 +29,7 @@ urlpatterns = [
     path("<slug:inventarnummer>/loeschen/bestaetigen/", views.loeschen, name="loeschen"),
     # QR-Code und Etiketten (F-12, F-70 bis F-73, F-89)
     path("<slug:inventarnummer>/etikett/", views.etikett_drucken, name="etikett-drucken"),
+    # M5 Verleih (F-30, F-36)
+    path("verleih/", views.verleih_liste, name="verleih-liste"),
+    path("<slug:inventarnummer>/verleih/", views.verleih_zeige, name="verleih"),
 ]

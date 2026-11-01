@@ -1,0 +1,59 @@
+{% extends "basis.html" %}
+
+{% block inhalt %}
+<div class="page-head">
+    <div><h1>Verleih</h1>
+        <p class="lead">Aktive und überfällige Leihen</p>
+    </div>
+</div>
+
+<div class="card">
+    <div class="tbl-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Nr.</th>
+                    <th>Gerät</th>
+                    <th>Person</th>
+                    <th>Rückgabe bis</th>
+                    <th>Zweck</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for leihe in leihen %}
+                <tr>
+                    <td class="mono">{{ leihe.nr }}</td>
+                    <td>
+                        <a href="{% url 'geraete:detail' leihe.gerat.inventarnummer %}" class="linkish inv">
+                            {{ leihe.gerat.inventarnummer }}
+                        </a>
+                        <span class="sub">{{ leihe.gerat.hersteller }} {{ leihe.gerat.modell }}</span>
+                    </td>
+                    <td>{{ leihe.person.vorname }} {{ leihe.person.nachname }}</td>
+                    <td class="nowrap">{{ leihe.rueckgabe_bis|date:"d.m.Y" }}</td>
+                    <td>{{ leihe.zweck }}</td>
+                    <td>
+                        {% if leihe.id in ueberfaellige %}
+                            <span class="pill err" data-test="leihe" data-id="{{ leihe.id }}" data-stand="ueberfaellig">
+                                ⏰ überfällig
+                            </span>
+                        {% else %}
+                            <span class="pill ok" data-test="leihe" data-id="{{ leihe.id }}" data-stand="ausgegeben">
+                                ausgegeben
+                            </span>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% empty %}
+                <tr>
+                    <td colspan="6">
+                        <div class="empty-state">Keine Leihen in dieser Ansicht.</div>
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

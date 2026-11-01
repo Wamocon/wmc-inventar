@@ -1,0 +1,20 @@
+{% extends "basis.html" %}
+
+{% block inhalt %}
+<div class="card" data-test="dialog" data-name="verleih">
+    <div class="card-head"><h2>Gerät verleihen</h2></div>
+    <div class="card-body">
+        <p class="muted">
+            {{ gerat.inventarnummer }} · {{ gerat.hersteller }} {{ gerat.modell }}
+        </p>
+        {% if fehler %}
+        <div data-test="fehler" class="error-box">{{ fehler }}</div>
+        {% endif %}
+        <form method="post" novalidate>
+            {% csrf_token %}
+            {{ form.as_p }}
+            <button type="submit" data-test="speichern" class="btn primary">Verleih abschließen</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -35,5 +35,7 @@ urlpatterns = [
     path("import/werte/", import_views.import_werte, name="import-werte"),
     path("import/vorschau.csv/", import_views.import_vorschau_csv, name="import-vorschau-csv"),
     path("import/speichern/", import_views.import_speichern_view, name="import-speichern"),
+    # M5 Verleih (F-36): /verleih/ – Leihen-Übersicht, nur Admin
+    path("verleih/", geraete_views.verleih_liste, name="verleih-liste"),
     path("admin/", admin.site.urls),
 ]

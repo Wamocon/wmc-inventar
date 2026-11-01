@@ -1,7 +1,7 @@
 """Service-Schicht für Geräte-Vorgänge (M2 Bestand, M3 Lebenszyklus).
 
 AGENTS.md: „Ein Vorgang = eine Funktion, eine Transaktion. Statuswechsel
-nur über die Service-Schicht, nicht in Views oder Templates.“
+nur über die Service-Schicht, nicht in Views oder Templates."
 
 F-10 bis F-14 (Aufnahme), F-15 (Bearbeiten), F-16 (Prüfung),
 F-20 bis F-23 (Ausgabe), F-41 (Umzug), F-42 (Reparatur),
@@ -19,7 +19,7 @@ from django.utils import timezone
 from konten.models import Konto
 from stammdaten.models import Ausstattungsprofil, Kategorie, Ort, Person
 
-from .models import Gerat, GeratKonflikt, Importlauf, Vorgang
+from .models import Gerat, GeratKonflikt, Importlauf, Leihe, Protokoll, Vorgang
 
 
 class GeratFehler(ValueError):
@@ -95,8 +95,8 @@ def gerat_anlegen(
     """Neues Gerät anlegen (F-11, F-12, F-13, F-14).
 
     Inventarnummer wird automatisch vergeben und ist danach unveränderlich.
-    Status beginnt bei „Auf Lager“, außer eine Person ist benannt
-    (dann „In Benutzung“).
+    Status beginnt bei „Auf Lager", außer eine Person ist benannt
+    (dann „In Benutzung").
     """
     if person is not None and ort is not None:
         raise GeratFehler("Ein Gerät steht bei einer Person oder an einem Ort, nicht beides.")
@@ -139,7 +139,7 @@ def gerat_anlegen(
     )
     erstellten = gerat.erstellt_am
     if altbestand_ohne_protokoll:
-        # F-85: Import – der Vorgang „Import“ steht in der Historie.
+        # F-85: Import – der Vorgang „Import" steht in der Historie.
         Vorgang.objects.create(
             gerat=gerat,
             typ=Vorgang.TYP_IMPORT,
@@ -148,7 +148,7 @@ def gerat_anlegen(
             abschliesst=True,
         )
     else:
-        # F-10: Aufnahme – Vorgang „Aufnahme“ steht in der Historie.
+        # F-10: Aufnahme – Vorgang „Aufnahme" steht in der Historie.
         Vorgang.objects.create(
             gerat=gerat,
             typ=Vorgang.TYP_AUFNAHME,
@@ -165,7 +165,7 @@ def gerat_vergeben(
 ) -> Gerat:
     """Gerät an eine Person vergeben (F-45, M2/M3).
 
-    Status wird „In Benutzer“, Person ist gesetzt, Ort ist leer.
+    Status wird „In Benutzer", Person ist gesetzt, Ort ist leer.
     """
     gerat.person = person
     gerat.ort = None
@@ -187,11 +187,11 @@ def gerat_ausgeben(
     """Gerät ausgeben (F-20 bis F-23, F-131, M3).
 
     Ziel ist eine Person oder ein Ort (Arbeitsplatz, Raum, Lager).
-    Status wird „In Benutzung“, Person und/oder Ort werden gesetzt.
+    Status wird „In Benutzung", Person und/oder Ort werden gesetzt.
     Ein Vorgang wird geschrieben.
 
-    F-131 (A-0098): Der Dialog trägt „Zustand“, „Zubehör komplett“ und
-    „Bemerkung“. Der Zustand geht in den Vorgang „Ausgabe“ und auf das
+    F-131 (A-0098): Der Dialog trägt „Zustand", „Zubehör komplett" und
+    „Bemerkung". Der Zustand geht in den Vorgang „Ausgabe" und auf das
     Gerät. Protokoll und Signatur bleiben M6, das Protokoll-PDF folgt
     mit F-130.
     """
@@ -200,12 +200,16 @@ def gerat_ausgeben(
     if gerat.status == Gerat.STATUS_IN_REPARATUR:
         raise GeratFehler("Geräte in Reparatur können nicht ausgegeben werden.")
 
+    # F-20: Reservierte Geräte sind nicht wählbar
+    if _gerat_ist_reserviert(gerat):
+        raise GeratFehler("Gerät ist reserviert und kann nicht ausgegeben werden (F-20).")
+
     person = ziel if isinstance(ziel, Person) else None
     ort = ziel if isinstance(ziel, Ort) else None
     if person is None and ort is None:
         raise GeratFehler("Ausgabeziel muss eine Person oder ein Ort sein.")
 
-    # F-20: Status wird „In Benutzung“
+    # F-20: Status wird „In Benutzung"
     gerat.status = Gerat.STATUS_IN_BENUTZUNG
     gerat.person = person
     gerat.ort = ort
@@ -226,7 +230,7 @@ def gerat_ausgeben(
         teile.append(anmerkung)
     bemerkt = ", ".join(teile)
 
-    # F-20 bis F-23: Ausgabe – Vorgang „Ausgabe“ steht in der Historie.
+    # F-20 bis F-23: Ausgabe – Vorgang „Ausgabe" steht in der Historie.
     Vorgang.objects.create(
         gerat=gerat,
         typ=Vorgang.TYP_AUSGABE,
@@ -316,8 +320,8 @@ def gerat_rueckgeben(
 ) -> Gerat:
     """Gerät zurückgeben (F-50, F-58, M3).
 
-    Status wird „Auf Lager“, Person wird entfernt.
-    Wenn fehlend=True, startet die Ausmusterung mit Grund „verloren“.
+    Status wird „Auf Lager", Person wird entfernt.
+    Wenn fehlend=True, startet die Ausmusterung mit Grund „verloren".
     """
     if gerat.status not in (Gerat.STATUS_IN_BENUTZUNG, Gerat.STATUS_VERLIEHEN):
         raise GeratFehler("Nur Geräte in Benutzung oder verliehen können zurückgegeben werden.")
@@ -326,8 +330,8 @@ def gerat_rueckgeben(
     gerat.zustand = zustand_rueckgabe
 
     if fehlend:
-        # F-50 (A-0097): „fehlt, Ausmusterung starten“ aus der Auswahl „Danach“
-        # startet die Ausmusterung mit Grund „verloren“ (wie bisher, fehlend=True).
+        # F-50 (A-0097): „fehlt, Ausmusterung starten" aus der Auswahl „Danach"
+        # startet die Ausmusterung mit Grund „verloren" (wie bisher, fehlend=True).
         return ausmustern(
             gerat,
             grund="verloren",
@@ -435,7 +439,7 @@ def gerat_reparatur_fertig(
 ) -> Gerat:
     """Reparatur abschließen (F-42, M3).
 
-    Abschluss mit neuem Zustand und Ziel „bisherige Zuordnung“ oder „Lager“.
+    Abschluss mit neuem Zustand und Ziel „bisherige Zuordnung" oder „Lager".
     """
     if gerat.status != Gerat.STATUS_IN_REPARATUR:
         raise GeratFehler("Nur Geräte in Reparatur können repariert werden.")
@@ -443,14 +447,14 @@ def gerat_reparatur_fertig(
     gerat.zustand = zustand
 
     if ziel == "zuordnung":
-        # F-42: Ziel „Bisherige Zuordnung“ – Gerät geht zurück zu Person/Ort.
+        # F-42: Ziel „Bisherige Zuordnung" – Gerät geht zurück zu Person/Ort.
         if gerat.person is None and gerat.ort is None:
             # Kein vorheriger Verbleib bekannt – Gerät geht ins Lager.
             gerat.status = Gerat.STATUS_AUF_LAGER
         else:
             gerat.status = Gerat.STATUS_IN_BENUTZUNG
     else:
-        # F-42: Ziel „Lager“
+        # F-42: Ziel „Lager"
         gerat.status = Gerat.STATUS_AUF_LAGER
         gerat.person = None
         gerat.ort = None
@@ -477,7 +481,7 @@ def gerat_bearbeiten(
     """Gerät ändern (F-15). Inventarnummer bleibt unverändert (F-12).
 
     A-0098 (F-40): je geändertem Feld entsteht ein Vorgang vom Typ
-    „Änderung“ mit dem Feld, dem alten und dem neuen Wert
+    „Änderung" mit dem Feld, dem alten und dem neuen Wert
     (``aenderung_feld``, ``aenderung_alter_wert``, ``aenderung_neuer_wert``).
     Ohne Änderung entsteht kein Vorgang.
     """
@@ -563,7 +567,7 @@ def statuswechsel(
     if neuer_status not in dict(Gerat.STATUSES):
         raise GeratFehler(f"Unbekannter Status: {neuer_status}")
     if neuer_status == Gerat.STATUS_IN_BENUTZUNG and person is None:
-        raise GeratFehler("Für „In Benutzung“ muss eine Person benannt sein.")
+        raise GeratFehler("Für In Benutzung muss eine Person benannt sein.")
     gerat.status = neuer_status
     if neuer_status in (Gerat.STATUS_AUF_LAGER, Gerat.STATUS_IN_BENUTZUNG,
                         Gerat.STATUS_IN_REPARATUR, Gerat.STATUS_VERLIEHEN):
@@ -586,8 +590,8 @@ def statuswechsel(
 def gerat_pruefen(gerat: Gerat, geprueft_von: Konto) -> Gerat:
     """Prüfung abhaken: Datum und Kontext (F-16).
 
-    Schreibt auch den Vorgang „Geprüft“ (F-89, AUFTRAG M4), damit
-    „Zuletzt geprüft“ Datum und Konto trägt.
+    Schreibt auch den Vorgang „Geprüft" (F-89, AUFTRAG M4), damit
+    „Zuletzt geprüft" Datum und Konto trägt.
     """
     gerat.zuletzt_geprueft_am = timezone.now()
     gerat.zuletzt_geprueft_von = geprueft_von
@@ -621,7 +625,7 @@ def konflikt_anlegen(
 def konflikt_loesen(
     konflikt: GeratKonflikt, nehmen: str, ausgefuehrt_von: Konto | None = None
 ) -> GeratKonflikt:
-    """Konflikt lösen: „alten Wert behalten“ oder „neuen Wert übernehmen“ (F-86)."""
+    """Konflikt lösen: „alten Wert behalten" oder „neuen Wert übernehmen" (F-86)."""
     if nehmen not in ("alt", "neu"):
         raise GeratFehler("Ein Konflikt wird gelöst, indem der alte Wert behalten oder der neue Wert übernommen wird.")
     if nehmen == "neu":
@@ -684,10 +688,10 @@ def person_alle_zuruecknehmen(
 ) -> int:
     """Alle Geräte einer Person zurücknehmen (F-52, A-0099).
 
-    Jedes Gerät, das noch bei der Person liegt („In Benutzung“ oder
-    „Verliehen“), wird ins Lager zurückgenommen: Status „Auf Lager“,
-    Person wird entfernt, Vorgang „Rückgabe“ entsteht je Gerät.
-    „Auf Lager“ bleibt unverändert (dort ist die Person nicht zugeordnet).
+    Jedes Gerät, das noch bei der Person liegt („In Benutzung" oder
+    „Verliehen"), wird ins Lager zurückgenommen: Status „Auf Lager",
+    Person wird entfernt, Vorgang „Rückgabe" entsteht je Gerät.
+    „Auf Lager" bleibt unverändert (dort ist die Person nicht zugeordnet).
     Gibt die Anzahl der zurückgenommenen Geräte zurück.
     """
     gerate = list(
@@ -713,7 +717,7 @@ def soll_zahlen(ort: Ort) -> list[tuple[Kategorie, int]]:
     """Soll-Ausstattung eines Ortes als Liste (Kategorie, Anzahl) (F-62).
 
     Ohne Profil ist das Soll leer; dann ist jeder erfasste Eintrag
-    „mehr als Soll“ und nichts fehlt.
+    „mehr als Soll" und nichts fehlt.
     """
     if ort.typ != Ort.TYP_ARBEITSPLATZ or ort.profil is None:
         return []
@@ -727,9 +731,9 @@ def soll_zahlen(ort: Ort) -> list[tuple[Kategorie, int]]:
 def soll_ist_abgleich(ort: Ort) -> dict:
     """Soll-Ist-Abgleich je Arbeitsplatz (F-62).
 
-    Ergebnis: „vollstaendig“, „unvollstaendig“ oder „mehr-als-soll“,
-    jeweils mit Fehlliste („fehlt: n x Kategorie“) und Mehrliste
-    („mehr: n x Kategorie“).
+    Ergebnis: „vollstaendig", „unvollstaendig" oder „mehr-als-soll",
+    jeweils mit Fehlliste („fehlt: n x Kategorie") und Mehrliste
+    („mehr: n x Kategorie").
     """
     soll = dict((k, a) for k, a in soll_zahlen(ort))
     ist: dict[Kategorie, int] = {}
@@ -769,8 +773,8 @@ def soll_ist_abgleich(ort: Ort) -> dict:
 def bedarf_uebersicht(orte: list[Ort] | None = None) -> dict:
     """Bedarf: fehlende Ausstattung je Kategorie mit Lagerbestand (F-63).
 
-    Ergebnis: Zeilen je Kategorie mit Summe „fehlt“ und Lagerbestand
-    („Auf Lager“ an einem Lagerort), sortiert nach Kategorie.
+    Ergebnis: Zeilen je Kategorie mit Summe „fehlt" und Lagerbestand
+    („Auf Lager" an einem Lagerort), sortiert nach Kategorie.
     """
     if orte is None:
         orte = list(
@@ -803,7 +807,7 @@ def bedarf_uebersicht(orte: list[Ort] | None = None) -> dict:
 def fortschritt_je_ort(orte: list[Ort] | None = None) -> list[dict]:
     """Fortschritt: geprüfte Geräte / alle Geräte, auch je Ort (F-89).
 
-    Geprüft = „Zuletzt geprüft“ gesetzt und das Gerät ist erfasst
+    Geprüft = „Zuletzt geprüft" gesetzt und das Gerät ist erfasst
     (nicht ausgemustert, nicht in Reparatur).
     """
     if orte is None:
@@ -828,7 +832,7 @@ def fortschritt_je_ort(orte: list[Ort] | None = None) -> list[dict]:
 def fortschritt_des_orts(ort: Ort) -> dict:
     """Fortschritt eines einzelnen Orts (F-89, Markierung ``inventur-fortschritt``).
 
-    Geprüft = „Zuletzt geprüft“ gesetzt und das Gerät ist erfasst
+    Geprüft = „Zuletzt geprüft" gesetzt und das Gerät ist erfasst
     (nicht ausgemustert, nicht in Reparatur).
     """
     alle = list(Gerat.objects.filter(ort=ort, status__in=_ERFASST))
@@ -942,16 +946,16 @@ def import_speichern(
     """Speichert die Vorschau-Zeilen (F-84 bis F-87).
 
     Je Zeile:
-    - „neu“: Gerät anlegen mit allen Feldern aus der Zeile.
-    - „ergaenzt“: vorhandenes Gerät (VorschauZeile.gerat), leere Felder füllen.
-    - „konflikt“: vorhandenes Gerät, widersprüchliche Werte → GeratKonflikt.
-    - „uebersprungen“: nichts tun.
+    - „neu": Gerät anlegen mit allen Feldern aus der Zeile.
+    - „ergaenzt": vorhandenes Gerät (VorschauZeile.gerat), leere Felder füllen.
+    - „konflikt": vorhandenes Gerät, widersprüchliche Werte → GeratKonflikt.
+    - „uebersprungen": nichts tun.
 
     F-85: Status und Verbleib ableiten.
-    F-87: Vorgang „Import“ mit Dateiname, Blatt, Zeile.
+    F-87: Vorgang „Import" mit Dateiname, Blatt, Zeile.
     Neue Personen aus der Wertezuordnung werden ohne Konto angelegt (O-18).
 
-    Rückgabe: {„neu“: int, „ergaenzt“: int, „konflikt“: int, „uebersprungen“: int}
+    Rückgabe: {„neu": int, „ergaenzt": int, „konflikt": int, „uebersprungen": int}
     """
     from . import import_parser
     from django.utils.dateparse import parse_date
@@ -1078,7 +1082,7 @@ def import_speichern(
                     erstellt_von=konto,
                     erstellt_am=timezone.now(),
                 )
-                # F-87: Vorgang „Import“
+                # F-87: Vorgang „Import"
                 Vorgang.objects.create(
                     gerat=gerat,
                     typ=Vorgang.TYP_IMPORT,
@@ -1143,7 +1147,7 @@ def import_speichern(
                     geaendert.append("zustand_ungeprueft")
                 if geaendert:
                     gerat.save(update_fields=geaendert)
-                # F-87: Vorgang „Import“
+                # F-87: Vorgang „Import"
                 Vorgang.objects.create(
                     gerat=gerat,
                     typ=Vorgang.TYP_IMPORT,
@@ -1187,7 +1191,7 @@ def import_speichern(
                         alter_wert=gerat.modell, neuer_wert=modell,
                         herkunft=herkunft,
                     )
-                # F-87: Vorgang „Import“
+                # F-87: Vorgang „Import"
                 Vorgang.objects.create(
                     gerat=gerat,
                     typ=Vorgang.TYP_IMPORT,
@@ -1206,3 +1210,178 @@ def import_speichern(
         lauf.save()
 
     return {"neu": neu, "ergaenzt": ergaenzt, "konflikt": konflikt, "uebersprungen": ubersprungen}
+
+
+# --- M5 Verleih (F-30, F-36, F-133, F-20) ------------------------------------
+
+def _naechste_leihnummer() -> str:
+    """Nächste Leihnummer L-NNNN (fortlaufend, TESTSCHNITTSTELLE 3)."""
+    from .models import Leihe
+    letzte = Leihe.objects.order_by("-nr").first()
+    if letzte and letzte.nr:
+        try:
+            return f"L-{int(letzte.nr[2:]) + 1:04d}"
+        except ValueError:
+            pass
+    return "L-0001"
+
+
+def _naechste_protokollnummer() -> str:
+    """Nächste Protokollnummer UP-JJJJ-NNNN (fortlaufend je Jahr, TESTSCHNITTSTELLE 3)."""
+    from .models import Protokoll
+    jahr = timezone.now().year
+    letzte = (
+        Protokoll.objects.filter(nr__startswith=f"UP-{jahr}-")
+        .order_by("-nr")
+        .first()
+    )
+    if letzte and letzte.nr:
+        try:
+            return f"UP-{jahr}-{int(letzte.nr[-4:]) + 1:04d}"
+        except ValueError:
+            pass
+    return f"UP-{jahr}-0001"
+
+
+def leih_gerat_ausgeben(
+    gerat: Gerat,
+    person: Person,
+    rueckgabe_bis: date,
+    zweck: str,
+    ausgefuehrt_von: Konto,
+) -> Leihe:
+    """Vorgang „Verleih" (F-30, Kapitel 3.2, Kapitel 8).
+
+    Voraussetzungen (F-30, Kapitel 8):
+    - Gerät ist „Auf Lager"
+    - Gerät ist nicht reserviert (F-20)
+    - Person ist gesetzt (Pflicht)
+    - Rückgabedatum ist Pflicht
+    - Zweck ist Pflicht
+
+    Ergebnis:
+    - Gerät: Status „Verliehen"
+    - Leihe: Status „ausgegeben"
+    - Protokoll: Stand "scan-offen" (F-22, Kapitel 8.2)
+    - Vorgang: Typ „ausgabe", leihgabe_an, zurueck_am
+    """
+    from .models import Leihe, Protokoll, Vorgang
+    from django.db import transaction
+
+    if gerat.status != Gerat.STATUS_AUF_LAGER:
+        raise GeratFehler(f"Gerät ist nicht auf Lager (Status: {gerat.status}).")
+
+    if _gerat_ist_reserviert(gerat):
+        raise GeratFehler("Gerät ist reserviert und kann nicht verliehen werden (F-20).")
+
+    if not zweck or not zweck.strip():
+        raise GeratFehler("Zweck ist Pflicht (F-30).")
+
+    # Nächste Leihnummer und Protokollnummer
+    leih_nr = _naechste_leihnummer()
+    protokoll_nr = _naechste_protokollnummer()
+
+    with transaction.atomic():
+        # Protokoll (F-21, F-22): Stand "scan-offen", Nummer UP-JJJJ-NNNN
+        Protokoll.objects.create(
+            person=person,
+            geraet=gerat,
+            datum=timezone.now().date(),
+            nr=protokoll_nr,
+            stand=Protokoll.STAND_SCAN_OFFEN,
+            fotos=0,
+            erzeugt_von=ausgefuehrt_von,
+        )
+
+        # Gerät: Status → Verliehen (F-30)
+        gerat.status = Gerat.STATUS_VERLIEHEN
+        gerat.person = person
+        gerat.ort = None
+        gerat.save(update_fields=["status", "person", "ort"])
+
+        # Leihe: Status „ausgegeben" (F-30)
+        leihe = Leihe.objects.create(
+            nr=leih_nr,
+            gerat=gerat,
+            person=person,
+            rueckgabe_bis=rueckgabe_bis,
+            zweck=zweck.strip(),
+            status=Leihe.STATUS_AUSGEGEBEN,
+            erzeugt_von=ausgefuehrt_von,
+        )
+
+        # Vorgang (Kapitel 8)
+        Vorgang.objects.create(
+            gerat=gerat,
+            typ=Vorgang.TYP_AUSGABE,
+            erzeugt_von=ausgefuehrt_von,
+            leihgabe_an=person,
+            zurueck_am=rueckgabe_bis,
+            notiz=zweck.strip(),
+            abschliesst=False,
+        )
+
+    return leihe
+
+
+def _gerat_ist_reserviert(gerat: Gerat) -> bool:
+    """Ist das Gerät reserviert? (F-20, Kapitel 4)
+
+    Ein genehmigter, noch nicht ausgegebener Verleih reserviert das Gerät.
+    """
+    from .models import Leihe
+    return (
+        Leihe.objects.filter(gerat=gerat, genehmigt=True, status=Leihe.STATUS_AUSGEGEBEN)
+        .exists()
+    )
+
+
+def leihe_zurueckgeben(
+    leihe: Leihe,
+    ausgefuehrt_von: Konto,
+) -> None:
+    """Rückgabe eines verliehenen Geräts (F-133, Kapitel 8).
+
+    Setzt die Leihe auf „zurueckgegeben" und das Gerät auf „Auf Lager".
+    Belegt die Prüfpunkte nach F-133.
+    """
+    from .models import Vorgang
+    from django.db import transaction
+
+    gerat = leihe.gerat
+    if leihe.status != Leihe.STATUS_AUSGEGEBEN:
+        raise GeratFehler("Leihe ist nicht ausgegeben.")
+
+    with transaction.atomic():
+        # Gerät zurück ins Lager (F-133)
+        gerat.status = Gerat.STATUS_AUF_LAGER
+        gerat.person = None
+        gerat.save(update_fields=["status", "person"])
+
+        # Leihe → zurückgegeben
+        leihe.status = Leihe.STATUS_ZURUECKGEGEBEN
+        leihe.genehmigt = False
+        leihe.save(update_fields=["status", "genehmigt"])
+
+        # Vorgang „Rückgabe"
+        Vorgang.objects.create(
+            gerat=gerat,
+            typ=Vorgang.TYP_RUECKGABE,
+            erzeugt_von=ausgefuehrt_von,
+            leihgabe_an=leihe.person,
+            notiz="Rückgabe Leihgerät",
+            abschliesst=True,
+        )
+
+def leihen_ueberfaellig() -> list:
+    """Alle Leihen, die überfällig sind (F-36)."""
+    from .models import Leihe
+    from konten.zeit import jetzt_wie_im_entwicklungsmodus
+    heute = jetzt_wie_im_entwicklungsmodus().date()
+    return [
+        l for l in Leihe.objects.filter(
+            status=Leihe.STATUS_AUSGEGEBEN,
+            rueckgabe_bis__isnull=False,
+        ).select_related("gerat", "person")
+        if l.rueckgabe_bis and l.rueckgabe_bis < heute
+    ]

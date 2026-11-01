@@ -158,6 +158,10 @@
         <a href="/geraete/{{ gerat.inventarnummer }}/ausgeben/" class="btn" data-test="aktion-ausgabe">Ausgeben</a>
       </div>
       <div class="zeile">
+        <strong>Verleih</strong>
+        <a href="/geraete/{{ gerat.inventarnummer }}/verleih/" class="btn" data-test="aktion-verleih">Verleihen</a>
+      </div>
+      <div class="zeile">
         <strong>Umziehen</strong>
         <a href="/geraete/{{ gerat.inventarnummer }}/umziehen/" class="btn" data-test="aktion-umzug">Umziehen</a>
       </div>
@@ -183,6 +187,17 @@
       <div class="zeile">
         <strong>Umziehen</strong>
         <a href="/geraete/{{ gerat.inventarnummer }}/umziehen/" class="btn" data-test="aktion-umzug">Umziehen</a>
+      </div>
+    </div>
+  </div>
+  {% elif gerat.status == "verliehen" %}
+  <div class="abschnitt" data-test="lebenszyklus">
+    <h2>Lebenszyklus</h2>
+    <p class="muted">Gerät zurückgeben.</p>
+    <div class="liste">
+      <div class="zeile">
+        <strong>Rückgabe</strong>
+        <a href="/geraete/{{ gerat.inventarnummer }}/rueckgeben/" class="btn" data-test="aktion-rueckgabe">Rückgabe</a>
       </div>
     </div>
   </div>

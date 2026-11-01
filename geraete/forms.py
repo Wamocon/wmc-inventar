@@ -427,3 +427,29 @@ class GeratNotizForm(forms.Form):
         label="Notiz",
         widget=forms.Textarea(attrs={"rows": 3, "data-test": "notiz-feld"}),
     )
+
+
+# --- M5 Verleih (F-30) ---------------------------------------------------------
+
+class VerleihForm(forms.Form):
+    """Formular für den Verleih (F-30, TESTSCHNITTSTELLE 4).
+
+    Person, Rückgabe bis (Pflicht), Zweck (Pflicht).
+    """
+
+    person = forms.ModelChoiceField(
+        label="Person",
+        required=True,
+        queryset=Person.objects.filter(aktiv=True).order_by("nachname"),
+        widget=forms.Select(attrs={"data-test": "person", "class": "req"}),
+    )
+    rueckgabe_bis = forms.DateField(
+        label="Rückgabe bis",
+        required=True,
+        widget=forms.DateInput(attrs={"data-test": "rueckgabe-bis", "type": "date", "class": "req"}),
+    )
+    zweck = forms.CharField(
+        label="Zweck",
+        required=True,
+        widget=forms.TextInput(attrs={"data-test": "zweck", "class": "req"}),
+    )

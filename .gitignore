@@ -18,3 +18,9 @@ WMC_Hardwarebestand.xlsx
 # Testläufe: nur der letzte Stand unter tests/robot/ergebnisse/ wird eingecheckt
 tests/robot/ergebnisse/*.png
 tests/robot/ergebnisse/browser/
+
+# Hilfsdateien (nicht Teil des Auftrags)
+_fix_typos.py
+del_files.py
+fix_test.py
+fix_typo.py

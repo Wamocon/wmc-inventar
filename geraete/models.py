@@ -88,6 +88,13 @@ class Gerat(models.Model):
     # F-88: Kaufdatum bzw. Garantie als „nicht ermittelbar“ markiert
     kaufdatum_nicht_ermittelbar = models.BooleanField(default=False)
     garantie_nicht_ermittelbar = models.BooleanField(default=False)
+    # M5: Reserviert (F-20, Kapitel 4) – bleibt „Auf Lager" mit Zusatz „reserviert"
+    reserviert = models.BooleanField("Reserviert", default=False)
+    reserviert_von = models.ForeignKey(
+        "stammdaten.Person", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="reservierte_geraete", verbose_name="Reserviert von",
+    )
+    reserviert_bis = models.DateField("Reserviert bis", null=True, blank=True)
 
     erstellt_am = models.DateTimeField("Erstellt am")
     erstellt_von = models.ForeignKey(
@@ -334,3 +341,97 @@ class Vorgang(models.Model):
     @property
     def ist_offen(self) -> bool:
         return not self.abschliesst
+
+
+# --- M5 Verleih (Kapitel 3.2, F-30, F-36, F-133) ------------------------------
+
+class Protokoll(models.Model):
+    """Ein Ausgabeprotokoll (F-21, F-22, F-130, F-133).
+
+    Stand: scan-offen (F-22, M3), danach abgeschlossen (M6/M7).
+    Nummer: UP-JJJJ-NNNN (F-131).
+    """
+
+    STAND_SCAN_OFFEN = "scan-offen"
+    STAND_ABGESCHLOSSEN = "abgeschlossen"
+    STAENDE = [
+        (STAND_SCAN_OFFEN, "Unterschrift offen: Scan fehlt"),
+        (STAND_ABGESCHLOSSEN, "Abgeschlossen"),
+    ]
+
+    nr = models.CharField("Protokollnummer", max_length=24, blank=True, default="")
+    person = models.ForeignKey(
+        "stammdaten.Person", on_delete=models.CASCADE,
+        related_name="protokolle", verbose_name="Person",
+    )
+    geraet = models.ForeignKey(
+        Gerat, on_delete=models.CASCADE, related_name="protokolle"
+    )
+    datum = models.DateField("Datum")
+    stand = models.CharField("Stand", max_length=24, choices=STAENDE,
+                             default=STAND_SCAN_OFFEN)
+    erzeugt_von = models.ForeignKey(
+        "konten.Konto", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="erzeugte_protokolle", verbose_name="Erzeugt von",
+    )
+    fotos = models.PositiveIntegerField("Fotos", default=0)
+
+    class Meta:
+        verbose_name = "Protokoll"
+        verbose_name_plural = "Protokolle"
+        ordering = ["-datum"]
+
+    def __str__(self):
+        return f"Protokoll {self.nr or self.pk}: {self.person.nachname}"
+
+
+class Leihe(models.Model):
+    """Eine Leihe eines Geräts an eine Person (Kapitel 3.2, F-30, F-36).
+
+    Stände: ausgegeben, zurueckgegeben, ueberfaellig (F-36).
+    Genehmigt: Reservierung – das Gerät bleibt „Auf Lager" mit dem
+    Zusatz „reserviert" (F-20, Kapitel 4). Genehmigt wird erst in Teil 2.
+    """
+    STATUS_AUSGEGEBEN = "ausgegeben"
+    STATUS_ZURUECKGEGEBEN = "zurueckgegeben"
+    STATUSES = [
+        (STATUS_AUSGEGEBEN, "Ausgegeben"),
+        (STATUS_ZURUECKGEGEBEN, "Zurückgegeben"),
+    ]
+
+    nr = models.CharField("Leihnummer", max_length=16, blank=True, default="")
+    gerat = models.ForeignKey(
+        Gerat, on_delete=models.CASCADE, related_name="leihen"
+    )
+    person = models.ForeignKey(
+        "stammdaten.Person", on_delete=models.CASCADE,
+        related_name="leihen", verbose_name="Person",
+    )
+    rueckgabe_bis = models.DateField("Rückgabe bis", null=True, blank=True)
+    zweck = models.CharField("Zweck", max_length=240, blank=True, default="")
+    status = models.CharField("Status", max_length=24, choices=STATUSES,
+                              default=STATUS_AUSGEGEBEN)
+    genehmigt = models.BooleanField("Genehmigt (Reservierung)", default=False)
+    zeitpunkt = models.DateTimeField("Zeitpunkt", default=timezone.now)
+    erzeugt_von = models.ForeignKey(
+        "konten.Konto", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="erzeugte_leihen", verbose_name="Erzeugt von",
+    )
+
+    class Meta:
+        verbose_name = "Leihe"
+        verbose_name_plural = "Leihen"
+        ordering = ["-zeitpunkt"]
+
+    def __str__(self):
+        return f"Leihe {self.gerat.inventarnummer} → {self.person.nachname}"
+
+    def stand_aktuell(self) -> str:
+        """Aktueller Stand: ausgegeben, zurueckgegeben oder ueberfaellig (F-36)."""
+        if self.status == self.STATUS_ZURUECKGEGEBEN:
+            return "zurueckgegeben"
+        if self.rueckgabe_bis is not None:
+            from datetime import date
+            from konten.zeit import jetzt_wie_im_entwicklungsmodus
+            return "ueberfaellig" if self.rueckgabe_bis < jetzt_wie_im_entwicklungsmodus().date() else "ausgegeben"
+        return "ausgegeben"

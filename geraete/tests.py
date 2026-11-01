@@ -2454,3 +2454,128 @@ class VorlageTests(TestCase):
         )
         self.assertEqual(antwort.status_code, 403)
         self.assertEqual(Gerat.objects.count(), vorher)
+
+
+# --- M5 Verleih (F-30, F-36, F-133) ---------------------------------------------
+
+class VerleihServiceTests(TestCase):
+    """Tests für die Verleih-Service-Funktionen (F-30, F-36, F-133)."""
+
+    def setUp(self):
+        self.kat, self.ort, self.person = stammdaten_erstellen()
+        self.admin = konto_erstellen("it-admin", rolle="admin", email="it-admin@beispiel.test")
+        self.gerat = services.gerat_anlegen(
+            kategorie=self.kat, hersteller="Lenovo", modell="ThinkPad",
+            seriennummer="SN-LEIH-01",
+        )
+
+    def test_leihe_erstellen(self):
+        """F-30: Verleih erstellt eine Leihe mit Status 'ausgegeben'."""
+        from .models import Leihe, Protokoll
+
+        rueckgabe = date(2026, 11, 15)
+        leihe = services.leih_gerat_ausgeben(
+            gerat=self.gerat, person=self.person, rueckgabe_bis=rueckgabe,
+            zweck="Präsentation", ausgefuehrt_von=self.admin,
+        )
+        self.assertEqual(leihe.status, Leihe.STATUS_AUSGEGEBEN)
+        self.assertEqual(self.gerat.status, Gerat.STATUS_VERLIEHEN)
+
+    def test_leihe_rueckgeben(self):
+        """F-133: Rückgabe setzt Leihe auf 'zurueckgegeben' und Gerät auf 'Auf Lager'."""
+        from .models import Leihe
+        from datetime import date
+
+        rueckgabe = date(2026, 11, 15)
+        leihe = services.leih_gerat_ausgeben(
+            gerat=self.gerat, person=self.person, rueckgabe_bis=rueckgabe,
+            zweck="Präsentation", ausgefuehrt_von=self.admin,
+        )
+        services.leihe_zurueckgeben(leihe, ausgefuehrt_von=self.admin)
+        leihe.refresh_from_db()
+        self.assertEqual(leihe.status, Leihe.STATUS_ZURUECKGEGEBEN)
+        self.gerat.refresh_from_db()
+        self.assertEqual(self.gerat.status, Gerat.STATUS_AUF_LAGER)
+
+    def test_leihe_ueberfaellig(self):
+        """F-36: Leihe mit überfälligem Rückgabedatum wird erkannt."""
+        from .models import Leihe
+        from datetime import date, timedelta
+        from konten.zeit import jetzt_wie_im_entwicklungsmodus
+
+        # Rückgabedatum in der Vergangenheit
+        rueckgabe = date(2026, 10, 1)
+        leihe = services.leih_gerat_ausgeben(
+            gerat=self.gerat, person=self.person, rueckgabe_bis=rueckgabe,
+            zweck="Präsentation", ausgefuehrt_von=self.admin,
+        )
+        ueberfaellige = list(services.leihen_ueberfaellig())
+        self.assertEqual(len(ueberfaellige), 1)
+        self.assertEqual(ueberfaellige[0].id, leihe.id)
+
+
+class VerleihViewTests(TestCase):
+    """Tests für die Verleih-Views (F-36, TESTSCHNITTSTELLE 3)."""
+
+    def setUp(self):
+        self.kat, self.ort, self.person = stammdaten_erstellen(
+            person_email="anna.becker@beispiel.test"
+        )
+        self.admin = konto_erstellen("it-admin", rolle="admin", email="it-admin@beispiel.test")
+        self.gf = konto_erstellen("gf", rolle="leser", email="gf@beispiel.test")
+        self.anna = konto_erstellen(
+            "anna-becker", rolle="mitarbeiter", email="anna.becker@beispiel.test"
+        )
+        self.gerat = services.gerat_anlegen(
+            kategorie=self.kat, hersteller="Lenovo", modell="ThinkPad",
+            seriennummer="SN-LEIH-02",
+        )
+
+    def test_verleih_liste_admin_200(self):
+        """F-36: /verleih/ für it-admin@beispiel.test mit 200 antwortet."""
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get("/verleih/")
+        self.assertEqual(antwort.status_code, 200)
+
+    def test_verleih_liste_mitarbeiter_403(self):
+        """F-36: /verleih/ für anna.becker@beispiel.test mit 403 antwortet."""
+        self.client.login(username=self.anna.email, password="test-passwort-123")
+        antwort = self.client.get("/verleih/")
+        self.assertEqual(antwort.status_code, 403)
+
+    def test_verleih_liste_leser_403(self):
+        """F-36: /verleih/ für gf@beispiel.test mit 403 antwortet."""
+        self.client.login(username=self.gf.email, password="test-passwort-123")
+        antwort = self.client.get("/verleih/")
+        self.assertEqual(antwort.status_code, 403)
+
+    def test_verleih_dialog_admin(self):
+        """F-30: Verleih-Dialog zeigt sich für Admin am Gerätedetail."""
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get(f"/geraete/{self.gerat.inventarnummer}/")
+        html = antwort.content.decode()
+        self.assertIn('data-test="aktion-verleih"', html)
+
+    def test_verleih_dialog_post(self):
+        """F-30: POST auf /geraete/<nr>/verleih/ verleih das Gerät."""
+        from .models import Leihe, Protokoll
+        from datetime import date
+
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.post(
+            f"/geraete/{self.gerat.inventarnummer}/verleih/",
+            {
+                "person": self.person.pk,
+                "rueckgabe_bis": "2026-11-15",
+                "zweck": "Präsentation",
+            },
+        )
+        self.assertEqual(antwort.status_code, 302)
+        leihe = Leihe.objects.filter(gerat=self.gerat).first()
+        self.assertIsNotNone(leihe)
+        self.assertEqual(leihe.status, Leihe.STATUS_AUSGEGEBEN)
+        self.gerat.refresh_from_db()
+        self.assertEqual(self.gerat.status, Gerat.STATUS_VERLIEHEN)
+        protokoll = Protokoll.objects.filter(geraet=self.gerat).first()
+        self.assertIsNotNone(protokoll)
+        self.assertEqual(protokoll.stand, Protokoll.STAND_SCAN_OFFEN)

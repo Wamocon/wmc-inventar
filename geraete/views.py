@@ -1006,3 +1006,88 @@ def etiketten_ort(request):
             "ausgewaehlt": request.GET.get("ort", ""),
         },
     )
+
+
+# --- M5 Verleih (F-30, F-36) ---------------------------------------------------
+
+def _ist_admin(request) -> bool:
+    return bool(request.user.ist_admin)
+
+
+@login_required
+def verleih_zeige(request, inventarnummer):
+    """Dialog „Gerät verleihen" am Gerätedetail (F-30, TESTSCHNITTSTELLE 4).
+
+    GET: Formular anzeigen.
+    POST: Verleih abschließen.
+    """
+    from .models import Gerat
+    from .services import leih_gerat_ausgeben, GeratFehler
+    from .forms import VerleihForm
+
+    if not _ist_admin(request):
+        raise PermissionDenied
+
+    gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
+    form = VerleihForm(request.POST or None)
+
+    meldung = ""
+    fehler = ""
+
+    if request.method == "POST" and form.is_valid():
+        try:
+            person = form.cleaned_data["person"]
+            rueckgabe_bis = form.cleaned_data["rueckgabe_bis"]
+            zweck = form.cleaned_data["zweck"]
+            leih_gerat_ausgeben(
+                gerat=gerat,
+                person=person,
+                rueckgabe_bis=rueckgabe_bis,
+                zweck=zweck,
+                ausgefuehrt_von=request.user,
+            )
+            meldung = "Gerät wurde verliehen."
+            return redirect("geraete:detail", inventarnummer=inventarnummer)
+        except GeratFehler as e:
+            fehler = str(e)
+
+    return render(
+        request,
+        "geraete/verleih.html",
+        {
+            "form": form,
+            "gerat": gerat,
+            "meldung": meldung,
+            "fehler": fehler,
+        },
+    )
+
+
+@login_required
+def verleih_liste(request):
+    """/verleih/ – Leihen-Übersicht (F-36, TESTSCHNITTSTELLE 3).
+
+    Zeigt aktive und überfällige Leihen.
+    Nur für Admin (403 für Mitarbeiter, F-112).
+    """
+    from .models import Leihe
+    from .services import leihen_ueberfaellig
+
+    if not _ist_admin(request):
+        raise PermissionDenied
+
+    leihen = list(
+        Leihe.objects.filter(status=Leihe.STATUS_AUSGEGEBEN)
+        .select_related("gerat", "person")
+        .order_by("-zeitpunkt")
+    )
+    ueberfaellige = {l.id for l in leihen_ueberfaellig()}
+
+    return render(
+        request,
+        "geraete/verleih_liste.html",
+        {
+            "leihen": leihen,
+            "ueberfaellige": ueberfaellige,
+        },
+    )
