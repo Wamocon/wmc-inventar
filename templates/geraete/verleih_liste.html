@@ -57,7 +57,9 @@
                             <a href="{% url 'geraete:leih_genehmigen' leihe.id %}" class="btn small primary" data-test="genehmigen">Genehmigen</a>
                             <a href="{% url 'geraete:leih_ablehnen' leihe.id %}" class="btn small" data-test="ablehnen">Ablehnen</a>
                         {% elif leihe.status == "genehmigt" %}
-                            <span class="muted">ausstehend</span>
+                            <a href="{% url 'geraete:leih_ausgeben' leihe.id %}" class="btn small primary" data-test="ausgeben">Ausgeben</a>
+                        {% elif leihe.status == "ausgegeben" %}
+                            <a href="{% url 'geraete:leih_verlaengern' leihe.id %}" class="btn small" data-test="verlaengern">Verlängern</a>
                         {% elif leihe.status == "zurückgezogen" %}
                             <span class="muted">—</span>
                         {% else %}

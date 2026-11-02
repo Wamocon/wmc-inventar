@@ -1588,6 +1588,164 @@ def _gerat_reserve_ist_leihe(gerat: Gerat, leihe: Leihe) -> bool:
         return gerat.reserviert is True and leihe.ist_zurueckziehbar()
     return gerat.reserviert_bis == leihe.ende and gerat.reserviert is True
 
+def leihe_ausgeben(
+    leihe: Leihe,
+    ausgefuehrt_von: Konto,
+) -> Leihe:
+    """M5 Teil 4 (F-33, F-21, F-22): IT gibt eine genehmigte Leihe aus.
+
+    Voraussetzungen (F-33):
+    - Leihe ist genehmigt
+    - Gerät ist im Leihpool
+    - Gerät ist nicht reserviert (F-20), außer durch die Leihe selbst
+
+    Ergebnis:
+    - Gerät: Status "Verliehen", Person gesetzt
+    - Leihe: Status "ausgegeben"
+    - Protokoll: Stand "scan-offen" (F-21, F-22)
+    - Vorgang: Typ "ausgabe", leihgabe_an, zurueck_am
+    - Reservierung endet (reserviert=False, reserviert_bis=None)
+    """
+    from .models import Protokoll, Vorgang
+    from django.db import transaction
+
+    if leihe.status != Leihe.STATUS_GENEHMIGT:
+        raise GeratFehler("Diese Leihe ist nicht genehmigt (F-33).")
+
+    if leihe.gerat_id is None:
+        raise GeratFehler("Die Leihe hat kein Gerät zugewiesen.")
+
+    gerat = leihe.gerat
+    if gerat.status != Gerat.STATUS_AUF_LAGER:
+        raise GeratFehler(f"Gerät ist nicht auf Lager (Status: {gerat.status}).")
+
+    if not gerat.leihpool:
+        raise GeratFehler("Gerät steht nicht im Leihpool (F-33).")
+
+    # Prüfen, ob das Gerät für jemand anderen reserviert ist (F-20)
+    # Eine Reservierung durch die Leihe selbst (gleiche Person) ist erlaubt
+    if _gerat_ist_reserviert(gerat):
+        # Reservierung prüfen: nur ablehnen, wenn sie nicht zur Leihe gehört
+        andere_reservation = None
+        for leihe_anderer in Leihe.objects.filter(
+            gerat=gerat,
+            genehmigt=True,
+            status=Leihe.STATUS_GENEHMIGT,
+        ).exclude(person=leihe.person):
+            andere_reservation = leihe_anderer
+            break
+        if andere_reservation is not None:
+            raise GeratFehler("Gerät ist für eine andere Person reserviert und kann nicht ausgegeben werden (F-20).")
+
+    person = leihe.person
+    if person is None:
+        raise GeratFehler("Die Leihe hat keine Person.")
+
+    rueckgabe_bis = leihe.rueckgabe_bis
+    if rueckgabe_bis is None:
+        raise GeratFehler("Rückgabedatum fehlt.")
+
+    with transaction.atomic():
+        # Protokoll (F-21, F-22): Stand "scan-offen", Nummer UP-JJJJ-NNNN
+        Protokoll.objects.create(
+            person=person,
+            geraet=gerat,
+            datum=timezone.now().date(),
+            nr=_naechste_protokollnummer(),
+            stand=Protokoll.STAND_SCAN_OFFEN,
+            fotos=0,
+            erzeugt_von=ausgefuehrt_von,
+        )
+
+        # Gerät: Status → Verliehen (F-33)
+        gerat.status = Gerat.STATUS_VERLIEHEN
+        gerat.person = person
+        gerat.ort = None
+        gerat.save(update_fields=["status", "person", "ort"])
+
+        # Leihe: Status → ausgegeben (F-33)
+        leihe.status = Leihe.STATUS_AUSGEGEBEN
+        leihe.save(update_fields=["status"])
+
+        # Vorgang "Ausgabe" (Kapitel 8)
+        Vorgang.objects.create(
+            gerat=gerat,
+            typ=Vorgang.TYP_AUSGABE,
+            erzeugt_von=ausgefuehrt_von,
+            leihgabe_an=person,
+            zurueck_am=rueckgabe_bis,
+            notiz=leihe.zweck or "Leihgerät ausgegeben (F-33).",
+            abschliesst=False,
+        )
+
+        # Reservierung endet (F-20): das Gerät ist jetzt verliehen
+        gerat.reserviert = False
+        gerat.reserviert_von = None
+        gerat.reserviert_bis = None
+        gerat.save(update_fields=["reserviert", "reserviert_von", "reserviert_bis"])
+
+    return leihe
+
+
+def leihe_verlaengern(
+    leihe: Leihe,
+    rueckgabe_bis_neu: date,
+    ausgefuehrt_von: Konto,
+) -> Leihe:
+    """M5 Teil 4 (F-35): Mitarbeiter fragt Verlängerung an; IT gewährt oder lehnt ab.
+
+    Voraussetzungen (F-35):
+    - Leihe ist ausgegeben
+    - Neue Rückgabedatum muss nach dem alten liegen
+
+    Ablehnung:
+    - Gerät ist für einen Zeitraum nach dem neuen Rückgabedatum reserviert (F-35)
+
+    Ergebnis bei Erfolg:
+    - Leihe: rueckgabe_bis wird verschoben
+    - Vorgang "Änderung" wird angelegt
+    """
+    from .models import Vorgang
+    from django.db import transaction
+
+    if leihe.status != Leihe.STATUS_AUSGEGEBEN:
+        raise GeratFehler("Diese Leihe ist nicht ausgegeben (F-35).")
+
+    gerat = leihe.gerat
+    if gerat is None:
+        raise GeratFehler("Die Leihe hat kein Gerät zugewiesen.")
+
+    altes_rueckgabe_bis = leihe.rueckgabe_bis
+    if rueckgabe_bis_neu <= altes_rueckgabe_bis:
+        raise GeratFehler("Neues Rückgabedatum muss nach dem alten liegen (F-35).")
+
+    # Prüfen, ob das Gerät nach dem neuen Rückgabedatum reserviert ist (F-35)
+    if _gerat_ist_reserviert(gerat, rueckgabe_bis_neu, rueckgabe_bis_neu):
+        raise GeratFehler(
+            "Verlängerung abgelehnt: Das Gerät ist für den gewünschten "
+            "Zeitraum bereits reserviert (F-35)."
+        )
+
+    with transaction.atomic():
+        leihe.rueckgabe_bis = rueckgabe_bis_neu
+        if leihe.ende is None or rueckgabe_bis_neu > leihe.ende:
+            leihe.ende = rueckgabe_bis_neu
+        leihe.save(update_fields=["rueckgabe_bis", "ende"])
+
+        Vorgang.objects.create(
+            gerat=gerat,
+            typ=Vorgang.TYP_AENDERUNG,
+            erzeugt_von=ausgefuehrt_von,
+            aenderung_feld="rueckgabe_bis",
+            aenderung_alter_wert=str(altes_rueckgabe_bis),
+            aenderung_neuer_wert=str(rueckgabe_bis_neu),
+            notiz="Verlängerung der Leihe (F-35).",
+            abschliesst=False,
+        )
+
+    return leihe
+
+
 def leihen_ueberfaellig() -> list:
     """Alle Leihen, die überfällig sind (F-36)."""
     from .models import Leihe

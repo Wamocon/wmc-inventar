@@ -1353,6 +1353,80 @@ def leihe_genehmigen_zeige(request, leih_id):
 
 
 @login_required
+def leihe_ausgeben_zeige(request, leih_id):
+    """Dialog „Leihe ausgeben" in /verleih/ (F-33, Kapitel 4).
+
+    GET: Formular anzeigen.
+    POST: Leihe ausgeben – Gerät wird „Verliehen", Protokoll entsteht.
+    """
+    from .forms import LeiheAusgebenForm
+    from .models import Leihe
+    from .services import GeratFehler, leihe_ausgeben
+
+    if not _ist_admin(request):
+        raise PermissionDenied
+
+    leihe = get_object_or_404(Leihe, id=leih_id)
+    form = LeiheAusgebenForm(request.POST or None)
+    fehler = ""
+    if request.method == "POST" and form.is_valid():
+        try:
+            leihe_ausgeben(leihe, ausgefuehrt_von=request.user)
+            return redirect("/verleih/")
+        except GeratFehler as fehler_vorgang:
+            fehler = str(fehler_vorgang)
+
+    return render(
+        request,
+        "geraete/leihe_ausgeben.html",
+        {
+            "form": form,
+            "leihe": leihe,
+            "fehler": fehler,
+        },
+    )
+
+
+@login_required
+def leihe_verlaengern_zeige(request, leih_id):
+    """Dialog „Verlängerung" in /verleih/ (F-35, Kapitel 4).
+
+    GET: Formular mit neuem Rückgabedatum.
+    POST: Verlängerung genehmigen – bei Folgereservierung mit fehler abgelehnt.
+    """
+    from .forms import LeiheVerlaengernForm
+    from .models import Leihe
+    from .services import GeratFehler, leihe_verlaengern
+
+    if not _ist_admin(request):
+        raise PermissionDenied
+
+    leihe = get_object_or_404(Leihe, id=leih_id)
+    form = LeiheVerlaengernForm(request.POST or None, leihe=leihe)
+    fehler = ""
+    if request.method == "POST" and form.is_valid():
+        try:
+            leihe_verlaengern(
+                leihe,
+                rueckgabe_bis_neu=form.cleaned_data["rueckgabe_bis_neu"],
+                ausgefuehrt_von=request.user,
+            )
+            return redirect("/verleih/")
+        except GeratFehler as fehler_vorgang:
+            fehler = str(fehler_vorgang)
+
+    return render(
+        request,
+        "geraete/leihe_verlaengern.html",
+        {
+            "form": form,
+            "leihe": leihe,
+            "fehler": fehler,
+        },
+    )
+
+
+@login_required
 def leihe_ablehnen_zeige(request, leih_id):
     """Dialog „Leihe ablehnen\" in /verleih/ (F-32, Kapitel 4).
 

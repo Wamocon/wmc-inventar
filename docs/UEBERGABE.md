@@ -31,6 +31,8 @@ M5 Nachbesserung (A-0117): Listen und Erstinventur nach TESTSCHNITTSTELLE Kapite
 
 M5 Verleih Teil 3 (A-0120): Meine Geräte, Kurzansicht, Datensparsamkeit (F-110 bis F-113). `/meine-geraete/` zeigt Mitarbeitern ihre eigenen Geräte mit Inventarnummer, Ausgabedatum und Protokoll-PDF (F-110), die eigenen Protokolle und „Meine Leihen" mit Stand und Rückgabedatum (F-111). `/g/<Inventarnummer>` zeigt Mitarbeitern die Kurzansicht mit Kategorie, Modell, Inventarnummer und „Ihnen zugeordnet" oder „nicht Ihnen zugeordnet" (F-113). Mitarbeiter sehen keine Preise, keine anderen Personen und keine Admin-Funktionen; `/geraete/`, `/personen/` und Protokoll und PDF einer anderen Person antworten mit 403 (F-112). `geraete/views.py:meine_geraete_zeige` (F-110, F-111), `geraete/views.py:gerat_kurz` (F-113, Kurzansicht für Mitarbeiter), `geraete/views.py:liste` (403 für Mitarbeiter, F-112), `stammdaten/views.py:personen_liste` (403 für Mitarbeiter, F-112), `templates/geraete/meine_geraete.html` (Meine Geräte, Meine Protokolle, Meine Leihen), `templates/geraete/kurzansicht.html` (Kurzansicht), `geraete/tests.py` (12 neue Tests: `MeineGeraeteTests` 5, `KurzansichtTests` 5, `DatensparsamkeitTests` 2). Alle 251 Tests sind grün.
 
+M5 Verleih Teil 4 (A-0122): Ausgabe aus der Leihe und Verlängerung (F-33, F-35, F-21, F-22). Aus einer genehmigten Leihe gibt die IT das Gerät aus (F-33): Das Protokoll entsteht wie bei der Ausgabe im Papierweg (F-21, F-22), der Status wird „Verliehen" zum selben Zeitpunkt wie dort, die Leihe steht auf „ausgegeben", und die Reservierung endet. `geraete/services.py:leih_ausgeben` (F-33, F-21, F-22, F-20), `geraete/views.py:leih_ausgeben_zeige` (Dialog „Leihe ausgeben"), `geraete/forms.py:LeiheAusgebenForm`, `templates/geraete/leih_ausgeben.html` (Dialog mit `data-test="dialog" data-name="ausgeben"`), `geraete/urls.py` (Routen `/geraete/verleih/<id>/ausgeben/` und `/geraete/verleih/<id>/verlaengern/`), `templates/geraete/verleih_liste.html` (Buttons „Ausgeben" und „Verlängern"). Die Verlängerung (F-35): Der Mitarbeiter fragt unter „Meine Leihen" eine Verlängerung an; die IT gewährt sie, wenn für das Gerät keine Folgereservierung besteht, sonst lehnt das Tool sie mit einer Meldung in fehler ab. `geraete/services.py:leih_verlaengern` (F-35), `geraete/views.py:leih_verlaengern_zeige` (Dialog „Verlängerung"), `geraete/forms.py:LeiheVerlaengernForm`, `templates/geraete/leih_verlaengern.html` (Dialog mit `data-test="dialog" data-name="verlaengern"`), `geraete/tests.py` (13 neue Tests: `LeiheAusgebenTests` 7, `LeiheVerlaengernTests` 6). Alle 268 Tests sind grün.
+
 **Nicht Teil dieser Karte (A-0099):**
 - **Protokoll in einem Vorgang (F-130):** Kommt mit M6; die Rückgabe-Ansicht im Offboarding zeigt keine Protokollfunktion.
 - **Deaktivieren des Kontos am Tag nach dem Austritt (F-53):** Ist ein Befehl für den Tageslauf und nicht Teil dieser Karte. `austritt_speichern` setzt `person.aktiv=False`, das Konto-Deaktivieren ist ein separater Tageslauf-Auftrag.
@@ -43,7 +45,7 @@ M5 Verleih Teil 3 (A-0120): Meine Geräte, Kurzansicht, Datensparsamkeit (F-110 
 | M2 Bestand | fertig | a3a85da | 31.10.2026 | Geräte erfassen, bearbeiten, prüfen, Suche, Konflikte, Arbeitsliste; Historie (F-40), Mehrfacherfassung (F-11), Vorlage (F-13) (A-0112); Import Vorschau (A-0113); Import speichern (F-84 bis F-88) (A-0114) |
 | M3 Lebenszyklus | fertig | | 28.10.2026 | Ausgabe, Rückgabe, Umzug, Reparatur, Ausmusterung, Vorgang-Historie, Gerätedetail-Aktionen (A-0074), Vorgänge als Dialoge (A-0075), Formulare und Fehlermeldungen (A-0097), Historie/Suche/Zustand/Konten (A-0098), Offboarding/Austritt/Löschen (A-0099) |
 | M4 Arbeitsplätze | fertig | a13dc17 | 30.10.2026 | Soll-Ist-Abgleich (F-62), Bedarf (F-63), Feste Person (F-64), Erstinventur (F-89); Raumplan (F-65, F-66, F-68, F-69) mit Pop-up und `aktion-im-raumplan`; Plan pflegen (F-67) mit Upload und Position (A-0107); QR-Code, Etiketten, PDF-Druck (A-0108); Mobile (F-74), Notiz, Geprüft (A-0111) |
-|M5 Verleih | teilweise | | 02.11.2026 | Leihe und Verleih durch die IT (F-30, F-36, F-133, F-20) (A-0115 Teil 1); Leihanfragen und Genehmigung (F-31, F-32) (A-0118, A-0119); Meine Geräte, Kurzansicht, Datensparsamkeit (F-110 bis F-113) (A-0120 Teil 3) |
+|M5 Verleih | teilweise | | 02.11.2026 | Leihe und Verleih durch die IT (F-30, F-36, F-133, F-20) (A-0115 Teil 1); Leihanfragen und Genehmigung (F-31, F-32, F-34, F-37) (A-0118, A-0119); Meine Geräte, Kurzansicht, Datensparsamkeit (F-110 bis F-113) (A-0120 Teil 3); Ausgabe aus der Leihe und Verlängerung (F-33, F-35) (A-0122 Teil 4) |
 | M6 Signatur | offen | | | |
 | M7 Abschluss | offen | | | |
 
@@ -68,14 +70,14 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 | F-22 | M | M3, M7 | Papierweg | teilweise | Vorgang „Unterschrift offen" in Service-Schicht; Scan-Upload in M7 |
 | F-23 | M | M3 | Ausgabe nur an einen Arbeitsplatz | erfüllt | `geraete/services.py:gerat_ausgeben`, Test: `test_ausgabe_an_ort` |
 | F-24 | K | M4 | Neue Person ausstatten | erfüllt | `geraete/services.py:bedarf_uebersicht` schlägt fehlende Geräte aus dem Profil vom Lager vor (F-24, Kann); Test: `test_bedarf_zeigt_fehlende`, `test_bedarf_mit_lagerbestand`; `templates/geraete/bedarf.html` |
-| F-30 | M | M5, M6 | Admin verleiht direkt | offen | |
-| F-31 | M | M5 | Mitarbeiter fragt Leihgerät an | offen | |
-| F-32 | M | M5 | Admin entscheidet | offen | |
-| F-33 | M | M5, M6 | Leihgerät ausgeben | offen | |
-| F-34 | M | M5 | Keine Doppelbuchung | offen | |
-| F-35 | S | M5 | Verlängerung | offen | |
-| F-36 | M | M5, M7 | Überfällige Leihen | offen | |
-| F-37 | M | M5 | Anfrage zurückziehen | offen | |
+| F-30 | M | M5, M6 | Admin verleiht direkt | teilweise | `geraete/services.py:leih_gerat_ausgeben` (F-30); Signatur (F-130) in M6 |
+| F-31 | M | M5 | Mitarbeiter fragt Leihgerät an | erfüllt | `geraete/services.py:leih_anfragen`, `geraete/views.py:leih_anfragen_zeige`, Test: `LeiheServiceTests` |
+| F-32 | M | M5 | Admin entscheidet | erfüllt | `geraete/services.py:leih_genehmigen`, `leih_ablehnen`, Test: `LeiheServiceTests` |
+| F-33 | M | M5, M6 | Leihgerät ausgeben | teilweise | `geraete/services.py:leih_ausgeben` (F-33, F-21, F-22); Signatur (F-130) in M6 |
+| F-34 | M | M5 | Keine Doppelbuchung | erfüllt | `geraete/services.py:_gerat_ist_reserviert` (F-20, F-34); Test: `test_leihe_ausgeben_fehler_nicht_genehmigt` |
+| F-35 | S | M5 | Verlängerung | erfüllt | `geraete/services.py:leih_verlaengern` (F-35); Test: `LeiheVerlaengernTests` |
+| F-36 | M | M5, M7 | Überfällige Leihen | teilweise | `geraete/services.py:leihen_ueberfaellig` (F-36); Übersicht in M7 |
+| F-37 | M | M5 | Anfrage zurückziehen | erfüllt | `geraete/services.py:leih_zurueckziehen` (F-37); Test: `LeiheServiceTests` |
 | F-40 | M | M2 | Stammdaten ändern | erfüllt | `geraete/services.py:gerat_bearbeiten` mit `_aenderungen_erkennen` (Vergleich gegen DB-Stand); Test: `test_aendern_zeugt_vorgang_aenderung_mit_alt_neu` |
 | F-41 | M | M3 | Umzug | erfüllt | `geraete/services.py:gerat_umziehen`, Test: `test_umzug` |
 | F-42 | M | M3 | Reparatur | erfüllt | `geraete/services.py:gerat_in_reparatur_geschickt`, `gerat_reparatur_fertig` mit `ziel` (F-42), Test: `test_reparatur_start`, `test_reparatur_fertig_ziel_lager`, `test_dialog_reparatur_abschliessen_ziel_bisherige_zuordnung` |

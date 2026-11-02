@@ -19,7 +19,15 @@ from stammdaten.models import Kategorie, Ort, Person
 
 from . import services
 from .models import Gerat, GeratKonflikt, Importlauf, Leihe, Vorgang
-from .services import GeratFehler, leihe_ablehnen, leihe_anfragen, leihe_genehmigen, leihe_zurueckziehen
+from .services import (
+    GeratFehler,
+    leihe_ausgeben,
+    leihe_ablehnen,
+    leihe_anfragen,
+    leihe_genehmigen,
+    leihe_verlaengern,
+    leihe_zurueckziehen,
+)
 
 
 # --- Konten-Helfer -----------------------------------------------------------
@@ -3097,3 +3105,213 @@ class DatensparsamkeitTests(TestCase):
         self.client.force_login(self.mitarbeiter)
         answer = self.client.get("/personen/")
         self.assertEqual(answer.status_code, 403)
+
+
+# ---------------------------------------------------------------------------
+# M5 Teil 4: Ausgabe aus der Leihe und Verlängerung (F-33, F-35)
+# ---------------------------------------------------------------------------
+
+class LeiheAusgebenTests(TestCase):
+    """F-33: IT gibt eine genehmigte Leihe aus."""
+
+    def setUp(self):
+        self.kategorie, self.ablage, self.person = stammdaten_erstellen()
+        self.kategorie = self.kategorie
+        self.ablage = self.ablage
+        self.person = self.person
+        self.mitarbeiter = konto_erstellen("anna", "mitarbeiter")
+        self.mitarbeiter.person = self.person
+        self.mitarbeiter.save()
+        self.admin = konto_erstellen("admin", "admin")
+        # Gerät im Leihpool anlegen
+        self.gerat = services.gerat_anlegen(
+            kategorie=self.kategorie, hersteller="Lenovo", modell="ThinkPad", leihpool=True
+        )
+        # Leihe anfragen und genehmigen
+        self.leihe = leihe_anfragen(
+            person=self.person,
+            kat=self.kategorie,
+            beginn=date(2026, 11, 15),
+            ende=date(2026, 11, 30),
+            zweck="Projektarbeit",
+            gerat=self.gerat,
+            erzeugt_von=self.admin,
+        )
+        leihe_genehmigen(
+            self.leihe,
+            gerat=self.gerat,
+            ausgefuehrt_von=self.admin,
+        )
+        self.leihe.refresh_from_db()
+
+    def test_leihe_ausgeben_geht(self):
+        """F-33: Genehmigung → Ausgabe → Gerät „Verliehen", Leihe „ausgegeben"."""
+        leihe_ausgeben(self.leihe, ausgefuehrt_von=self.admin)
+        self.leihe.refresh_from_db()
+        self.gerat.refresh_from_db()
+        self.assertEqual(self.leihe.status, Leihe.STATUS_AUSGEGEBEN)
+        self.assertEqual(self.gerat.status, Gerat.STATUS_VERLIEHEN)
+        self.assertEqual(self.gerat.person, self.person)
+
+    def test_protokoll_entsteht(self):
+        """F-21, F-22: Protokoll im Stand scan-offen entsteht."""
+        from .models import Protokoll
+        leihe_ausgeben(self.leihe, ausgefuehrt_von=self.admin)
+        self.leihe.refresh_from_db()
+        protokoll = Protokoll.objects.filter(
+            geraet=self.gerat, person=self.person
+        ).first()
+        self.assertIsNotNone(protokoll)
+        self.assertEqual(protokoll.stand, Protokoll.STAND_SCAN_OFFEN)
+
+    def test_reservierung_endet(self):
+        """F-20: Reservierung endet bei der Ausgabe."""
+        leihe_ausgeben(self.leihe, ausgefuehrt_von=self.admin)
+        self.gerat.refresh_from_db()
+        self.assertFalse(self.gerat.reserviert)
+        self.assertIsNone(self.gerat.reserviert_bis)
+
+    def test_view_200_fuer_admin(self):
+        """F-33: /geraete/verleih/<id>/ausgeben/ antwortet für Admin mit 200."""
+        self.client.force_login(self.admin)
+        answer = self.client.get(f"/geraete/verleih/{self.leihe.id}/ausgeben/")
+        self.assertEqual(answer.status_code, 200)
+        content = answer.content.decode()
+        self.assertIn('data-test="dialog"', content)
+        self.assertIn('data-name="ausgeben"', content)
+
+    def test_view_403_fuer_mitarbeiter(self):
+        """F-33: /geraete/verleih/<id>/ausgeben/ antwortet für Mitarbeiter mit 403."""
+        self.client.force_login(self.mitarbeiter)
+        answer = self.client.get(f"/geraete/verleih/{self.leihe.id}/ausgeben/")
+        self.assertEqual(answer.status_code, 403)
+
+    def test_post_ausgeben(self):
+        """F-33: POST gibt die Leihe aus."""
+        self.client.force_login(self.admin)
+        answer = self.client.post(
+            f"/geraete/verleih/{self.leihe.id}/ausgeben/",
+            {"bestätigung": "on"},
+        )
+        self.assertEqual(answer.status_code, 302)
+        self.leihe.refresh_from_db()
+        self.assertEqual(self.leihe.status, Leihe.STATUS_AUSGEGEBEN)
+
+    def test_leihe_ausgeben_fehler_nicht_genehmigt(self):
+        """F-33: Leihe muss genehmigt sein."""
+        from datetime import date
+        leihe_neu = Leihe.objects.create(
+            kat=self.kategorie,
+            person=self.person,
+            beginn=date(2026, 12, 1),
+            ende=date(2026, 12, 15),
+            rueckgabe_bis=date(2026, 12, 15),
+            zweck="Test",
+            status=Leihe.STATUS_ANGEFRAGT,
+        )
+        with self.assertRaises(GeratFehler):
+            leihe_ausgeben(leihe_neu, ausgefuehrt_von=self.admin)
+
+
+class LeiheVerlaengernTests(TestCase):
+    """F-35: Mitarbeiter fragt Verlängerung an; IT gewährt oder lehnt ab."""
+
+    def setUp(self):
+        self.kategorie, self.ablage, self.person = stammdaten_erstellen()
+        self.mitarbeiter = konto_erstellen("anna", "mitarbeiter")
+        self.mitarbeiter.person = self.person
+        self.mitarbeiter.save()
+        self.admin = konto_erstellen("admin", "admin")
+        self.gerat = services.gerat_anlegen(
+            kategorie=self.kategorie, hersteller="Lenovo", modell="ThinkPad", leihpool=True
+        )
+        # Leihe anfragen, genehmigen und ausgeben
+        self.leihe = leihe_anfragen(
+            person=self.person,
+            kat=self.kategorie,
+            beginn=date(2026, 11, 15),
+            ende=date(2026, 11, 30),
+            zweck="Projektarbeit",
+            gerat=self.gerat,
+            erzeugt_von=self.admin,
+        )
+        leihe_genehmigen(self.leihe, gerat=self.gerat, ausgefuehrt_von=self.admin)
+        leihe_ausgeben(self.leihe, ausgefuehrt_von=self.admin)
+        self.leihe.refresh_from_db()
+
+    def test_verlaengern_geht(self):
+        """F-35: Verlängerung ohne Folgereservierung verschiebt das Rückgabedatum."""
+        new_date = date(2026, 12, 15)
+        leihe_verlaengern(
+            self.leihe,
+            rueckgabe_bis_neu=new_date,
+            ausgefuehrt_von=self.admin,
+        )
+        self.leihe.refresh_from_db()
+        self.assertEqual(self.leihe.rueckgabe_bis, new_date)
+
+    def test_verlaengern_mit_folgereservierung_abgelehnt(self):
+        """F-35: Verlängerung mit Folgereservierung wird abgelehnt."""
+        # Folgereservierung anlegen: zweite genehmigte Leihe für das Gerät
+        # mit Zeitraum nach dem gewünschten neuen Rückgabedatum
+        person2 = Person.objects.create(
+            vorname="Max", nachname="Mustermann", email="max.mustermann@beispiel.test"
+        )
+        leihe2 = Leihe.objects.create(
+            kat=self.kategorie,
+            person=person2,
+            beginn=date(2026, 12, 10),
+            ende=date(2026, 12, 20),
+            rueckgabe_bis=date(2026, 12, 20),
+            zweck="Folgereservierung",
+            gerat=self.gerat,
+            genehmigt=True,
+            status=Leihe.STATUS_GENEHMIGT,
+        )
+        # Reservierung setzen
+        self.gerat.reserviert = True
+        self.gerat.reserviert_bis = date(2026, 12, 20)
+        self.gerat.save()
+
+        with self.assertRaises(GeratFehler):
+            leihe_verlaengern(
+                self.leihe,
+                rueckgabe_bis_neu=date(2026, 12, 15),
+                ausgefuehrt_von=self.admin,
+            )
+
+    def test_verlaengern_datum_nicht_vergangen(self):
+        """F-35: Neues Rückgabedatum muss nach dem alten liegen."""
+        with self.assertRaises(GeratFehler):
+            leihe_verlaengern(
+                self.leihe,
+                rueckgabe_bis_neu=date(2026, 11, 1),
+                ausgefuehrt_von=self.admin,
+            )
+
+    def test_view_200_fuer_admin(self):
+        """F-35: /geraete/verleih/<id>/verlaengern/ antwortet für Admin mit 200."""
+        self.client.force_login(self.admin)
+        answer = self.client.get(f"/geraete/verleih/{self.leihe.id}/verlaengern/")
+        self.assertEqual(answer.status_code, 200)
+        content = answer.content.decode()
+        self.assertIn('data-test="dialog"', content)
+        self.assertIn('data-name="verlaengern"', content)
+
+    def test_view_403_fuer_mitarbeiter(self):
+        """F-35: /geraete/verleih/<id>/verlaengern/ antwortet für Mitarbeiter mit 403."""
+        self.client.force_login(self.mitarbeiter)
+        answer = self.client.get(f"/geraete/verleih/{self.leihe.id}/verlaengern/")
+        self.assertEqual(answer.status_code, 403)
+
+    def test_post_verlaengern(self):
+        """F-35: POST verlängert die Leihe."""
+        self.client.force_login(self.admin)
+        new_date = date(2026, 12, 15)
+        answer = self.client.post(
+            f"/geraete/verleih/{self.leihe.id}/verlaengern/",
+            {"rueckgabe_bis_neu": new_date.strftime("%Y-%m-%d"), "bestätigung": "on"},
+        )
+        self.assertEqual(answer.status_code, 302)
+        self.leihe.refresh_from_db()
+        self.assertEqual(self.leihe.rueckgabe_bis, new_date)

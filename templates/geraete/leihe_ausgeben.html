@@ -1,0 +1,41 @@
+{% extends "basis.html" %}
+
+{% block titel %}Leihe ausgeben · WMC Inventar{% endblock %}
+
+{% block inhalt %}
+<div class="page-head">
+    <div><h1>Leihe ausgeben</h1>
+        <p class="lead">Ein genehmigtes Leihgerät ausgeben (F-33, F-21, F-22).</p>
+    </div>
+</div>
+
+<div class="card" data-test="dialog" data-name="ausgeben">
+    <div class="card-head">
+        <h2>Leihe {{ leihe.nr }} ausgeben</h2>
+    </div>
+    <div class="card-body">
+        <p class="muted">
+            Gerät: {{ leihe.gerat.inventarnummer }} ({{ leihe.gerat.modell }}) ·
+            Person: {{ leihe.person.vorname }} {{ leihe.person.nachname }} ·
+            Rückgabe bis: {{ leihe.rueckgabe_bis|date:"d.m.Y" }} ·
+            Zweck: {{ leihe.zweck }}
+        </p>
+
+        {% if fehler %}
+        <div data-test="fehler" class="error-box">{{ fehler }}</div>
+        {% endif %}
+
+        <form method="post" novalidate>
+            {% csrf_token %}
+            <label class="field">
+                <span>Ausgabe bestätigen <span class="erforderlich">*</span></span>
+                <input type="checkbox" name="bestätigung" required data-test="bestaetigung">
+            </label>
+            <div class="form-actions">
+                <a href="{% url 'geraete:verleih-liste' %}" class="btn">Abbrechen</a>
+                <button type="submit" class="btn primary" data-test="ausgeben">Ausgeben</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

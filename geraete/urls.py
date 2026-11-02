@@ -34,5 +34,8 @@ urlpatterns = [
     # M5 Teil 2: Anfrage und Entscheidung (F-31, F-32, F-34, F-37)
     path("verleih/<int:leih_id>/genehmigen/", views.leihe_genehmigen_zeige, name="leih_genehmigen"),
     path("verleih/<int:leih_id>/ablehnen/", views.leihe_ablehnen_zeige, name="leih_ablehnen"),
+    # M5 Teil 4: Ausgabe aus der Leihe und Verlängerung (F-33, F-35)
+    path("verleih/<int:leih_id>/ausgeben/", views.leihe_ausgeben_zeige, name="leih_ausgeben"),
+    path("verleih/<int:leih_id>/verlaengern/", views.leihe_verlaengern_zeige, name="leih_verlaengern"),
     path("<slug:inventarnummer>/verleih/", views.verleih_zeige, name="verleih"),
 ]

@@ -540,3 +540,35 @@ class LeiheZurueckziehenForm(forms.Form):
         required=True,
         widget=forms.CheckboxInput(attrs={"data-test": "bestaetigung"}),
     )
+
+
+class LeiheAusgebenForm(forms.Form):
+    """M5 Teil 4 (F-33): IT gibt eine genehmigte Leihe aus."""
+
+    bestätigung = forms.BooleanField(
+        label="Ausgabe bestätigen",
+        required=True,
+        widget=forms.CheckboxInput(attrs={"data-test": "bestaetigung"}),
+    )
+
+
+class LeiheVerlaengernForm(forms.Form):
+    """M5 Teil 4 (F-35): IT gewährt oder lehnt Verlängerung ab."""
+
+    rueckgabe_bis_neu = forms.DateField(
+        label="Neues Rückgabedatum",
+        required=True,
+        widget=forms.DateInput(
+            attrs={"data-test": "rueckgabe-bis-neu", "type": "date"}
+        ),
+    )
+    bestätigung = forms.BooleanField(
+        label="Verlängerung bestätigen",
+        required=True,
+        widget=forms.CheckboxInput(attrs={"data-test": "bestaetigung"}),
+    )
+
+    def __init__(self, *args, leihe=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if leihe is not None and leihe.rueckgabe_bis:
+            self.fields["rueckgabe_bis_neu"].initial = leihe.rueckgabe_bis
