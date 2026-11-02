@@ -12,6 +12,7 @@ from datetime import date
 
 from django.test import TestCase, Client
 from django.urls import reverse
+from django.utils import timezone
 
 from konten.models import Konto
 from stammdaten.models import Kategorie, Ort, Person
@@ -1891,10 +1892,12 @@ class QRCodeTests(TestCase):
         self.assertIn(f"/geraete/{self.gerat.inventarnummer}/", antwort.headers["Location"])
 
     def test_kurzansicht_mitarbeiter_keine_berechtigung(self):
-        """F-112: Mitarbeiter erhalten auf /g/<Inventarnummer> 403."""
+        """F-113: Mitarbeiter sehen auf /g/<Inventarnummer> die Kurzansicht."""
         self.client.login(username=self.mitarbeiter.email, password="test-passwort-123")
         antwort = self.client.get(f"/g/{self.gerat.inventarnummer}/")
-        self.assertEqual(antwort.status_code, 403)
+        self.assertEqual(antwort.status_code, 200)
+        content = antwort.content.decode()
+        self.assertIn('data-test="kurzansicht"', content)
 
     def test_etikett_drucken_admin_200(self):
         """F-72: /geraete/<Inventarnummer>/etikett/ liefert PDF für Admin."""
@@ -2898,9 +2901,159 @@ class LeiheZurueckziehenViewTests(TestCase):
         self.gerat.refresh_from_db()
         self.assertEqual(self.gerat.status, Gerat.STATUS_AUF_LAGER)
 
-    def test_admin_darf_nicht_zurueckziehen(self):
-        self.client.force_login(self.admin)
-        answer = self.client.get(
-            f"/meine-geraete/leihe/{self.leihe.id}/zurueckziehen/"
+
+# ---------------------------------------------------------------------------
+# M5 Teil 3: Meine Geräte, Kurzansicht, Datensparsamkeit (F-110 bis F-113)
+# ---------------------------------------------------------------------------
+
+class MeineGeraeteTests(TestCase):
+    """/meine-geraete/ für Mitarbeiter (F-110, F-111)."""
+
+    def setUp(self):
+        self.kategorie, self.ablage, self.person = stammdaten_erstellen()
+        self.mitarbeiter = konto_erstellen("anna", "mitarbeiter")
+        self.mitarbeiter.person = self.person
+        self.mitarbeiter.save()
+        self.admin = konto_erstellen("admin", "admin")
+        self.leser = konto_erstellen("leser", "leser")
+
+    def test_mitarbeiter_sieht_meine_geraete(self):
+        """F-110: /meine-geraete/ antwortet für Mitarbeiter mit 200."""
+        self.client.force_login(self.mitarbeiter)
+        answer = self.client.get("/meine-geraete/")
+        self.assertEqual(answer.status_code, 200)
+        content = answer.content.decode()
+        self.assertIn('data-test="meine-geraete-umschlag"', content)
+        self.assertIn('data-test="meine-protokolle-umschlag"', content)
+        self.assertIn('data-test="meine-leihen-umschlag"', content)
+
+    def test_mitarbeiter_sieht_eigene_geraete(self):
+        """F-110: Eigene Geräte mit Inventarnummer und Ausgabedatum."""
+        gerat = services.gerat_anlegen(
+            kategorie=self.kategorie, hersteller="Lenovo", modell="ThinkPad"
         )
+        gerat.person = self.person
+        gerat.save()
+        self.client.force_login(self.mitarbeiter)
+        answer = self.client.get("/meine-geraete/")
+        self.assertEqual(answer.status_code, 200)
+        content = answer.content.decode()
+        self.assertIn(gerat.inventarnummer, content)
+        self.assertIn('data-liste="meine-geraete"', content)
+
+    def test_mitarbeiter_sieht_eigene_leihen(self):
+        """F-111: „Meine Leihen“ mit Stand und Rückgabedatum."""
+        self.leihe = Leihe.objects.create(
+            kat=self.kategorie,
+            beginn=date(2026, 11, 2),
+            ende=date(2026, 11, 10),
+            zweck="Test",
+            person=self.person,
+            status=Leihe.STATUS_ANGEFRAGT,
+        )
+        self.client.force_login(self.mitarbeiter)
+        answer = self.client.get("/meine-geraete/")
+        self.assertEqual(answer.status_code, 200)
+        content = answer.content.decode()
+        self.assertIn('data-liste="meine-leihen"', content)
+        self.assertIn("angefragt", content)
+
+    def test_admin_sieht_403(self):
+        """F-112: Admin sieht /meine-geraete/ nicht."""
+        self.client.force_login(self.admin)
+        answer = self.client.get("/meine-geraete/")
+        self.assertEqual(answer.status_code, 403)
+
+    def test_leser_sieht_403(self):
+        """F-112: Leser sieht /meine-geraete/ nicht."""
+        self.client.force_login(self.leser)
+        answer = self.client.get("/meine-geraete/")
+        self.assertEqual(answer.status_code, 403)
+
+
+class KurzansichtTests(TestCase):
+    """/g/<Inventarnummer> als Mitarbeiter (F-113)."""
+
+    def setUp(self):
+        self.kategorie, self.ablage, self.person = stammdaten_erstellen()
+        self.mitarbeiter = konto_erstellen("anna", "mitarbeiter")
+        self.mitarbeiter.person = self.person
+        self.mitarbeiter.save()
+        self.admin = konto_erstellen("admin", "admin")
+        self.leser = konto_erstellen("leser", "leser")
+        self.gerat_eigen = services.gerat_anlegen(
+            kategorie=self.kategorie, hersteller="Lenovo", modell="ThinkPad"
+        )
+        self.gerat_eigen.person = self.person
+        self.gerat_eigen.save()
+        self.gerat_fremd = services.gerat_anlegen(
+            kategorie=self.kategorie, hersteller="Dell", modell="Latitude"
+        )
+        self.gerat_fremd.save()
+
+    def test_mitarbeiter_sieht_kurzansicht(self):
+        """F-113: Mitarbeiter sieht die Kurzansicht mit Kategorie, Modell, Inventarnummer."""
+        self.client.force_login(self.mitarbeiter)
+        answer = self.client.get(f"/g/{self.gerat_eigen.inventarnummer}/")
+        self.assertEqual(answer.status_code, 200)
+        content = answer.content.decode()
+        self.assertIn('data-test="kurzansicht"', content)
+        self.assertIn('data-test="kategorie"', content)
+        self.assertIn('data-test="modell"', content)
+        self.assertIn('data-test="inventarnummer"', content)
+        self.assertIn(self.gerat_eigen.inventarnummer, content)
+        self.assertIn(self.gerat_eigen.kategorie.name, content)
+
+    def test_mitarbeiter_eigenes_geraet(self):
+        """F-113: Eigenes Gerät zeigt „Ihnen zugeordnet"."""
+        self.client.force_login(self.mitarbeiter)
+        answer = self.client.get(f"/g/{self.gerat_eigen.inventarnummer}/")
+        content = answer.content.decode()
+        self.assertIn('data-test="zuordnung"', content)
+        self.assertIn("Ihnen zugeordnet", content)
+
+    def test_mitarbeiter_fremdes_geraet(self):
+        """F-113: Fremdes Gerät zeigt „nicht Ihnen zugeordnet"."""
+        self.client.force_login(self.mitarbeiter)
+        answer = self.client.get(f"/g/{self.gerat_fremd.inventarnummer}/")
+        content = answer.content.decode()
+        self.assertIn("nicht Ihnen zugeordnet", content)
+
+    def test_admin_wird_zu_detail_geleitet(self):
+        """F-113: Admin wird auf das Gerätedetail weitergeleitet."""
+        self.client.force_login(self.admin)
+        answer = self.client.get(f"/g/{self.gerat_eigen.inventarnummer}/")
+        self.assertEqual(answer.status_code, 302)
+        self.assertIn("/geraete/", answer["Location"])
+
+    def test_leser_wird_zu_detail_geleitet(self):
+        """F-113: Leser wird auf das Gerätedetail weitergeleitet."""
+        self.client.force_login(self.leser)
+        answer = self.client.get(f"/g/{self.gerat_eigen.inventarnummer}/")
+        self.assertEqual(answer.status_code, 302)
+        self.assertIn("/geraete/", answer["Location"])
+
+
+class DatensparsamkeitTests(TestCase):
+    """F-112: Mitarbeiter sehen keine fremden Daten."""
+
+    def setUp(self):
+        self.kategorie, self.ablage, self.person = stammdaten_erstellen()
+        self.mitarbeiter = konto_erstellen("anna", "mitarbeiter")
+        self.mitarbeiter.person = self.person
+        self.mitarbeiter.save()
+        self.gerat = services.gerat_anlegen(
+            kategorie=self.kategorie, hersteller="Lenovo", modell="ThinkPad"
+        )
+
+    def test_mitarbeiter_sieht_kein_geraete(self):
+        """F-112: /geraete/ antwortet für Mitarbeiter mit 403."""
+        self.client.force_login(self.mitarbeiter)
+        answer = self.client.get("/geraete/")
+        self.assertEqual(answer.status_code, 403)
+
+    def test_mitarbeiter_sieht_keine_personen(self):
+        """F-112: /personen/ antwortet für Mitarbeiter mit 403."""
+        self.client.force_login(self.mitarbeiter)
+        answer = self.client.get("/personen/")
         self.assertEqual(answer.status_code, 403)

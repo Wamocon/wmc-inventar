@@ -1,0 +1,81 @@
+{% extends "basis.html" %}
+
+{% block titel %}Meine Geräte · WMC Inventar{% endblock %}
+
+{% block inhalt %}
+<div class="page-head">
+    <div>
+        <h1>Meine Geräte</h1>
+        <p class="lead muted">Ihre Geräte, Ihre Protokolle und Ihre Leihen.</p>
+    </div>
+    <div class="actions">
+        <a class="btn" data-test="leihe-anfragen" href="/meine-geraete/leihe/neu/">Leihgerät anfragen</a>
+    </div>
+</div>
+
+<section class="abschnitt" data-test="meine-geraete-umschlag">
+    <h2>Meine Geräte</h2>
+    {% if geraete %}
+    <div class="liste" data-test="liste" data-liste="meine-geraete">
+        {% for eintrag in geraete %}
+        <div class="zeile" data-test="zeile" data-id="{{ eintrag.gerat.inventarnummer }}">
+            <span class="inv num">{{ eintrag.gerat.inventarnummer }}</span>
+            <span>
+                <span class="muted">Ausgabe: {{ eintrag.ausgabe_datum|default:"—" }}</span>
+                {% if eintrag.protokoll %}
+                <a data-test="protokoll-pdf" href="/protokolle/{{ eintrag.protokoll.nr }}/pdf/">Protokoll (PDF)</a>
+                {% else %}
+                <span class="muted">noch ohne Protokoll</span>
+                {% endif %}
+            </span>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">Ihnen sind keine Geräte ausgegeben.</p>
+    {% endif %}
+</section>
+
+<section class="abschnitt" data-test="meine-protokolle-umschlag">
+    <h2>Meine Protokolle</h2>
+    {% if protokolle %}
+    <div class="liste" data-test="liste" data-liste="meine-protokolle">
+        {% for protokoll in protokolle %}
+        <div class="zeile" data-test="zeile" data-id="{{ protokoll.nr }}">
+            <span class="num">{{ protokoll.nr }}</span>
+            <span>
+                {% if protokoll.datum %}<span class="muted">{{ protokoll.datum|date:"d.m.Y" }}</span>{% endif %}
+            </span>
+            <a data-test="protokoll-pdf" href="/protokolle/{{ protokoll.nr }}/pdf/">PDF</a>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">Noch keine Protokolle.</p>
+    {% endif %}
+</section>
+
+<section class="abschnitt" data-test="meine-leihen-umschlag">
+    <h2>Meine Leihen</h2>
+    {% if leihen %}
+    <div class="liste" data-test="liste" data-liste="meine-leihen">
+        {% for leihe in leihen %}
+        <div class="zeile" data-test="zeile" data-id="{{ leihe.id }}" data-stand="{{ leihe.status }}">
+            <span>
+                <span class="chip-status {{ leihe.status_class }}">{{ leihe.stand_anzeige }}</span>
+            </span>
+            <span>
+                <span class="muted">Rückgabe bis: {{ leihe.rueckgabe_bis|date:"d.m.Y" }}</span>
+                {% if leihe.zweck %}<span class="muted"> · {{ leihe.zweck }}</span>{% endif %}
+            </span>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">
+        Sie haben keine Leihen.
+        <a data-test="leihe-anfragen" href="/meine-geraete/leihe/neu/">Leihgerät anfragen</a>
+    </p>
+    {% endif %}
+</section>
+{% endblock %}

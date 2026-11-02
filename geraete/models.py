@@ -418,13 +418,14 @@ class Leihe(models.Model):
     # A-0118 (F-37): Aus diesen Zuständen darf die Leihe zurückgezogen werden.
     ZURUECKZIEHBAR = (STATUS_ANGEFRAGT, STATUS_GENEHMIGT)
 
-    def stand_anzeige(self, ueberfaellig: bool = False) -> str:
+    @property
+    def stand_anzeige(self) -> str:
         """Anzeigetext des Stands (TESTSCHNITTSTELLE 5).
 
         Eine ausgegebene Leihe zeigt nach Ablauf der Frist „überfällig“
-        (F-36), sonst „ausgegeben“.
+        (F-36), sonst den Stand.
         """
-        if self.status == self.STATUS_AUSGEGEBEN and ueberfaellig:
+        if self.status == self.STATUS_AUSGEGEBEN and getattr(self, "ueberfaellig", False):
             return "überfällig"
         return self.STAND_ANZEIGE.get(self.status, self.status)
 

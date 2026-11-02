@@ -1,6 +1,6 @@
 # Übergabe WMCNL-2755
 
-Ausgefüllt von: Gregor · Datum: 01.11.2026 · Zweig: gregor/inventar · Letzter Commit: (siehe git log)
+Ausgefüllt von: Gregor · Datum: 02.11.2026 · Zweig: gregor/inventar · Letzter Commit: (siehe git log)
 
 ## Zusammenfassung
 
@@ -29,6 +29,8 @@ M5 Nachbesserung (A-0116): `/verleih/` trägt `data-test="liste"` und je Zeile `
 
 M5 Nachbesserung (A-0117): Listen und Erstinventur nach TESTSCHNITTSTELLE Kapitel 4. Jede Liste trägt ein Element mit `data-test="liste"` und jede Zeile `data-test="zeile" data-id`; die bisherigen Markierungen bleiben. Geräte: `templates/geraete/liste.html` trägt `data-test="liste" data-liste="geraete-liste"` und je Zeile `data-test="zeile" data-id="{{ g.inventarnummer }}"`; `inventur-fortschritt` trägt `ist` und `gesamt` als Elemente (Kapitel 4, F-89). Personen: `templates/stammdaten/personen_liste.html` trägt `data-test="liste" data-liste="personen-liste"` und je Zeile `data-test="zeile" data-id="{{ p.pk }}"`. Arbeitsplätze: `templates/geraete/arbeitsplaetze_liste.html` trägt `data-test="liste" data-liste="arbeitsplaetze-liste"` und je Zeile `data-test="zeile" data-id="{{ z.ort.kennung }}"`. Konten: `templates/konten/konten_liste.html` trägt `data-test="liste" data-liste="konten-liste"` und je Zeile `data-test="zeile" data-id="{{ k.pk }}"`. Kategorien: `templates/stammdaten/kategorien_liste.html` trägt `data-test="liste" data-liste="kategorien-liste"` und je Zeile `data-test="zeile" data-id="{{ k.pk }}"`. Orte: `templates/stammdaten/orte_liste.html` trägt `data-test="liste" data-liste="orte-liste"` und je Zeile `data-test="zeile" data-id="{{ o.kennung }}"`. Offboarding: `templates/stammdaten/offboarding.html` trägt `data-test="liste" data-liste="offboarding-geraete"` und je Zeile `data-test="zeile" data-id="{{ g.inventarnummer }}"`. `docs/UEBERGABE.md` aktualisiert. Alle 221 Tests sind grün.
 
+M5 Verleih Teil 3 (A-0120): Meine Geräte, Kurzansicht, Datensparsamkeit (F-110 bis F-113). `/meine-geraete/` zeigt Mitarbeitern ihre eigenen Geräte mit Inventarnummer, Ausgabedatum und Protokoll-PDF (F-110), die eigenen Protokolle und „Meine Leihen" mit Stand und Rückgabedatum (F-111). `/g/<Inventarnummer>` zeigt Mitarbeitern die Kurzansicht mit Kategorie, Modell, Inventarnummer und „Ihnen zugeordnet" oder „nicht Ihnen zugeordnet" (F-113). Mitarbeiter sehen keine Preise, keine anderen Personen und keine Admin-Funktionen; `/geraete/`, `/personen/` und Protokoll und PDF einer anderen Person antworten mit 403 (F-112). `geraete/views.py:meine_geraete_zeige` (F-110, F-111), `geraete/views.py:gerat_kurz` (F-113, Kurzansicht für Mitarbeiter), `geraete/views.py:liste` (403 für Mitarbeiter, F-112), `stammdaten/views.py:personen_liste` (403 für Mitarbeiter, F-112), `templates/geraete/meine_geraete.html` (Meine Geräte, Meine Protokolle, Meine Leihen), `templates/geraete/kurzansicht.html` (Kurzansicht), `geraete/tests.py` (12 neue Tests: `MeineGeraeteTests` 5, `KurzansichtTests` 5, `DatensparsamkeitTests` 2). Alle 251 Tests sind grün.
+
 **Nicht Teil dieser Karte (A-0099):**
 - **Protokoll in einem Vorgang (F-130):** Kommt mit M6; die Rückgabe-Ansicht im Offboarding zeigt keine Protokollfunktion.
 - **Deaktivieren des Kontos am Tag nach dem Austritt (F-53):** Ist ein Befehl für den Tageslauf und nicht Teil dieser Karte. `austritt_speichern` setzt `person.aktiv=False`, das Konto-Deaktivieren ist ein separater Tageslauf-Auftrag.
@@ -41,7 +43,7 @@ M5 Nachbesserung (A-0117): Listen und Erstinventur nach TESTSCHNITTSTELLE Kapite
 | M2 Bestand | fertig | a3a85da | 31.10.2026 | Geräte erfassen, bearbeiten, prüfen, Suche, Konflikte, Arbeitsliste; Historie (F-40), Mehrfacherfassung (F-11), Vorlage (F-13) (A-0112); Import Vorschau (A-0113); Import speichern (F-84 bis F-88) (A-0114) |
 | M3 Lebenszyklus | fertig | | 28.10.2026 | Ausgabe, Rückgabe, Umzug, Reparatur, Ausmusterung, Vorgang-Historie, Gerätedetail-Aktionen (A-0074), Vorgänge als Dialoge (A-0075), Formulare und Fehlermeldungen (A-0097), Historie/Suche/Zustand/Konten (A-0098), Offboarding/Austritt/Löschen (A-0099) |
 | M4 Arbeitsplätze | fertig | a13dc17 | 30.10.2026 | Soll-Ist-Abgleich (F-62), Bedarf (F-63), Feste Person (F-64), Erstinventur (F-89); Raumplan (F-65, F-66, F-68, F-69) mit Pop-up und `aktion-im-raumplan`; Plan pflegen (F-67) mit Upload und Position (A-0107); QR-Code, Etiketten, PDF-Druck (A-0108); Mobile (F-74), Notiz, Geprüft (A-0111) |
-| M5 Verleih | teilweise | | 01.11.2026 | Leihe und Verleih durch die IT (F-30, F-36, F-133, F-20) (A-0115 Teil 1); Leihanfragen und Genehmigung (F-31, F-32) in Teil 2 |
+|M5 Verleih | teilweise | | 02.11.2026 | Leihe und Verleih durch die IT (F-30, F-36, F-133, F-20) (A-0115 Teil 1); Leihanfragen und Genehmigung (F-31, F-32) (A-0118, A-0119); Meine Geräte, Kurzansicht, Datensparsamkeit (F-110 bis F-113) (A-0120 Teil 3) |
 | M6 Signatur | offen | | | |
 | M7 Abschluss | offen | | | |
 
@@ -125,10 +127,10 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 | F-103 | M | M7 | Export | offen | |
 | F-104 | S | M7 | Inventarwert | offen | |
 | F-105 | K | M7 | Schnittstelle für die Schaltzentrale | offen | |
-| F-110 | M | M5 | Meine Geräte | offen | |
-| F-111 | M | M5 | Leihen | offen | |
-| F-112 | M | M5 | Datensparsamkeit | offen | |
-| F-113 | S | M5 | QR-Scan als Mitarbeiter | offen | |
+| F-110 | M | M5 | Meine Geräte | erfüllt | `geraete/views.py:meine_geraete_zeige`, `templates/geraete/meine_geraete.html`, Tests: `MeineGeraeteTests` (5) |
+| F-111 | M | M5 | Leihen | erfüllt | `geraete/views.py:meine_geraete_zeige` (Meine Leihen), `templates/geraete/meine_geraete.html`, Tests: `MeineGeraeteTests` (5) |
+| F-112 | M | M5 | Datensparsamkeit | erfüllt | `geraete/views.py:liste` (403 für Mitarbeiter), `stammdaten/views.py:personen_liste` (403), Tests: `DatensparsamkeitTests` (2) |
+| F-113 | S | M5 | QR-Scan als Mitarbeiter | erfüllt | `geraete/views.py:gerat_kurz` (Kurzansicht), `templates/geraete/kurzansicht.html`, Tests: `KurzansichtTests` (5) |
 | F-120 | M | M1 | Kategorien pflegen | erfüllt | `stammdaten/views.py:kategorien_liste`, `kategorien_anlegen`, `kategorien_aendern` |
 | F-121 | M | M1 | Personen pflegen | erfüllt | `stammdaten/views.py:personen_liste`, `personen_anlegen`, `personen_aendern` |
 | F-122 | M | M7 | Einstellungen | offen | |
@@ -158,7 +160,7 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 
 ## Wie getestet
 
-Befehle mit gekürzter Ausgabe: `python manage.py test` (205 Tests, alle grün), `python manage.py check` (keine Probleme), `python manage.py migrate` (keine neuen Migrationen), `python manage.py beispieldaten --neu` (21 Kategorien, 26 Geräte, 4 Konten, 1 Raumplan mit 15 Arbeitsplätzen und 4 Räumen). `testsiegel` und `tageslauf` sind noch nicht implementiert (M6/M7).
+Befehle mit gekürzter Ausgabe: `python manage.py test` (251 Tests, alle grün), `python manage.py check` (keine Probleme), `python manage.py migrate` (keine neuen Migrationen), `python manage.py beispieldaten --neu` (21 Kategorien, 26 Geräte, 4 Konten, 1 Raumplan mit 15 Arbeitsplätzen und 4 Räumen). `testsiegel` und `tageslauf` sind noch nicht implementiert (M6/M7).
 
 ## Offene Punkte (A-0099)
 

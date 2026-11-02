@@ -32,7 +32,7 @@ from .forms import (
     GeratRueckgabeForm,
     GeratUmzugForm,
 )
-from .models import Gerat, GeratKonflikt, Vorgang
+from .models import Gerat, GeratKonflikt, Leihe, Protokoll, Vorgang
 
 
 def _qr_svg(gerat):
@@ -71,10 +71,13 @@ def _keine_berechtigung(request, pfad: str):
 @login_required
 def liste(request):
     """Liste aller Geräte (F-41): Standard aufsteigend nach Inventarnummer,
-    Filter nach Status, Ort, Kategorie, Person, Gerätename (F-40)."""
-    if not _darf_sehen(request.user):
-        meldung_error(request, "Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
-        return redirect("/")
+    Filter nach Status, Ort, Kategorie, Person, Gerätename (F-40).
+
+    Für Mitarbeiter: 403 „Keine Berechtigung" (F-112, Kapitel 2) –
+    auch für eigene Geräte; eigene Geräte stehen unter /meine-geraete/.
+    """
+    if not request.user.darf_geraete_sehen():
+        return render(request, "konten/keine_berechtigung.html", status=403)
 
     q = (request.GET.get("q") or "").strip()
     status = (request.GET.get("status") or "").strip()
@@ -155,8 +158,7 @@ def liste(request):
 def detail(request, inventarnummer: str):
     """Gerät anzeigen (F-16: Prüfung, letzte Daten, Konflikte)."""
     if not _darf_sehen(request.user):
-        meldung_error(request, "Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
-        return redirect("/")
+        return render(request, "konten/keine_berechtigung.html", status=403)
     gerat = get_object_or_404(
         Gerat.objects.select_related(
             "person", "ort",
@@ -877,19 +879,24 @@ def loeschen(request, inventarnummer: str):
 
 @login_required
 def gerat_kurz(request, inventarnummer: str):
-    """/g/<Inventarnummer>: leitet Admin und Leser nach Anmeldung weiter (F-70).
+    """/g/<Inventarnummer>: Kurzansicht für Mitarbeiter (F-113).
 
-    Die Kurzansicht für Mitarbeiter (F-113) kommt mit M5.
-    Bis dahin: Admin und Leser → /geraete/<Inventarnummer>/,
-    Mitarbeiter → "keine Berechtigung" (F-112).
+    Zeigt Kategorie, Modell, Inventarnummer und
+    „Ihnen zugeordnet" oder „nicht Ihnen zugeordnet" – sonst nichts.
+    Für Admin und Leser leitet weiter zu /geraete/<Inventarnummer>/ (F-70).
     """
     if not _darf_sehen(request.user):
         meldung_error(request, "Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
         return redirect("/")
     if request.user.ist_mitarbeiter:
-        # F-112: Ein direkter Aufruf fremder Daten über die URL liefert
-        # "keine Berechtigung". F-113 (Kurzansicht) kommt mit M5.
-        raise PermissionDenied("Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
+        gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
+        person = request.user.person
+        Ihnen_zugeordnet = person is not None and gerat.person_id == person.id
+        return render(
+            request,
+            "geraete/kurzansicht.html",
+            {"gerat": gerat, "Ihnen_zugeordnet": Ihnen_zugeordnet},
+        )
     return redirect(f"/geraete/{inventarnummer}/")
 
 
@@ -1086,7 +1093,7 @@ def verleih_liste(request):
         .select_related("gerat", "person", "kat")
         .order_by("-zeitpunkt")
     )
-    ueberfaellige = {l.id for l in leihen_ueberfaellig()}
+    ueberfaellige = {l.id for l in services.leihen_ueberfaellig()}
 
     return render(
         request,
@@ -1124,14 +1131,61 @@ def _freie_je_kategorie(beginn, ende, pool_qs):
 
 @login_required
 def meine_geraete_zeige(request):
-    """/meine-geraete/ – Geräte des Mitarbeiters (F-95, F-112)."""
+    """/meine-geraete/ – Meine Geräte (F-110, F-111, Kapitel 3).
+
+    Zeigt die eigenen Geräte mit Inventarnummer, Ausgabedatum und
+    Protokoll-PDF, die eigenen Protokolle und „Meine Leihen“ mit Stand,
+    Rückgabedatum und dem Weg zu „Leihgerät anfragen“.
+    Mitarbeiter: 200; Admin und Leser: 403 (F-112).
+    """
     if not _ist_mitarbeiter(request):
         raise PermissionDenied
-    geräte = Gerat.objects.filter(person=request.user.person).order_by("inventarnummer")
+    person = request.user.person
+
+    geräte = list(Gerat.objects.filter(person=person).order_by("inventarnummer"))
+
+    ausgaben = {}
+    protokoll_je_gerat = {}
+    for vorgang in Vorgang.objects.filter(
+        typ=Vorgang.TYP_AUSGABE, gerat__person=person
+    ).order_by("-zeitpunkt"):
+        if vorgang.gerat_id not in ausgaben:
+            ausgaben[vorgang.gerat_id] = vorgang
+        if vorgang.protokoll_id and vorgang.gerat_id not in protokoll_je_gerat:
+            protokoll_je_gerat[vorgang.gerat_id] = vorgang
+
+    def _eintrag(gerat):
+        vorgang_ausgabe = ausgaben.get(gerat.id)
+        return {
+            "gerat": gerat,
+            "ausgabe_datum": vorgang_ausgabe.zeitpunkt.date() if vorgang_ausgabe else None,
+            "protokoll": protokoll_je_gerat.get(gerat.id).protokoll
+            if gerat.id in protokoll_je_gerat
+            else None,
+        }
+
+    gerate_eintraege = [_eintrag(gerat) for gerat in geräte]
+
+    protokolle = list(
+        Protokoll.objects.filter(person=person)
+        .order_by("-datum")
+    )
+
+    leihen = list(
+        Leihe.objects.filter(person=person).order_by("-zeitpunkt")
+    )
+    ueberfaellige = {l.id for l in services.leihen_ueberfaellig()}
+    for leihe in leihen:
+        leihe.ueberfaellig = leihe.id in ueberfaellige
+
     return render(
         request,
         "geraete/meine_geraete.html",
-        {"geraete": geräte},
+        {
+            "geraete": gerate_eintraege,
+            "protokolle": protokolle,
+            "leihen": leihen,
+        },
     )
 
 
