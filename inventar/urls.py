@@ -37,5 +37,11 @@ urlpatterns = [
     path("import/speichern/", import_views.import_speichern_view, name="import-speichern"),
     # M5 Verleih (F-36): /verleih/ – Leihen-Übersicht, nur Admin
     path("verleih/", geraete_views.verleih_liste, name="verleih-liste"),
+    # M5 Teil 2: Meine Geräte (F-95, F-112, F-31, F-37)
+    # direkt unter /meine-geraete/ (TESTSCHNITTSTELLE Kapitel 3)
+    path("meine-geraete/", geraete_views.meine_geraete_zeige, name="meine_geraete"),
+    path("meine-geraete/alle/", geraete_views.meine_geraete_alle_zeige, name="meine_geraete_alle"),
+    path("meine-geraete/leihe/neu/", geraete_views.meine_geraete_leihe_neu, name="meine_geraete_leihe_neu"),
+    path("meine-geraete/leihe/<int:leih_id>/zurueckziehen/", geraete_views.meine_geraete_leihe_zurueckziehen, name="meine_geraete_leihe_zurueckziehen"),
     path("admin/", admin.site.urls),
 ]

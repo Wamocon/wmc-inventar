@@ -1194,7 +1194,7 @@ def meine_geraete_leihe_neu(request):
                 gerat=form.cleaned_data.get("gerat"),
                 erzeugt_von=request.user,
             )
-            return redirect("verleih-liste")
+            return redirect("/verleih/")
         except GeratFehler as fehler_vorgang:
             meldung = str(fehler_vorgang)
 
@@ -1232,7 +1232,7 @@ def meine_geraete_leihe_zurueckziehen(request, leih_id):
     if request.method == "POST" and form.is_valid():
         try:
             leihe_zurueckziehen(leihe, ausgefuehrt_von=request.user)
-            return redirect("geraete:meine_geraete")
+            return redirect("/meine-geraete/")
         except GeratFehler as fehler:
             meldung = str(fehler)
 
@@ -1276,7 +1276,7 @@ def leihe_genehmigen_zeige(request, leih_id):
                 gerat=form.cleaned_data["gerat"],
                 ausgefuehrt_von=request.user,
             )
-            return redirect("verleih-liste")
+            return redirect("/verleih/")
         except GeratFehler as fehler_vorgang:
             fehler = str(fehler_vorgang)
 
@@ -1314,7 +1314,7 @@ def leihe_ablehnen_zeige(request, leih_id):
                 begruendung=form.cleaned_data["begründung"],
                 ausgefuehrt_von=request.user,
             )
-            return redirect("verleih-liste")
+            return redirect("/verleih/")
         except GeratFehler as fehler_vorgang:
             fehler = str(fehler_vorgang)
 

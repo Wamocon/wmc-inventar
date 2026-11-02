@@ -2755,7 +2755,7 @@ class LeiheZurueckziehenServiceTests(TestCase):
 
 
 class LeiheAnfrageViewTests(TestCase):
-    """F-31: /geraete/meine-geraete/leihe/neu/ für Mitarbeiter."""
+    """F-31: /meine-geraete/leihe/neu/ für Mitarbeiter (Kapitel 3)."""
 
     def setUp(self):
         self.kategorie, self.ablage, self.person = stammdaten_erstellen()
@@ -2770,22 +2770,22 @@ class LeiheAnfrageViewTests(TestCase):
         self.gerat.save()
 
     def test_leihe_neu_antwortet_200(self):
-        answer = self.client.get("/geraete/meine-geraete/leihe/neu/")
+        answer = self.client.get("/meine-geraete/leihe/neu/")
         self.assertEqual(answer.status_code, 200)
         self.assertContains(answer, "Leihe anfragen")
 
     def test_leihe_neu_zeigt_freie_geraete(self):
-        answer = self.client.get("/geraete/meine-geraete/leihe/neu/")
+        answer = self.client.get("/meine-geraete/leihe/neu/")
         self.assertContains(answer, "freie")
 
     def test_admin_darf_nicht(self):
         admin = konto_erstellen("admin", "admin")
         self.client.force_login(admin)
-        answer = self.client.get("/geraete/meine-geraete/leihe/neu/")
+        answer = self.client.get("/meine-geraete/leihe/neu/")
         self.assertEqual(answer.status_code, 403)
 
     def test_anfrage_wird_erstellt(self):
-        answer = self.client.post("/geraete/meine-geraete/leihe/neu/", {
+        answer = self.client.post("/meine-geraete/leihe/neu/", {
             "kat": self.kategorie.id,
             "beginn": "2026-11-02",
             "ende": "2026-11-10",
@@ -2874,7 +2874,7 @@ class LeiheZurueckziehenViewTests(TestCase):
     def test_zurueckziehen_angefragt(self):
         self.client.force_login(self.mitarbeiter)
         answer = self.client.post(
-            f"/geraete/meine-geraete/leihe/{self.leihe.id}/zurueckziehen/",
+            f"/meine-geraete/leihe/{self.leihe.id}/zurueckziehen/",
             {"bestätigung": "on"},
         )
         self.assertEqual(answer.status_code, 302)
@@ -2889,7 +2889,7 @@ class LeiheZurueckziehenViewTests(TestCase):
         self.assertTrue(self.gerat.reserviert)
         self.client.force_login(self.mitarbeiter)
         answer = self.client.post(
-            f"/geraete/meine-geraete/leihe/{self.leihe.id}/zurueckziehen/",
+            f"/meine-geraete/leihe/{self.leihe.id}/zurueckziehen/",
             {"bestätigung": "on"},
         )
         self.assertEqual(answer.status_code, 302)
@@ -2901,6 +2901,6 @@ class LeiheZurueckziehenViewTests(TestCase):
     def test_admin_darf_nicht_zurueckziehen(self):
         self.client.force_login(self.admin)
         answer = self.client.get(
-            f"/geraete/meine-geraete/leihe/{self.leihe.id}/zurueckziehen/"
+            f"/meine-geraete/leihe/{self.leihe.id}/zurueckziehen/"
         )
         self.assertEqual(answer.status_code, 403)

@@ -34,9 +34,5 @@ urlpatterns = [
     # M5 Teil 2: Anfrage und Entscheidung (F-31, F-32, F-34, F-37)
     path("verleih/<int:leih_id>/genehmigen/", views.leihe_genehmigen_zeige, name="leih_genehmigen"),
     path("verleih/<int:leih_id>/ablehnen/", views.leihe_ablehnen_zeige, name="leih_ablehnen"),
-    path("meine-geraete/", views.meine_geraete_zeige, name="meine_geraete"),
-    path("meine-geraete/alle/", views.meine_geraete_alle_zeige, name="meine_geraete_alle"),
-    path("meine-geraete/leihe/neu/", views.meine_geraete_leihe_neu, name="meine_geraete_leihe_neu"),
-    path("meine-geraete/leihe/<int:leih_id>/zurueckziehen/", views.meine_geraete_leihe_zurueckziehen, name="meine_geraete_leihe_zurueckziehen"),
     path("<slug:inventarnummer>/verleih/", views.verleih_zeige, name="verleih"),
 ]
