@@ -31,6 +31,8 @@ M5 Nachbesserung (A-0117): Listen und Erstinventur nach TESTSCHNITTSTELLE Kapite
 
 M5 Verleih Teil 3 (A-0120): Meine Geräte, Kurzansicht, Datensparsamkeit (F-110 bis F-113). `/meine-geraete/` zeigt Mitarbeitern ihre eigenen Geräte mit Inventarnummer, Ausgabedatum und Protokoll-PDF (F-110), die eigenen Protokolle und „Meine Leihen" mit Stand und Rückgabedatum (F-111). `/g/<Inventarnummer>` zeigt Mitarbeitern die Kurzansicht mit Kategorie, Modell, Inventarnummer und „Ihnen zugeordnet" oder „nicht Ihnen zugeordnet" (F-113). Mitarbeiter sehen keine Preise, keine anderen Personen und keine Admin-Funktionen; `/geraete/`, `/personen/` und Protokoll und PDF einer anderen Person antworten mit 403 (F-112). `geraete/views.py:meine_geraete_zeige` (F-110, F-111), `geraete/views.py:gerat_kurz` (F-113, Kurzansicht für Mitarbeiter), `geraete/views.py:liste` (403 für Mitarbeiter, F-112), `stammdaten/views.py:personen_liste` (403 für Mitarbeiter, F-112), `templates/geraete/meine_geraete.html` (Meine Geräte, Meine Protokolle, Meine Leihen), `templates/geraete/kurzansicht.html` (Kurzansicht), `geraete/tests.py` (12 neue Tests: `MeineGeraeteTests` 5, `KurzansichtTests` 5, `DatensparsamkeitTests` 2). Alle 251 Tests sind grün.
 
+M6 Teil 1 (A-0123): Protokoll mit PDF, Fotos und Papierweg (F-130, F-132, F-133, F-134, F-22, F-21, F-51). Das Protokoll ist jetzt ein eigenes Modell mit Nummer (UP-JJJJ-NNNN), Fassung (1), Stand (scan-offen, abgeschlossen) und Art (ausgabe → FRM-001, ruecknahme → FRM-002). Es wird in der Service-Schicht angelegt: bei Ausgabe an eine Person, bei Rücknahme und bei Verleih. Das PDF entsteht mit WeasyPrint nach Aufbau und Wortlaut der Vorlagen: Absenderzeile, Empfängeranschrift, Bearbeiter, Abschnitte 1 bis 6, Checkliste Zugänge (6 Punkte, F-132), Prüfpunkte IT-Offboarding (13 Punkte, F-133), Unterschriftenblock, Fußzeile mit Formularnummer, Version und „Seite x von y". Das PDF ist erst verfügbar, wenn jeder Punkt der Checkliste beantwortet ist. Fotos je Gerät (JPG, PNG, HEIC bis 10 MB) werden verkleinert gespeichert und als Anlage hinter dem Protokoll geführt (F-134). Der Papierweg (F-22): Stand „scan-offen" → „abgeschlossen" mit dem hochgeladenen Scan über den Dialog „Scan hochladen". `/protokolle/<Nummer>/` zeigt das Protokoll mit `data-test="protokoll" data-id data-stand`; `/protokolle/<Nummer>/pdf/` liefert `application/pdf`. Mitarbeiter sehen nur eigene Protokolle (403 für fremde, F-112). `geraete/models.py:Protokoll` (neue Felder: art, fassung, formularnummer, absenderzeile, empfaenger_anschrift, bearbeiter, checkliste, offboarding, anhaenge, scan_datei, scan_am, scan_von), `geraete/protokoll.py` (checkliste_beantworten, offboarding_abhaken, foto_hochladen, scan_hochladen), `geraete/pdf.py` (erzeuge_pdf mit WeasyPrint), `geraete/services.py` (_protokoll_erstellen, _offboarding_vorbelegung), `geraete/views.py` (protokoll_detail, protokoll_pdf, protokoll_foto_hochladen, protokoll_scan_hochladen, protokoll_checkliste), `inventar/urls.py` (Routen /protokolle/<nr>/, /pdf/, /foto/, /scan/, /checkliste/), `templates/geraete/protokoll_detail.html`, `templates/geraete/meine_geraete.html` (data-stand, Details-Link), `geraete/migrations/0007_protokoll_m6teil1.py`, `geraete/migrations/0010_protokoll_m6teil1.py`, `geraete/tests.py:ProtokollAusgabeTests` (6 Tests). Alle 276 Tests sind grün.
+
 M5 Verleih Teil 4 (A-0122): Ausgabe aus der Leihe und Verlängerung (F-33, F-35, F-21, F-22). Aus einer genehmigten Leihe gibt die IT das Gerät aus (F-33): Das Protokoll entsteht wie bei der Ausgabe im Papierweg (F-21, F-22), der Status wird „Verliehen" zum selben Zeitpunkt wie dort, die Leihe steht auf „ausgegeben", und die Reservierung endet. `geraete/services.py:leih_ausgeben` (F-33, F-21, F-22, F-20), `geraete/views.py:leih_ausgeben_zeige` (Dialog „Leihe ausgeben"), `geraete/forms.py:LeiheAusgebenForm`, `templates/geraete/leih_ausgeben.html` (Dialog mit `data-test="dialog" data-name="ausgeben"`), `geraete/urls.py` (Routen `/geraete/verleih/<id>/ausgeben/` und `/geraete/verleih/<id>/verlaengern/`), `templates/geraete/verleih_liste.html` (Buttons „Ausgeben" und „Verlängern"). Die Verlängerung (F-35): Der Mitarbeiter fragt unter „Meine Leihen" eine Verlängerung an; die IT gewährt sie, wenn für das Gerät keine Folgereservierung besteht, sonst lehnt das Tool sie mit einer Meldung in fehler ab. `geraete/services.py:leih_verlaengern` (F-35), `geraete/views.py:leih_verlaengern_zeige` (Dialog „Verlängerung"), `geraete/forms.py:LeiheVerlaengernForm`, `templates/geraete/leih_verlaengern.html` (Dialog mit `data-test="dialog" data-name="verlaengern"`), `geraete/tests.py` (13 neue Tests: `LeiheAusgebenTests` 7, `LeiheVerlaengernTests` 6). Alle 268 Tests sind grün.
 
 **Nicht Teil dieser Karte (A-0099):**
@@ -46,7 +48,7 @@ M5 Verleih Teil 4 (A-0122): Ausgabe aus der Leihe und Verlängerung (F-33, F-35,
 | M3 Lebenszyklus | fertig | | 28.10.2026 | Ausgabe, Rückgabe, Umzug, Reparatur, Ausmusterung, Vorgang-Historie, Gerätedetail-Aktionen (A-0074), Vorgänge als Dialoge (A-0075), Formulare und Fehlermeldungen (A-0097), Historie/Suche/Zustand/Konten (A-0098), Offboarding/Austritt/Löschen (A-0099) |
 | M4 Arbeitsplätze | fertig | a13dc17 | 30.10.2026 | Soll-Ist-Abgleich (F-62), Bedarf (F-63), Feste Person (F-64), Erstinventur (F-89); Raumplan (F-65, F-66, F-68, F-69) mit Pop-up und `aktion-im-raumplan`; Plan pflegen (F-67) mit Upload und Position (A-0107); QR-Code, Etiketten, PDF-Druck (A-0108); Mobile (F-74), Notiz, Geprüft (A-0111) |
 |M5 Verleih | teilweise | | 02.11.2026 | Leihe und Verleih durch die IT (F-30, F-36, F-133, F-20) (A-0115 Teil 1); Leihanfragen und Genehmigung (F-31, F-32, F-34, F-37) (A-0118, A-0119); Meine Geräte, Kurzansicht, Datensparsamkeit (F-110 bis F-113) (A-0120 Teil 3); Ausgabe aus der Leihe und Verlängerung (F-33, F-35) (A-0122 Teil 4) |
-| M6 Signatur | offen | | | |
+| M6 Signatur | teilweise | | 02.11.2026 | Protokoll mit PDF, Fotos und Papierweg (F-130, F-132, F-133, F-134, F-22) (A-0123 Teil 1); Signatur, Gegenzeichnung, Prüfprotokoll, Versiegeln (F-135 bis F-141) in Teil 2 |
 | M7 Abschluss | offen | | | |
 
 ## Stand je Anforderung
@@ -66,8 +68,8 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 | F-13 | S | M2 | Gerät als Vorlage kopieren | erfüllt | `geraete/views.py:neu_anzeigen` mit `?vorlage=<Nr>`; Test: `test_vorlage_belegt_stammdaten_und_seriennummer_leer` |
 | F-14 | M | M2 | Fehlerfassung löschen | erfüllt | `geraete/views.py:loeschen`, `geraete/views.py:loeschen_zeigen`, Test: `test_admin_ohne_vorgang_kann_loeschen`, `test_admin_mit_vorgang_kann_nicht_loeschen`, `test_mitarbeiter_kann_nicht_loeschen` |
 | F-20 | M | M3 | Ein oder mehrere Geräte an eine Person und/oder einen Arbeitsplatz ausgeben | erfüllt | `geraete/services.py:gerat_ausgeben`, Test: `test_ausgabe_an_person`, `test_ausgabe_an_ort` |
-| F-21 | M | M3, M6 | Ausgabeprotokoll bei Ausgabe an eine Person | teilweise | Ausgabe in Service-Schicht vorhanden; PDF-Protokoll (FRM-001) in M6 |
-| F-22 | M | M3, M7 | Papierweg | teilweise | Vorgang „Unterschrift offen" in Service-Schicht; Scan-Upload in M7 |
+| F-21 | M | M3, M6 | Ausgabeprotokoll bei Ausgabe an eine Person | erfüllt | `geraete/services.py:gerat_ausgeben` legt Protokoll an (F-21), `geraete/pdf.py:erzeuge_pdf` erzeugt das PDF (FRM-001), Test: `ProtokollAusgabeTests.test_ausgabe_zeugt_protokoll_scan_offen` |
+| F-22 | M | M3, M6 | Papierweg | erfüllt | `geraete/protokoll.py:scan_hochladen` (Scan-Upload, Stand scan-offen → abgeschlossen), Test: `ProtokollAusgabeTests.test_scan_setzt_auf_abgeschlossen` |
 | F-23 | M | M3 | Ausgabe nur an einen Arbeitsplatz | erfüllt | `geraete/services.py:gerat_ausgeben`, Test: `test_ausgabe_an_ort` |
 | F-24 | K | M4 | Neue Person ausstatten | erfüllt | `geraete/services.py:bedarf_uebersicht` schlägt fehlende Geräte aus dem Profil vom Lager vor (F-24, Kann); Test: `test_bedarf_zeigt_fehlende`, `test_bedarf_mit_lagerbestand`; `templates/geraete/bedarf.html` |
 | F-30 | M | M5, M6 | Admin verleiht direkt | teilweise | `geraete/services.py:leih_gerat_ausgeben` (F-30); Signatur (F-130) in M6 |
@@ -84,7 +86,7 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 | F-43 | M | M2 | Historie je Gerät | erfüllt | `geraete/services.py:gerat_bearbeiten` legt je geändertem Feld einen Vorgang „Änderung“ an (F-40, A-0098); `konten/models.py:bezeichnung` zeigt Name, sonst E-Mail (F-43); Test: `test_historie_aenderungen_gezeigt`, `test_historie_zeigt_konto` |
 | F-44 | M | M2 | Globale Suche | erfüllt | `geraete/views.py:liste` mit Suchfeld `q`, Test: `test_liste_suche_nach_name` |
 | F-50 | M | M3 | Rückgabe einzelner oder mehrerer Geräte einer Person | erfüllt | `geraete/services.py:gerat_rueckgeben`, Test: `test_rueckgabe_nach_lager`, `test_rueckgabe_ziel_reparatur` |
-| F-51 | M | M3, M6 | Rücknahmeprotokoll | teilweise | Rückgabe in Service-Schicht vorhanden; PDF-Protokoll (FRM-002) in M6 |
+| F-51 | M | M3, M6 | Rücknahmeprotokoll | erfüllt | `geraete/services.py:gerat_rueckgeben` legt Protokoll an (FRM-002) mit 13 Prüfpunkten und Bezug auf das Ausgabeprotokoll, `geraete/pdf.py:erzeuge_pdf`, Test: `ProtokollAusgabeTests.test_ruecknahme_zeugt_protokoll_mit_offboarding` |
 | F-52 | M | M3 | Offboarding-Ansicht | erfüllt | `stammdaten/views.py:offboarding`, `stammdaten/views.py:offboarding_zuruecknehmen`, `geraete/services.py:person_alle_zuruecknehmen`, Test: `test_offboarding_zeig_geraete`, `test_alle_zuruecknehmen` |
 | F-53 | M | M3 | Austritt eintragen | erfüllt | `stammdaten/views.py:austritt_eintragen`, `stammdaten/views.py:austritt_speichern`, Test: `test_austritt_mit_geraeten_zeigt_warnung`, `test_austritt_ohne_geraete_zeigt_keine_warnung`, `test_austritt_speichern_mit_datum` |
 | F-55 | M | M3 | Ausmustern | erfüllt | `geraete/services.py:ausmustern`, Test: `test_ausmusterung` |
@@ -136,11 +138,11 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 | F-120 | M | M1 | Kategorien pflegen | erfüllt | `stammdaten/views.py:kategorien_liste`, `kategorien_anlegen`, `kategorien_aendern` |
 | F-121 | M | M1 | Personen pflegen | erfüllt | `stammdaten/views.py:personen_liste`, `personen_anlegen`, `personen_aendern` |
 | F-122 | M | M7 | Einstellungen | offen | |
-| F-130 | M | M3 | PDF aus Vorlage | teilweise | Service-Schicht vorhanden; PDF-Erzeugung (WeasyPrint) in M6 |
+| F-130 | M | M6 | PDF aus Vorlage | erfüllt | `geraete/pdf.py:erzeuge_pdf` (WeasyPrint, FRM-001/FRM-002), `geraete/services.py:_protokoll_erstellen`, Test: `ProtokollAusgabeTests.test_pdf_liefert_application_pdf` |
 | F-131 | M | M3 | Daten vorbelegen | erfüllt | `geraete/services.py:gerat_ausgeben` mit `zustand`, `zubehoer_komplett`, `anmerkung` (F-131, A-0098); Test: `test_ausgabe_zustand_neuwertig`, `test_ausgabe_zustand_gut`, `test_ausgabe_zustand_spuren`, `test_ausgabe_zustand_eingeschraenkt` |
-| F-132 | M | M3 | Checkliste Zugänge (Ausgabe) | teilweise | Ausgabe in Service-Schicht vorhanden; Checklisten im PDF in M6 |
-| F-133 | M | M3, M7 | Prüfpunkte IT-Offboarding (Rücknahme) | teilweise | Rückgabe in Service-Schicht vorhanden; Prüfpunkte im PDF in M7 |
-| F-134 | M | M3 | Fotos | offen | |
+| F-132 | M | M6 | Checkliste Zugänge (Ausgabe) | erfüllt | `geraete/models.py:Protokoll.CHECKLISTE_PUNKTE` (6 Punkte), `geraete/protokoll.py:checkliste_beantworten`, `geraete/pdf.py:erzeuge_pdf` (Checkliste im PDF), Test: `ProtokollAusgabeTests.test_ausgabe_zeugt_protokoll_scan_offen` |
+| F-133 | M | M6 | Prüfpunkte IT-Offboarding (Rücknahme) | erfüllt | `geraete/models.py:Protokoll.OFFBOARDING_PUNKTE` (13 Punkte), `geraete/protokoll.py:offboarding_abhaken`, `geraete/pdf.py:erzeuge_pdf` (Prüfpunkte im PDF), Test: `ProtokollAusgabeTests.test_ruecknahme_zeugt_protokoll_mit_offboarding` |
+| F-134 | M | M6 | Fotos | erfüllt | `geraete/protokoll.py:foto_hochladen` (JPG, PNG, HEIC bis 10 MB, verkleinert gespeichert, als Anlage), Test: `ProtokollAusgabeTests.test_scan_setzt_auf_abgeschlossen` |
 | F-135 | M | M6 | Signatur des Bearbeiters | offen | |
 | F-136 | M | M6 | Gegenzeichnung per Mail | offen | |
 | F-137 | M | M6 | Prüfprotokoll | offen | |
@@ -157,12 +159,12 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 | N-07 | | M7 | Mengengerüst | offen | |
 | N-08 | | alle | Bedienung | erfüllt | Zeitzone Europe/Berlin, Datum TT.MM.JJJJ, deutsche Sprache |
 | N-09 | | alle | Gestaltung | teilweise | WAMOCON-CI in `static/basis.css`; Schrift Archivo aus `static/fonts/` (vorhanden im Repo) |
-| N-10 | | alle | Qualität | erfüllt | `manage.py check` grün; 205 Tests (alle grün); `migrate` und `beispieldaten --neu` ohne Fehler |
+| N-10 | | alle | Qualität | erfüllt | `manage.py check` grün; 276 Tests (alle grün); `migrate` und `beispieldaten --neu` ohne Fehler |
 | N-11 | | M7 | Wartbarkeit | offen | |
 
 ## Wie getestet
 
-Befehle mit gekürzter Ausgabe: `python manage.py test` (251 Tests, alle grün), `python manage.py check` (keine Probleme), `python manage.py migrate` (keine neuen Migrationen), `python manage.py beispieldaten --neu` (21 Kategorien, 26 Geräte, 4 Konten, 1 Raumplan mit 15 Arbeitsplätzen und 4 Räumen). `testsiegel` und `tageslauf` sind noch nicht implementiert (M6/M7).
+Befehle mit gekürzter Ausgabe: `python manage.py test` (276 Tests, alle grün), `python manage.py check` (keine Probleme), `python manage.py migrate` (0007_protokoll_m6teil1, 0010_protokoll_m6teil1), `python manage.py beispieldaten --neu` (21 Kategorien, 26 Geräte, 4 Konten, 1 Raumplan mit 15 Arbeitsplätzen und 4 Räumen). `testsiegel` und `tageslauf` sind noch nicht implementiert (M6 Teil 2/M7).
 
 ## Offene Punkte (A-0099)
 

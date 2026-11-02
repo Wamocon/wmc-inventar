@@ -41,11 +41,15 @@
     {% if protokolle %}
     <div class="liste" data-test="liste" data-liste="meine-protokolle">
         {% for protokoll in protokolle %}
-        <div class="zeile" data-test="zeile" data-id="{{ protokoll.nr }}">
+        <div class="zeile" data-test="zeile" data-id="{{ protokoll.nr }}" data-stand="{{ protokoll.stand }}">
             <span class="num">{{ protokoll.nr }}</span>
+            <span>
+                <span class="chip-status {{ protokoll.stand_class }}">{{ protokoll.stand_anzeige }}</span>
+            </span>
             <span>
                 {% if protokoll.datum %}<span class="muted">{{ protokoll.datum|date:"d.m.Y" }}</span>{% endif %}
             </span>
+            <a data-test="protokoll-detail" href="/protokolle/{{ protokoll.nr }}/">Details</a>
             <a data-test="protokoll-pdf" href="/protokolle/{{ protokoll.nr }}/pdf/">PDF</a>
         </div>
         {% endfor %}

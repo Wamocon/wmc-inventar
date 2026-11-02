@@ -18,7 +18,7 @@ from konten.models import Konto
 from stammdaten.models import Kategorie, Ort, Person
 
 from . import services
-from .models import Gerat, GeratKonflikt, Importlauf, Leihe, Vorgang
+from .models import Gerat, GeratKonflikt, Importlauf, Leihe, Protokoll, Vorgang
 from .services import (
     GeratFehler,
     leihe_ausgeben,
@@ -3315,3 +3315,180 @@ class LeiheVerlaengernTests(TestCase):
         self.assertEqual(answer.status_code, 302)
         self.leihe.refresh_from_db()
         self.assertEqual(self.leihe.rueckgabe_bis, new_date)
+
+
+# --- M6 Teil 1: Protokoll (F-130, F-132, F-133, F-134, F-22) --------------------
+
+class ProtokollAusgabeTests(TestCase):
+    """F-130, F-132, F-134, F-22: Ausgabe erzeugt Protokoll, PDF, Foto, Scan."""
+
+    def setUp(self):
+        self.kat = Kategorie.objects.create(name="Notebook")
+        self.ort = Ort.objects.create(typ=Ort.TYP_LAGER, kennung="WMC-L-01")
+        self.anna = Person.objects.create(
+            anrede=Person.ANREDE_FRAU, vorname="Anna", nachname="Becker",
+            email="anna.becker@beispiel.test", anschrift="Beispielweg 3, 65760 Eschborn",
+        )
+        self.admin = konto_erstellen("it-admin", "admin", "it-admin@beispiel.test")
+        self.felix = konto_erstellen("felix.hoffmann", "mitarbeiter", "felix.hoffmann@beispiel.test")
+        self.anna_konto = konto_erstellen("anna.becker", "mitarbeiter", "anna.becker@beispiel.test")
+        self.anna_konto.person = self.anna
+        self.anna_konto.save()
+
+        self.gerat = services.gerat_anlegen(
+            kategorie=self.kat, hersteller="Lenovo", modell="ThinkPad T14",
+            seriennummer="SN12345", ort=self.ort,
+        )
+
+    def _ausgeben(self):
+        return services.gerat_ausgeben(
+            self.gerat, ziel=self.anna, ausgefuehrt_von=self.admin,
+        )
+
+    def test_ausgabe_erzeugt_protokoll_scan_offen(self):
+        """F-130, F-22: Ausgabe erzeugt Protokoll mit Stand scan-offen."""
+        self._ausgeben()
+        protokoll = Protokoll.objects.filter(person=self.anna, geraet=self.gerat).first()
+        self.assertIsNotNone(protokoll)
+        self.assertEqual(protokoll.stand, Protokoll.STAND_SCAN_OFFEN)
+        self.assertEqual(protokoll.art, Protokoll.ART_AUSGABE)
+        self.assertRegex(protokoll.nr, r"^UP-\d{4}-\d{4}$")
+        self.assertEqual(protokoll.formularnummer, "FRM-001")
+
+    def test_pdf_liefert_application_pdf(self):
+        """F-130: /protokolle/<Nummer>/pdf/ liefert application/pdf."""
+        self._ausgeben()
+        protokoll = Protokoll.objects.first()
+        # Checkliste beantworten (F-132)
+        for schluessel, _text in Protokoll.CHECKLISTE_PUNKTE:
+            protokoll.checkliste[schluessel] = 1
+        protokoll.save()
+        self.client.force_login(self.admin)
+        antwort = self.client.get(f"/protokolle/{protokoll.nr}/pdf/")
+        self.assertEqual(antwort.status_code, 200)
+        self.assertEqual(antwort["Content-Type"], "application/pdf")
+        import io
+        import pypdfium2 as pdfium
+        pdf_doc = pdfium.PdfDocument(io.BytesIO(antwort.content))
+        text = "\n".join(
+            page.get_textpage().get_text_bounded()
+            for page in pdf_doc
+        )
+        self.assertIn("Wamocon GmbH", text)
+        self.assertIn("Seite 1 von", text)
+
+    def test_pdf_braucht_checkliste(self):
+        """F-132: PDF entsteht erst, wenn die Checkliste beantwortet ist."""
+        self._ausgeben()
+        protokoll = Protokoll.objects.first()
+        self.client.force_login(self.admin)
+        antwort = self.client.get(f"/protokolle/{protokoll.nr}/pdf/")
+        self.assertNotEqual(antwort.status_code, 200)
+
+    def test_403_fur_fremdes_konto(self):
+        """Kapitel 3: /protokolle/<Nummer>/ für Felix Hoffmann mit 403."""
+        self._ausgeben()
+        protokoll = Protokoll.objects.first()
+        self.client.force_login(self.felix)
+        antwort = self.client.get(f"/protokolle/{protokoll.nr}/")
+        self.assertEqual(antwort.status_code, 403)
+
+    def test_meine_geraete_zeigt_data_stand(self):
+        """Kapitel 4: meine-protokolle hat data-id und data-stand."""
+        self._ausgeben()
+        self.client.force_login(self.anna_konto)
+        antwort = self.client.get("/meine-geraete/")
+        self.assertEqual(antwort.status_code, 200)
+        inhalt = antwort.content.decode()
+        self.assertIn('data-stand="scan-offen"', inhalt)
+
+    def test_scan_setzt_abgeschlossen(self):
+        """F-22: hochgeladener Scan setzt das Protokoll auf abgeschlossen."""
+        self._ausgeben()
+        protokoll = Protokoll.objects.first()
+        self.client.force_login(self.admin)
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        scan = SimpleUploadedFile("scan.pdf", b"%PDF-1.4 test", content_type="application/pdf")
+        antwort = self.client.post(
+            f"/protokolle/{protokoll.nr}/scan/", {"scan": scan},
+        )
+        self.assertEqual(antwort.status_code, 302)
+        protokoll.refresh_from_db()
+        self.assertEqual(protokoll.stand, Protokoll.STAND_ABGESCHLOSSEN)
+
+
+class ProtokollRuecknahmeTests(TestCase):
+    """F-130, F-133: Rücknahme erzeugt Protokoll nach FRM-002."""
+
+    def setUp(self):
+        self.kat = Kategorie.objects.create(name="Notebook")
+        self.ort = Ort.objects.create(typ=Ort.TYP_LAGER, kennung="WMC-L-01")
+        self.anna = Person.objects.create(
+            anrede=Person.ANREDE_FRAU, vorname="Anna", nachname="Becker",
+            email="anna.becker@beispiel.test", anschrift="Beispielweg 3, 65760 Eschborn",
+        )
+        self.admin = konto_erstellen("it-admin", "admin", "it-admin@beispiel.test")
+        self.gerat = services.gerat_anlegen(
+            kategorie=self.kat, hersteller="Lenovo", modell="ThinkPad T14",
+            seriennummer="SN12345", ort=self.ort,
+        )
+        self._ausgabe = services.gerat_ausgeben(
+            self.gerat, ziel=self.anna, ausgefuehrt_von=self.admin,
+        )
+
+    def test_ruecknahme_erzeugt_protokoll_frm002(self):
+        """F-130, F-133: Rücknahme erzeugt Protokoll nach FRM-002 mit 13 Prüfpunkten."""
+        self.gerat.refresh_from_db()
+        services.gerat_rueckgeben(
+            self.gerat, ziel="lager", zustand_rueckgabe="2",
+            zubesehoer_komplett=True, maengel="keine",
+            ausgefuehrt_von=self.admin,
+        )
+        protokolle = list(Protokoll.objects.filter(geraet=self.gerat).order_by("id"))
+        self.assertEqual(len(protokolle), 2)
+        ruecknahme = protokolle[-1]
+        self.assertEqual(ruecknahme.art, Protokoll.ART_RUECKNAHME)
+        self.assertEqual(ruecknahme.formularnummer, "FRM-002")
+        self.assertEqual(ruecknahme.rueckgabe_zu_protokoll, protokolle[0])
+        self.assertEqual(len(ruecknahme.offboarding), 13)
+        self.assertEqual(ruecknahme.stand, Protokoll.STAND_SCAN_OFFEN)
+
+
+class ProtokollFotoTests(TestCase):
+    """F-134: Foto verkleinert als Anlage."""
+
+    def setUp(self):
+        self.kat = Kategorie.objects.create(name="Notebook")
+        self.ort = Ort.objects.create(typ=Ort.TYP_LAGER, kennung="WMC-L-01")
+        self.anna = Person.objects.create(
+            anrede=Person.ANREDE_FRAU, vorname="Anna", nachname="Becker",
+            email="anna.becker@beispiel.test", anschrift="Beispielweg 3, 65760 Eschborn",
+        )
+        self.admin = konto_erstellen("it-admin", "admin", "it-admin@beispiel.test")
+        self.gerat = services.gerat_anlegen(
+            kategorie=self.kat, hersteller="Lenovo", modell="ThinkPad T14",
+            seriennummer="SN12345", ort=self.ort,
+        )
+        services.gerat_ausgeben(self.gerat, ziel=self.anna, ausgefuehrt_von=self.admin)
+        self.protokoll = Protokoll.objects.first()
+
+    def test_foto_hochladen_verkleinert(self):
+        """F-134: hochgeladenes Foto verkleinert als Anlage im PDF."""
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from PIL import Image
+        import io
+
+        bild = Image.new("RGB", (2000, 1500), color="blue")
+        puffer = io.BytesIO()
+        bild.save(puffer, format="JPEG")
+        puffer.seek(0)
+        foto = SimpleUploadedFile("foto.jpg", puffer.read(), content_type="image/jpeg")
+
+        self.client.force_login(self.admin)
+        antwort = self.client.post(
+            f"/protokolle/{self.protokoll.nr}/foto/", {"foto": foto},
+        )
+        self.assertEqual(antwort.status_code, 302)
+        self.protokoll.refresh_from_db()
+        self.assertEqual(len(self.protokoll.anhaenge), 1)
+        self.assertLess(self.protokoll.anhaenge[0]["groesse"], 2000 * 1500)

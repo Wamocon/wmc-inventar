@@ -241,8 +241,60 @@ def gerat_ausgeben(
         notiz=bemerkt,
         abschliesst=True,
     )
+    # A-0123 (M6 Teil 1): F-130, F-131, F-22 — Protokoll in der
+    # Service-Schicht bei Ausgabe an eine Person. Stand ist „scan-offen";
+    # das PDF entsteht erst, wenn die Checkliste beantwortet ist (F-132).
+    if person is not None:
+        _protokoll_erstellen(
+            person=person,
+            gerat=gerat,
+            art=Protokoll.ART_AUSGABE,
+            bearbeiter=(
+                ausgefuehrt_von.bezeichnung() if ausgefuehrt_von is not None else ""
+            ),
+            erzeugt_von=ausgefuehrt_von,
+        )
     gerat.save()
     return gerat
+
+
+def _protokoll_erstellen(
+    person: Person,
+    gerat: Gerat,
+    art: str = Protokoll.ART_AUSGABE,
+    bearbeiter: str = "",
+    erzeugt_von: Konto | None = None,
+    rueckgabe_zu_protokoll: Protokoll | None = None,
+    checkliste: dict | None = None,
+    offboarding: dict | None = None,
+) -> Protokoll:
+    """A-0123 (M6 Teil 1): Protokoll in der Service-Schicht anlegen (F-130).
+
+    Stand beginnt immer „scan-offen" (F-22), Nummer UP-JJJJ-NNNN (F-131).
+    Art „ausgabe" → FRM-001, Art „ruecknahme" → FRM-002 mit Bezug auf
+    das Ausgabeprotokoll (Kapitel 5).
+    """
+    return Protokoll.objects.create(
+        nr=_naechste_protokollnummer(),
+        person=person,
+        geraet=gerat,
+        datum=timezone.now().date(),
+        stand=Protokoll.STAND_SCAN_OFFEN,
+        art=art,
+        fassung="1.0",
+        formularnummer=(
+            "FRM-002" if art == Protokoll.ART_RUECKNAHME else "FRM-001"
+        ),
+        absenderzeile="Wamocon GmbH · IT",
+        empfaenger_anschrift=str(person.anschrift).strip()
+        if getattr(person, "anschrift", None)
+        else "",
+        bearbeiter=bearbeiter,
+        checkliste=checkliste or {},
+        offboarding=offboarding or {},
+        rueckgabe_zu_protokoll=rueckgabe_zu_protokoll,
+        erzeugt_von=erzeugt_von,
+    )
 
 
 @transaction.atomic
@@ -348,6 +400,30 @@ def gerat_rueckgeben(
         # F-50: Ziel Lager
         gerat.status = Gerat.STATUS_AUF_LAGER
 
+    # A-0123 (M6 Teil 1): F-130, F-131, F-22 — Protokoll in der
+    # Service-Schicht bei Rücknahme. Stand ist „scan-offen"; der Bezug
+    # auf das Ausgabeprotokoll trägt die Nummer (FRM-002, Kapitel 5).
+    person = gerat.person
+    if person is not None:
+        ausgabe_protokoll = (
+            Protokoll.objects.filter(
+                geraet=gerat, person=person, art=Protokoll.ART_AUSGABE
+            )
+            .order_by("-datum", "-id")
+            .first()
+        )
+        _protokoll_erstellen(
+            person=person,
+            gerat=gerat,
+            art=Protokoll.ART_RUECKNAHME,
+            bearbeiter=(
+                ausgefuehrt_von.bezeichnung() if ausgefuehrt_von is not None else ""
+            ),
+            erzeugt_von=ausgefuehrt_von,
+            rueckgabe_zu_protokoll=ausgabe_protokoll,
+            offboarding=_offboarding_vorbelegung(gerat, person),
+        )
+
     gerat.person = None
     gerat.ort = None
 
@@ -361,6 +437,26 @@ def gerat_rueckgeben(
     )
     gerat.save()
     return gerat
+
+
+def _offboarding_vorbelegung(gerat: Gerat, person: Person) -> dict:
+    """FRM-002 Abschnitt 3: Vorbelegung der 13 Prüfpunkte IT-Offboarding.
+
+    Rücknahme bei Austritt (Person hat ein Austrittsdatum): keine Option,
+    außer Punkt 13 „Rückgabe im Hardware-Inventar dokumentiert" = erledigt.
+    Jede andere Rückgabe: Punkt 1 = erledigt, Punkt 13 = erledigt,
+    alle übrigen = nicht zutreffend.
+    """
+    punkte = dict(Protokoll.OFFBOARDING_PUNKTE)
+    schluessel = list(punkte)
+    # Alle 13 Punkte anlegen, Standard: nicht abgehakt (False)
+    vorbelegung: dict[str, bool] = {k: False for k in schluessel}
+    if person is not None and getattr(person, "austritt", None):
+        vorbelegung[schluessel[-1]] = True  # Punkt 13: erledigt
+    else:
+        vorbelegung[schluessel[0]] = True   # Punkt 1: erledigt
+        vorbelegung[schluessel[-1]] = True  # Punkt 13: erledigt
+    return vorbelegung
 
 
 @transaction.atomic
@@ -1646,14 +1742,15 @@ def leihe_ausgeben(
         raise GeratFehler("Rückgabedatum fehlt.")
 
     with transaction.atomic():
-        # Protokoll (F-21, F-22): Stand "scan-offen", Nummer UP-JJJJ-NNNN
-        Protokoll.objects.create(
+        # A-0123 (M6 Teil 1): F-21, F-22, F-130 — Protokoll in der
+        # Service-Schicht bei Verleih. Stand ist „scan-offen".
+        _protokoll_erstellen(
             person=person,
-            geraet=gerat,
-            datum=timezone.now().date(),
-            nr=_naechste_protokollnummer(),
-            stand=Protokoll.STAND_SCAN_OFFEN,
-            fotos=0,
+            gerat=gerat,
+            art=Protokoll.ART_AUSGABE,
+            bearbeiter=(
+                ausgefuehrt_von.bezeichnung() if ausgefuehrt_von is not None else ""
+            ),
             erzeugt_von=ausgefuehrt_von,
         )
 

@@ -1155,17 +1155,18 @@ def meine_geraete_zeige(request):
     ).order_by("-zeitpunkt"):
         if vorgang.gerat_id not in ausgaben:
             ausgaben[vorgang.gerat_id] = vorgang
-        if vorgang.protokoll_id and vorgang.gerat_id not in protokoll_je_gerat:
-            protokoll_je_gerat[vorgang.gerat_id] = vorgang
 
     def _eintrag(gerat):
         vorgang_ausgabe = ausgaben.get(gerat.id)
+        protokoll = (
+            Protokoll.objects.filter(geraet=gerat, person=person)
+            .order_by("-datum", "-id")
+            .first()
+        )
         return {
             "gerat": gerat,
             "ausgabe_datum": vorgang_ausgabe.zeitpunkt.date() if vorgang_ausgabe else None,
-            "protokoll": protokoll_je_gerat.get(gerat.id).protokoll
-            if gerat.id in protokoll_je_gerat
-            else None,
+            "protokoll": protokoll,
         }
 
     gerate_eintraege = [_eintrag(gerat) for gerat in geräte]
@@ -1462,3 +1463,153 @@ def leihe_ablehnen_zeige(request, leih_id):
             "fehler": fehler,
         },
     )
+
+
+# --- M6 Teil 1: Protokoll (F-130, F-132, F-133, F-134, F-22) ------------------
+
+def _protokoll_berechtigt(protokoll: Protokoll, request) -> None:
+    """Rechte (TESTSCHNITTSTELLE 3): 200 für die Person, Admin und Leser
+    mit Person; sonst 403.
+    """
+    if request.user.ist_admin:
+        return
+    person = protokoll.person
+    if request.user.ist_leser:
+        if request.user.person is not None:
+            return
+        raise PermissionDenied
+    if request.user.person is None:
+        raise PermissionDenied
+    if person is None or request.user.person_id != person.id:
+        raise PermissionDenied
+
+
+@login_required
+def protokoll_detail(request, protokoll_nr):
+    """/protokolle/<Nummer>/ – Protokoll-Detail (F-130, F-132, F-134).
+
+    Zeigt Aufbau und Wortlaut der Vorlage, die Checkliste, die Fotos
+    und den Stand. Kapitel 3: 403 für ein fremdes Konto.
+    """
+    protokoll = get_object_or_404(Protokoll, nr=protokoll_nr)
+    _protokoll_berechtigt(protokoll, request)
+
+    checkliste = [
+        {"text": text, "wert": (protokoll.checkliste or {}).get(schluessel)}
+        for schluessel, text in Protokoll.CHECKLISTE_PUNKTE
+    ]
+    offboarding = [
+        {"text": text, "wert": bool((protokoll.offboarding or {}).get(schluessel))}
+        for schluessel, text in Protokoll.OFFBOARDING_PUNKTE
+    ]
+    return render(
+        request,
+        "geraete/protokoll_detail.html",
+        {
+            "protokoll": protokoll,
+            "geraet": protokoll.geraet,
+            "person": protokoll.person,
+            "checkliste": checkliste,
+            "offboarding": offboarding,
+            "anhaenge": protokoll.anhaenge_liste(),
+        },
+    )
+
+
+@login_required
+def protokoll_pdf(request, protokoll_nr):
+    """/protokolle/<Nummer>/pdf/ – PDF-Download (F-130, F-132).
+
+    F-132: das PDF entsteht erst, wenn jeder Punkt der Checkliste
+    beantwortet ist. Antwortet application/pdf.
+    """
+    protokoll = get_object_or_404(Protokoll, nr=protokoll_nr)
+    _protokoll_berechtigt(protokoll, request)
+
+    from . import pdf as protokoll_pdf_modul
+    try:
+        inhalt = protokoll_pdf_modul.pdf_bauen(protokoll)
+    except services.GeratFehler as fehler:
+        meldung_error(request, str(fehler))
+        return redirect(f"/protokolle/{protokoll_nr}/")
+
+    antwort = HttpResponse(inhalt, content_type="application/pdf")
+    antwort[
+        "Content-Disposition"
+    ] = f"attachment; filename={protokoll_pdf_modul.dateiname_protokoll(protokoll)}"
+    return antwort
+
+
+@login_required
+@require_POST
+def protokoll_checkliste_beantworten(request, protokoll_nr):
+    """POST /protokolle/<Nummer>/checkliste/ – Checkliste (F-132).
+
+    Die sechs Punkte ja/nein. Nur solange das Protokoll „scan-offen"
+    ist (F-22).
+    """
+    protokoll = get_object_or_404(Protokoll, nr=protokoll_nr)
+    _protokoll_berechtigt(protokoll, request)
+
+    from . import protokoll as protokoll_services
+
+    werte = {}
+    for schluessel, _text in Protokoll.CHECKLISTE_PUNKTE:
+        roh = request.POST.get(f"checkliste.{schluessel}")
+        if roh in ("0", "1"):
+            werte[schluessel] = int(roh)
+    try:
+        protokoll_services.checkliste_beantworten(protokoll, werte, request.user)
+    except services.GeratFehler as fehler:
+        meldung_error(request, str(fehler))
+    meldung_success(request, "Checkliste gespeichert (F-132).")
+    return redirect(f"/protokolle/{protokoll_nr}/")
+
+
+@login_required
+@require_POST
+def protokoll_foto_hochladen(request, protokoll_nr):
+    """POST /protokolle/<Nummer>/foto/ – Foto (F-134).
+
+    JPG, PNG oder HEIC bis 10 MB; verkleinert als Anlage hinter dem
+    Protokoll.
+    """
+    protokoll = get_object_or_404(Protokoll, nr=protokoll_nr)
+    _protokoll_berechtigt(protokoll, request)
+
+    from . import protokoll as protokoll_services
+
+    datei = request.FILES.get("foto")
+    if datei is None:
+        meldung_error(request, "Kein Foto übergeben (F-134).")
+        return redirect(f"/protokolle/{protokoll_nr}/")
+    try:
+        protokoll_services.foto_hochladen(protokoll, datei, request.user)
+    except services.GeratFehler as fehler:
+        meldung_error(request, str(fehler))
+    meldung_success(request, "Foto als Anlage gespeichert (F-134).")
+    return redirect(f"/protokolle/{protokoll_nr}/")
+
+
+@login_required
+@require_POST
+def protokoll_scan_hochladen(request, protokoll_nr):
+    """POST /protokolle/<Nummer>/scan/ – Scan (F-22).
+
+    Der hochgeladene Scan setzt das Protokoll auf „abgeschlossen".
+    """
+    protokoll = get_object_or_404(Protokoll, nr=protokoll_nr)
+    _protokoll_berechtigt(protokoll, request)
+
+    from . import protokoll as protokoll_services
+
+    datei = request.FILES.get("scan")
+    if datei is None:
+        meldung_error(request, "Kein Scan übergeben (F-22).")
+        return redirect(f"/protokolle/{protokoll_nr}/")
+    try:
+        protokoll_services.scan_hochladen(protokoll, datei, request.user)
+    except services.GeratFehler as fehler:
+        meldung_error(request, str(fehler))
+    meldung_success(request, "Scan hochgeladen, Protokoll abgeschlossen (F-22).")
+    return redirect(f"/protokolle/{protokoll_nr}/")

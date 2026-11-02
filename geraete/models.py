@@ -376,6 +376,68 @@ class Protokoll(models.Model):
     )
     fotos = models.PositiveIntegerField("Fotos", default=0)
 
+    # --- A-0123 M6 Teil 1: Wortlaut der Vorlage (F-130, F-132, F-133, F-134, F-22) ---
+    ART_AUSGABE = "ausgabe"
+    ART_RUECKNAHME = "ruecknahme"
+    ARTEN = [
+        (ART_AUSGABE, "Ausgabe (FRM-001)"),
+        (ART_RUECKNAHME, "Rücknahme (FRM-002)"),
+    ]
+    art = models.CharField(
+        "Art", max_length=16, choices=ARTEN, default=ART_AUSGABE
+    )
+    fassung = models.CharField("Fassung", max_length=8, default="1.0")
+    formularnummer = models.CharField(
+        "Formularnummer (Fußzeile)", max_length=24, default="FRM-001"
+    )
+    absenderzeile = models.CharField(
+        "Absenderzeile", max_length=240, default="Wamocon GmbH · IT"
+    )
+    empfaenger_anschrift = models.TextField(
+        "Empfängeranschrift (Briefkopf)", blank=True, default=""
+    )
+    bearbeiter = models.CharField(
+        "Bearbeiter", max_length=120, blank=True, default=""
+    )
+    # F-132: Checkliste Zugänge, sechs Punkte, ja/nein (1/0).
+    # Das PDF entsteht erst, wenn jeder Punkt beantwortet ist.
+    checkliste = models.JSONField(
+        "Checkliste Zugänge", default=dict, blank=True
+    )
+    # F-133: Prüfpunkte IT-Offboarding, 13 Punkte, nur bei Rücknahme.
+    offboarding = models.JSONField(
+        "Prüfpunkte IT-Offboarding", default=dict, blank=True
+    )
+    # F-22: hochgeladener Scan des unterzeichneten Protokolls.
+    scan_datei = models.FileField(
+        "Scan des Protokolls",
+        upload_to="protokolle/scans/",
+        blank=True,
+        default="",
+    )
+    scan_am = models.DateTimeField("Scan hochgeladen am", null=True, blank=True)
+    scan_von = models.ForeignKey(
+        "konten.Konto",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="scans_hochgeladen",
+        verbose_name="Scan hochgeladen von",
+    )
+    # F-134: Fotos je Gerät bei Ausgabe und Rücknahme, verkleinert als
+    # Anlage hinter dem Protokoll. Jeder Eintrag: {"pfad": str, "name": str,
+    # "groesse": int, "hochgeladen_am": str}
+    anhaenge = models.JSONField("Anhänge (Fotos)", default=list, blank=True)
+    # Rücknahme-FRM-002: Bezug auf das Ausgabeprotokoll (Kapitel 5).
+    rueckgabe_zu_protokoll = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="rueckgaben",
+        verbose_name="Rücknahme zu Protokoll",
+    )
+
     class Meta:
         verbose_name = "Protokoll"
         verbose_name_plural = "Protokolle"
@@ -383,6 +445,75 @@ class Protokoll(models.Model):
 
     def __str__(self):
         return f"Protokoll {self.nr or self.pk}: {self.person.nachname}"
+
+    @property
+    def stand_anzeige(self) -> str:
+        return dict(self.STAENDE).get(self.stand, self.stand) or self.stand
+
+    @property
+    def stand_class(self) -> str:
+        """CSS-Klasse für die Statusanzeige (Kapitel 4: data-stand)."""
+        return "stand-ok" if self.stand == self.STAND_ABGESCHLOSSEN else "stand-offen"
+
+    @property
+    def art_anzeige(self) -> str:
+        return dict(self.ARTEN).get(self.art, self.art) or self.art
+
+    # --- F-132: Checkliste Zugänge (sechs Punkte) ------------------------------
+    # Wortlaut aus docs/vorlagen/FRM-001.md Abschnitt 3, Vorbelegung
+    # (F-132). Reihenfolge und Bezeichnung sind fest.
+    CHECKLISTE_PUNKTE = (
+        ("m365", "Benutzerkonto Microsoft 365, Erstkennwort persönlich übergeben"),
+        ("mfa", "Mehrfaktor-Authentifizierung eingerichtet"),
+        ("passwortmanager", "Zugang Passwortmanager"),
+        ("vpn", "VPN-Zugang, Zertifikat oder Schlüssel"),
+        ("projektsysteme", "Zugriff Confluence, Jira und weitere Projektsysteme"),
+        ("zugangskarte", "Zugangskarte, Schlüssel, Transponder"),
+        # TODO: A-0126 (M6 Teil 3) ersetzt die letzten zwei Punkte durch
+        # „Zugänge entzogen" und „Daten gelöscht".
+    )
+
+    def checkliste_unbeantwortet(self) -> list[str]:
+        """F-132: Punkte, die noch nicht ja/nein beantwortet sind."""
+        werte = self.checkliste or {}
+        offene = []
+        for schluessel, _text in self.CHECKLISTE_PUNKTE:
+            if werte.get(schluessel) not in (0, 1):
+                offene.append(schluessel)
+        return offene
+
+    # --- F-133: Prüfpunkte IT-Offboarding (13 Punkte) --------------------------
+    # Wortlaut aus docs/vorlagen/FRM-002.md Abschnitt 3, Vorbelegung
+    # (F-133). Reihenfolge und Bezeichnung sind fest.
+    OFFBOARDING_PUNKTE = (
+        ("werkseinstellung", "Gerät auf Werkseinstellungen zurückgesetzt, Datenträger sicher gelöscht"),
+        ("daten_gesichert", "Lokale Daten des Nutzers gesichert oder zur Löschung freigegeben"),
+        ("geraeteverwaltung", "Gerät aus der Geräteverwaltung und aus dem Inventar ausgetragen"),
+        ("benutzerkonten", "Benutzerkonten deaktiviert (Microsoft 365, Confluence, Jira, weitere)"),
+        ("mfa_entkoppelt", "Mehrfaktor-Authentifizierung und Authenticator vom Gerät entkoppelt"),
+        ("ssh_api", "SSH-Schlüssel und API-Token widerrufen"),
+        ("vpn_zertifikate", "VPN-Zugang und Zertifikate widerrufen"),
+        ("passwortmanager", "Zugriffe im Passwortmanager entzogen"),
+        ("gemeinsame_kennworter", "Gemeinsam genutzte Kennwörter geändert"),
+        ("softwarelizenzen", "Softwarelizenzen zurückgeführt oder neu zugewiesen (Microsoft 365)"),
+        ("zugangskarte", "Zugangskarte, Schlüssel und Transponder zurückgegeben"),
+        ("private_geraete", "Geschäftliche Daten von privaten Geräten und Cloud-Speichern entfernt"),
+        ("inventar_dokumentiert", "Rückgabe im Hardware-Inventar dokumentiert"),
+        # TODO: A-0126 (M6 Teil 3) ersetzt die letzten zwei Punkte durch
+        # „Backup" und „Archiv" mit geprüften Namen.
+    )
+
+    def offboarding_unbeantwortet(self) -> list[str]:
+        """F-133: Prüfpunkte, die noch nicht abgehackt sind."""
+        werte = self.offboarding or {}
+        return [
+            schluessel
+            for schluessel, _text in self.OFFBOARDING_PUNKTE
+            if not werte.get(schluessel)
+        ]
+
+    def anhaenge_liste(self) -> list[dict]:
+        return list(self.anhaenge or [])
 
 
 class Leihe(models.Model):
