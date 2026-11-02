@@ -10,8 +10,7 @@
     <a class="btn primary" href="/konten/neu/" data-test="konto-anlegen">Neues Konto</a>
   </div>
 </div>
-<div class="liste" data-test="liste" data-liste="konten-liste">
-  <div data-test="konten-liste"></div>
+<div class="liste" data-test="liste">
   {% for k in konten %}
   <div class="zeile" data-test="zeile" data-id="{{ k.pk }}">
     <a href="/konten/{{ k.pk }}/">{{ k.email }}</a>

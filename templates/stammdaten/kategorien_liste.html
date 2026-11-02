@@ -5,8 +5,7 @@
   <div><h1>Kategorien</h1><p class="muted lead">Kategorien pflegen (F-120).</p></div>
   {% if ist_admin %}<div class="actions"><a class="btn primary" href="/kategorien/neu/" data-test="kategorie-anlegen">Neue Kategorie</a></div>{% endif %}
 </div>
-<div class="liste" data-test="liste" data-liste="kategorien-liste">
-  <div data-test="kategorien-liste"></div>
+<div class="liste" data-test="liste">
   {% for k in kategorien %}
   <div class="zeile" data-test="zeile" data-id="{{ k.pk }}">
     <a href="#">{{ k.name }}</a>

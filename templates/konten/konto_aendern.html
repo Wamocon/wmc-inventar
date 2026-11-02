@@ -12,7 +12,7 @@
         <label for="{{ f.id_for_label }}"{% if f.field.required %} class="req"{% endif %}>{{ f.label }}</label>
         {{ f }}
         {% if f.field.help_text %}<small class="help">{{ f.field.help_text }}</small>{% endif %}
-        {% for e in f.errors %}<small class="help" style="color:var(--err)">{{ e }}</small>{% endfor %}
+        {% for e in f.errors %}<small class="help error">{{ e }}</small>{% endfor %}
       </div>
     {% endfor %}
   </div>

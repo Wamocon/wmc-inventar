@@ -5,8 +5,7 @@
   <div><h1>Orte</h1><p class="muted lead">Orte pflegen (F-60).</p></div>
   {% if user.ist_admin %}<div class="actions"><a class="btn primary" href="/orte/neu/" data-test="ort-anlegen">Neuer Ort</a></div>{% endif %}
 </div>
-<div class="liste" data-test="liste" data-liste="orte-liste">
-  <div data-test="orte-liste"></div>
+<div class="liste" data-test="liste">
   {% for o in orte %}
   <div class="zeile" data-test="zeile" data-id="{{ o.kennung }}">
     <span class="num">{{ o.kennung }}</span>

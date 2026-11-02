@@ -51,8 +51,7 @@
 </div>
 {% endif %}
 
-<div class="liste" data-test="liste" data-liste="geraete-liste">
-  <div data-test="geraete-liste"></div>
+<div class="liste" data-test="liste">
   <form method="post" action="/etiketten/auswahl/" data-test="etiketten-formular">
     {% csrf_token %}
     <div class="etiketten-kopf">
@@ -62,9 +61,9 @@
       <span class="muted small" data-test="auswahl-anzahl">0 ausgewählt</span>
     </div>
     {% for g in geraete %}
-    <div class="zeile" data-test="zeile" data-id="{{ g.inventarnummer }}"{% if suche %} data-test="suchtreffer"{% endif %}>
+    <div class="zeile" data-test="zeile" data-id="{{ g.inventarnummer }}">
       <label class="auswahl"><input type="checkbox" name="auswahl" value="{{ g.inventarnummer }}" class="auswahl-box" data-test="auswahl" data-inventarnummer="{{ g.inventarnummer }}"></label>
-      <span class="inv num" data-test="inventarnummer">{{ g.inventarnummer }}</span>
+      <span class="inv num" data-test="inventarnummer">{% if suche %}<span data-test="suchtreffer">{{ g.inventarnummer }}</span>{% else %}{{ g.inventarnummer }}{% endif %}</span>
       <span data-test="zeile-name">{{ g.geraetename|default:g.modell }} · {{ g.kategorie.name }}{% if g.ort %} · {{ g.ort.kennung }}{% elif g.person %} · {{ g.person.voller_name }}{% endif %}</span>
       <span class="chip-status {{ g.status }}" data-test="status">{{ g.status_anzeige }}</span>
       <a class="btn sm" href="/geraete/{{ g.inventarnummer }}/" data-test="detail-link">Ansehen</a>

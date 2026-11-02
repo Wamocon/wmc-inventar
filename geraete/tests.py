@@ -225,7 +225,7 @@ class AnsichtsTests(TestCase):
         text = antwort.content.decode()
         self.assertIn(self.g1.inventarnummer, text)
         self.assertIn(self.g2.inventarnummer, text)
-        self.assertIn('data-test="geraete-liste"', text)
+        self.assertIn('data-test="liste"', text)
         pos1 = text.index(self.g1.inventarnummer)
         pos2 = text.index(self.g2.inventarnummer)
         self.assertLess(pos1, pos2, "Standard aufsteigend nach Inventarnummer (F-41)")
@@ -3492,3 +3492,81 @@ class ProtokollFotoTests(TestCase):
         self.protokoll.refresh_from_db()
         self.assertEqual(len(self.protokoll.anhaenge), 1)
         self.assertLess(self.protokoll.anhaenge[0]["groesse"], 2000 * 1500)
+
+
+class SucheTests(TestCase):
+    """F-44: Suche nach Inventarnummer, jede Trefferzeile trägt
+    data-test="zeile" genau einmal und data-test="suchtreffer"
+    enthält den Text der Zeile (A-0124)."""
+
+    def setUp(self):
+        self.kat = Kategorie.objects.create(name="Notebook")
+        self.ort = Ort.objects.create(typ=Ort.TYP_LAGER, kennung="WMC-L-01")
+        self.admin = konto_erstellen("it-admin", "admin", "it-admin@beispiel.test")
+        self.g1 = services.gerat_anlegen(
+            kategorie=self.kat, hersteller="Lenovo", modell="ThinkPad T14",
+            seriennummer="SN12345", ort=self.ort,
+        )
+
+    def test_suche_zeile_tragt_data_test_einmal(self):
+        """F-44: /geraete/?q=… zeigt die Zeile mit data-test="zeile" genau einmal."""
+        self.client.force_login(self.admin)
+        antwort = self.client.get("/geraete/", {"q": self.g1.inventarnummer})
+        self.assertEqual(antwort.status_code, 200)
+        text = antwort.content.decode()
+        # Die Zeile trägt data-test="zeile" genau einmal (nicht doppelt).
+        self.assertEqual(
+            text.count('data-test="zeile"'),
+            1,
+            "Die Zeile trägt data-test='zeile' genau einmal (F-44, A-0124).",
+        )
+
+    def test_suche_suchtreffer_enthaelt_text(self):
+        """F-44: suchtreffer enthält den Text der Zeile (Inventarnummer)."""
+        self.client.force_login(self.admin)
+        antwort = self.client.get("/geraete/", {"q": self.g1.inventarnummer})
+        self.assertEqual(antwort.status_code, 200)
+        text = antwort.content.decode()
+        self.assertIn('data-test="suchtreffer"', text)
+        # Der suchtreffer enthält die Inventarnummer.
+        idx = text.index('data-test="suchtreffer"')
+        # Nach dem suchtreffer-Attribut folgt die Inventarnummer.
+        self.assertIn(self.g1.inventarnummer, text[idx:idx + 120])
+
+    def test_keine_suche_kein_suchtreffer(self):
+        """F-44: ohne Suche gibt es kein suchtreffer-Element."""
+        self.client.force_login(self.admin)
+        antwort = self.client.get("/geraete/")
+        self.assertEqual(antwort.status_code, 200)
+        text = antwort.content.decode()
+        self.assertNotIn('data-test="suchtreffer"', text)
+
+
+class SicherheitTests(TestCase):
+    """N-02: Content-Security-Policy auf jeder Antwort (A-0124)."""
+
+    def test_anmelden_tragt_csp(self):
+        """N-02: /anmelden/ sendet Content-Security-Policy."""
+        antwort = self.client.get("/anmelden/")
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn("Content-Security-Policy", antwort.headers)
+        self.assertIn("default-src", antwort.headers["Content-Security-Policy"])
+
+    def test_arbeitsplaetze_tragt_csp(self):
+        """N-02: /arbeitsplaetze/ sendet Content-Security-Policy."""
+        self.admin = konto_erstellen("it-admin", "admin", "it-admin@beispiel.test")
+        self.client.force_login(self.admin)
+        antwort = self.client.get("/arbeitsplaetze/")
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn("Content-Security-Policy", antwort.headers)
+        self.assertIn("script-src", antwort.headers["Content-Security-Policy"])
+        self.assertIn("style-src", antwort.headers["Content-Security-Policy"])
+
+    def test_csp_verbietet_inline(self):
+        """N-02: CSP erlaubt keine Inline-Skripte oder -Styles."""
+        antwort = self.client.get("/anmelden/")
+        self.assertEqual(antwort.status_code, 200)
+        csp = antwort.headers["Content-Security-Policy"]
+        self.assertIn("script-src 'self'", csp)
+        self.assertIn("style-src 'self'", csp)
+        self.assertNotIn("'unsafe-inline'", csp)

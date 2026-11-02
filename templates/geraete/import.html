@@ -136,7 +136,7 @@
     {{ zusammenfassung.konflikt }} Konflikt · {{ zusammenfassung.uebersprungen }} übersprungen
   </div>
   <a class="btn" href="/import/vorschau.csv/" data-test="vorschau-csv">Vorschau als CSV</a>
-  <form method="post" action="/import/speichern/" data-test="import-speichernform" style="display:inline">
+  <form method="post" action="/import/speichern/" data-test="import-speichernform" class="form-inline">
     {% csrf_token %}
     <button type="submit" class="btn primary" data-test="speichern">Speichern</button>
   </form>

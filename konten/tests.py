@@ -176,7 +176,7 @@ class KontenVerwaltungTests(TestCase):
         antwort = self.client.get("/konten/")
         self.assertEqual(antwort.status_code, 200)
         text = antwort.content.decode()
-        self.assertIn('data-test="konten-liste"', text)
+        self.assertIn('data-test="liste"', text)
         self.assertIn('data-test="konto-anlegen"', text)
         # Das eigene Konto und das Mitarbeiter-Konto stehen in der Liste.
         self.assertIn("it-admin@beispiel.test", text)

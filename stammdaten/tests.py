@@ -40,7 +40,7 @@ class KategorieAnlegenTests(TestCase):
         self.assertEqual(antwort.status_code, 302)
         liste = self.client.get(reverse("stammdaten:kategorien-liste"))
         text = liste.content.decode()
-        self.assertIn('data-test="kategorien-liste"', text)
+        self.assertIn('data-test="liste"', text)
         self.assertIn("Grafikkarte", text)
 
     def test_anlegen_seite_oeffnet(self):
