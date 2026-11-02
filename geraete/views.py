@@ -1136,10 +1136,14 @@ def meine_geraete_zeige(request):
     Zeigt die eigenen Geräte mit Inventarnummer, Ausgabedatum und
     Protokoll-PDF, die eigenen Protokolle und „Meine Leihen“ mit Stand,
     Rückgabedatum und dem Weg zu „Leihgerät anfragen“.
-    Mitarbeiter: 200; Admin und Leser: 403 (F-112).
+    Kapitel 3: 200 für Mitarbeiter; 200 auch für Admin und Leser,
+    wenn das Konto eine Person hat; sonst 403.
     """
     if not _ist_mitarbeiter(request):
-        raise PermissionDenied
+        if not (request.user.ist_admin or request.user.ist_leser):
+            raise PermissionDenied
+        if request.user.person is None:
+            raise PermissionDenied
     person = request.user.person
 
     geräte = list(Gerat.objects.filter(person=person).order_by("inventarnummer"))
@@ -1216,7 +1220,10 @@ def meine_geraete_leihe_neu(request):
     from .services import GeratFehler, leihe_anfragen
 
     if not _ist_mitarbeiter(request):
-        raise PermissionDenied
+        if not (request.user.ist_admin or request.user.ist_leser):
+            raise PermissionDenied
+        if request.user.person is None:
+            raise PermissionDenied
 
     person = request.user.person
     if person is None:

@@ -1880,21 +1880,21 @@ class QRCodeTests(TestCase):
     def test_kurzansicht_admin_weiterleitung(self):
         """F-70: /g/<Inventarnummer> leitet Admin weiter zu /geraete/<Inventarnummer>/."""
         self.client.login(username=self.admin.email, password="test-passwort-123")
-        antwort = self.client.get(f"/g/{self.gerat.inventarnummer}/")
+        antwort = self.client.get(f"/g/{self.gerat.inventarnummer}")
         self.assertEqual(antwort.status_code, 302)
         self.assertIn(f"/geraete/{self.gerat.inventarnummer}/", antwort.headers["Location"])
 
     def test_kurzansicht_leser_weiterleitung(self):
         """F-70: /g/<Inventarnummer> leitet Leser weiter."""
         self.client.login(username=self.leser.email, password="test-passwort-123")
-        antwort = self.client.get(f"/g/{self.gerat.inventarnummer}/")
+        antwort = self.client.get(f"/g/{self.gerat.inventarnummer}")
         self.assertEqual(antwort.status_code, 302)
         self.assertIn(f"/geraete/{self.gerat.inventarnummer}/", antwort.headers["Location"])
 
     def test_kurzansicht_mitarbeiter_keine_berechtigung(self):
         """F-113: Mitarbeiter sehen auf /g/<Inventarnummer> die Kurzansicht."""
         self.client.login(username=self.mitarbeiter.email, password="test-passwort-123")
-        antwort = self.client.get(f"/g/{self.gerat.inventarnummer}/")
+        antwort = self.client.get(f"/g/{self.gerat.inventarnummer}")
         self.assertEqual(antwort.status_code, 200)
         content = antwort.content.decode()
         self.assertIn('data-test="kurzansicht"', content)
@@ -2923,9 +2923,9 @@ class MeineGeraeteTests(TestCase):
         answer = self.client.get("/meine-geraete/")
         self.assertEqual(answer.status_code, 200)
         content = answer.content.decode()
-        self.assertIn('data-test="meine-geraete-umschlag"', content)
-        self.assertIn('data-test="meine-protokolle-umschlag"', content)
-        self.assertIn('data-test="meine-leihen-umschlag"', content)
+        self.assertIn('data-test="meine-geraete"', content)
+        self.assertIn('data-test="meine-protokolle"', content)
+        self.assertIn('data-test="meine-leihen"', content)
 
     def test_mitarbeiter_sieht_eigene_geraete(self):
         """F-110: Eigene Geräte mit Inventarnummer und Ausgabedatum."""
@@ -2958,17 +2958,57 @@ class MeineGeraeteTests(TestCase):
         self.assertIn('data-liste="meine-leihen"', content)
         self.assertIn("angefragt", content)
 
-    def test_admin_sieht_403(self):
-        """F-112: Admin sieht /meine-geraete/ nicht."""
+    def test_admin_ohne_person_sieht_403(self):
+        """Kapitel 3: Admin ohne Person sieht /meine-geraete/ nicht."""
         self.client.force_login(self.admin)
         answer = self.client.get("/meine-geraete/")
         self.assertEqual(answer.status_code, 403)
 
-    def test_leser_sieht_403(self):
-        """F-112: Leser sieht /meine-geraete/ nicht."""
+    def test_leser_ohne_person_sieht_403(self):
+        """Kapitel 3: Leser ohne Person sieht /meine-geraete/ nicht."""
         self.client.force_login(self.leser)
         answer = self.client.get("/meine-geraete/")
         self.assertEqual(answer.status_code, 403)
+
+    def test_admin_mit_person_sieht_200(self):
+        """Kapitel 3: Admin mit Person sieht /meine-geraete/."""
+        self.admin.person = self.person
+        self.admin.save()
+        self.client.force_login(self.admin)
+        answer = self.client.get("/meine-geraete/")
+        self.assertEqual(answer.status_code, 200)
+        content = answer.content.decode()
+        self.assertIn('data-test="meine-geraete"', content)
+        self.assertIn('data-test="meine-protokolle"', content)
+        self.assertIn('data-test="meine-leihen"', content)
+
+    def test_leser_mit_person_sieht_200(self):
+        """Kapitel 3: Leser mit Person sieht /meine-geraete/."""
+        self.leser.person = self.person
+        self.leser.save()
+        self.client.force_login(self.leser)
+        answer = self.client.get("/meine-geraete/")
+        self.assertEqual(answer.status_code, 200)
+        content = answer.content.decode()
+        self.assertIn('data-test="meine-geraete"', content)
+        self.assertIn('data-test="meine-protokolle"', content)
+        self.assertIn('data-test="meine-leihen"', content)
+
+    def test_admin_mit_person_leihe_neu_200(self):
+        """Kapitel 3: Admin mit Person sieht /meine-geraete/leihe/neu/."""
+        self.admin.person = self.person
+        self.admin.save()
+        self.client.force_login(self.admin)
+        answer = self.client.get("/meine-geraete/leihe/neu/")
+        self.assertEqual(answer.status_code, 200)
+
+    def test_leser_mit_person_leihe_neu_200(self):
+        """Kapitel 3: Leser mit Person sieht /meine-geraete/leihe/neu/."""
+        self.leser.person = self.person
+        self.leser.save()
+        self.client.force_login(self.leser)
+        answer = self.client.get("/meine-geraete/leihe/neu/")
+        self.assertEqual(answer.status_code, 200)
 
 
 class KurzansichtTests(TestCase):
@@ -2994,7 +3034,7 @@ class KurzansichtTests(TestCase):
     def test_mitarbeiter_sieht_kurzansicht(self):
         """F-113: Mitarbeiter sieht die Kurzansicht mit Kategorie, Modell, Inventarnummer."""
         self.client.force_login(self.mitarbeiter)
-        answer = self.client.get(f"/g/{self.gerat_eigen.inventarnummer}/")
+        answer = self.client.get(f"/g/{self.gerat_eigen.inventarnummer}")
         self.assertEqual(answer.status_code, 200)
         content = answer.content.decode()
         self.assertIn('data-test="kurzansicht"', content)
@@ -3007,7 +3047,7 @@ class KurzansichtTests(TestCase):
     def test_mitarbeiter_eigenes_geraet(self):
         """F-113: Eigenes Gerät zeigt „Ihnen zugeordnet"."""
         self.client.force_login(self.mitarbeiter)
-        answer = self.client.get(f"/g/{self.gerat_eigen.inventarnummer}/")
+        answer = self.client.get(f"/g/{self.gerat_eigen.inventarnummer}")
         content = answer.content.decode()
         self.assertIn('data-test="zuordnung"', content)
         self.assertIn("Ihnen zugeordnet", content)
@@ -3015,21 +3055,21 @@ class KurzansichtTests(TestCase):
     def test_mitarbeiter_fremdes_geraet(self):
         """F-113: Fremdes Gerät zeigt „nicht Ihnen zugeordnet"."""
         self.client.force_login(self.mitarbeiter)
-        answer = self.client.get(f"/g/{self.gerat_fremd.inventarnummer}/")
+        answer = self.client.get(f"/g/{self.gerat_fremd.inventarnummer}")
         content = answer.content.decode()
         self.assertIn("nicht Ihnen zugeordnet", content)
 
     def test_admin_wird_zu_detail_geleitet(self):
         """F-113: Admin wird auf das Gerätedetail weitergeleitet."""
         self.client.force_login(self.admin)
-        answer = self.client.get(f"/g/{self.gerat_eigen.inventarnummer}/")
+        answer = self.client.get(f"/g/{self.gerat_eigen.inventarnummer}")
         self.assertEqual(answer.status_code, 302)
         self.assertIn("/geraete/", answer["Location"])
 
     def test_leser_wird_zu_detail_geleitet(self):
         """F-113: Leser wird auf das Gerätedetail weitergeleitet."""
         self.client.force_login(self.leser)
-        answer = self.client.get(f"/g/{self.gerat_eigen.inventarnummer}/")
+        answer = self.client.get(f"/g/{self.gerat_eigen.inventarnummer}")
         self.assertEqual(answer.status_code, 302)
         self.assertIn("/geraete/", answer["Location"])
 
