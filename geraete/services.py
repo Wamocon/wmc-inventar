@@ -2110,12 +2110,19 @@ def protokoll_bearbeiter_signieren(
     if not konto.check_password(password):
         return protokoll, False
 
+    # F-132: Signatur wird abgelehnt, solange die Checkliste noch offen ist.
+    offene = protokoll.checkliste_unbeantwortet()
+    if offene:
+        return protokoll, False
+
     # Prüfprotokoll: PDF-Hash berechnen (F-137).
+    # F-132, F-135: pdf_bauen muss erfolgreich sein; bei offenem Inhalt
+    # wird die Signatur abgelehnt, statt leeren Inhalt zu signieren.
     from . import pdf as pdf_modul
     try:
         pdf_bytes = pdf_modul.pdf_bauen(protokoll)
-    except Exception:
-        pdf_bytes = b""
+    except GeratFehler:
+        return protokoll, False
     pdf_hash = _pdf_hash(pdf_bytes)
 
     # Signatur setzen (F-135).

@@ -1722,7 +1722,15 @@ def protokoll_signieren(request, protokoll_nr: str):
         return redirect(f"/protokolle/{protokoll_nr}/")
 
     if not erfolg:
-        meldung_error(request, "Passwort ungültig (F-135).")
+        offene = protokoll.checkliste_unbeantwortet()
+        if offene:
+            meldung_error(
+                request,
+                f"Die Checkliste ist noch nicht vollständig beantwortet "
+                f"({len(offene)} Punkte offen, F-132); die Signatur wird abgelehnt."
+            )
+        else:
+            meldung_error(request, "Passwort ungültig (F-135).")
     else:
         meldung_success(request, "Protokoll signiert. Mail mit Link gesendet (F-135, F-136).")
     return redirect(f"/protokolle/{protokoll_nr}/")
