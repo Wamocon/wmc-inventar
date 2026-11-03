@@ -181,6 +181,7 @@ def gerat_ausgeben(
     gerat: Gerat,
     ziel: Person | Ort,
     *,
+    ziel_ort: Ort | None = None,
     zustand: int | None = None,
     zubehoer_komplett: bool = True,
     anmerkung: str = "",
@@ -201,6 +202,9 @@ def gerat_ausgeben(
     A-0127: Unterschrift. Bei „tool" bleibt das Gerät „Auf Lager",
     Protokoll auf „bearbeiter-offen"; Status, Person und Ort kommen
     erst mit der Signatur. Bei „papier" wie bisher: sofort „In Benutzung".
+
+    A-0128 (F-20): ``ziel_ort`` ist der Arbeitsplatz, wenn ``ziel``
+    eine Person ist. Beides zusammen ist erlaubt.
     """
     if gerat.status == Gerat.STATUS_AUSGEMUSTERT:
         raise GeratFehler("Ausgemusterte Geräte können nicht ausgegeben werden.")
@@ -212,7 +216,7 @@ def gerat_ausgeben(
         raise GeratFehler("Gerät ist reserviert und kann nicht ausgegeben werden (F-20).")
 
     person = ziel if isinstance(ziel, Person) else None
-    ort = ziel if isinstance(ziel, Ort) else None
+    ort = ziel if isinstance(ziel, Ort) else ziel_ort
     if person is None and ort is None:
         raise GeratFehler("Ausgabeziel muss eine Person oder ein Ort sein.")
 
@@ -220,6 +224,15 @@ def gerat_ausgeben(
     # Protokoll auf „bearbeiter-offen". Status, Person und Ort kommen
     # erst mit der Signatur in protokoll_bearbeiter_signieren.
     if person is not None and unterschrift == "tool":
+        # A-0128: Zweite Ausgabe abgelehnt, solange ein Protokoll
+        # auf "bearbeiter-offen" steht (F-21).
+        if Protokoll.objects.filter(
+            geraet=gerat, stand=Protokoll.STAND_BEARBEITER_OFFEN
+        ).exists():
+            raise GeratFehler(
+                "Für dieses Gerät steht bereits ein offenes Protokoll. "
+                "Eine weitere Ausgabe ist solange nicht möglich (F-21)."
+            )
         _protokoll_erstellen(
             person=person,
             gerat=gerat,
@@ -229,6 +242,8 @@ def gerat_ausgeben(
             ),
             erzeugt_von=ausgefuehrt_von,
             stand=Protokoll.STAND_BEARBEITER_OFFEN,
+            unterschrift_art="tool",
+            ort_ziel=ort,
         )
         gerat.save()
         return gerat
@@ -292,6 +307,9 @@ def _protokoll_erstellen(
     checkliste: dict | None = None,
     offboarding: dict | None = None,
     stand: str = Protokoll.STAND_SCAN_OFFEN,
+    unterschrift_art: str = "papier",
+    leihe: "Leihe | None" = None,
+    ort_ziel: "Ort | None" = None,
 ) -> Protokoll:
     """A-0123 (M6 Teil 1): Protokoll in der Service-Schicht anlegen (F-130).
 
@@ -301,6 +319,12 @@ def _protokoll_erstellen(
 
     A-0127: Bei Unterschrift „tool" beginnt das Protokoll auf
     „bearbeiter-offen".
+
+    A-0128: ``unterschrift_art`` wird beim Anlegen geschrieben (F-30).
+    Bei Verleih (F-30, F-33): ``leihe`` verweist auf die Leihe,
+    zu der das Protokoll gehört. Bei Ausgabe (F-20, F-21):
+    ``ort_ziel`` ist der Arbeitsort/Zielort, der beim Signieren
+    auf das Gerät gesetzt wird.
     """
     return Protokoll.objects.create(
         nr=_naechste_protokollnummer(),
@@ -322,6 +346,9 @@ def _protokoll_erstellen(
         offboarding=offboarding or {},
         rueckgabe_zu_protokoll=rueckgabe_zu_protokoll,
         erzeugt_von=erzeugt_von,
+        unterschrift_art=unterschrift_art,
+        leihe=leihe,
+        ort_ziel=ort_ziel,
     )
 
 
@@ -1407,7 +1434,27 @@ def leih_gerat_ausgeben(
 
     # A-0127: Unterschrift „tool" – Gerät bleibt „Auf Lager",
     # Protokoll auf „bearbeiter-offen". Status kommt erst mit der Signatur.
+    # A-0128: Zweite Ausgabe/Verleih abgelehnt, solange ein Protokoll
+    # auf "bearbeiter-offen" steht (F-30, F-33).
     if unterschrift == "tool":
+        if Protokoll.objects.filter(
+            geraet=gerat, stand=Protokoll.STAND_BEARBEITER_OFFEN
+        ).exists():
+            raise GeratFehler(
+                "Für dieses Gerät steht bereits ein offenes Protokoll. "
+                "Ein weiterer Verleih ist solange nicht möglich (F-30)."
+            )
+        # A-0128: Leihe zuerst anlegen, dann Protokoll mit Bezug.
+        leih_nr = _naechste_leihnummer()
+        leihe = Leihe.objects.create(
+            nr=leih_nr,
+            gerat=gerat,
+            person=person,
+            rueckgabe_bis=rueckgabe_bis,
+            zweck=zweck.strip(),
+            status=Leihe.STATUS_AUSGEGEBEN,
+            erzeugt_von=ausgefuehrt_von,
+        )
         Protokoll.objects.create(
             person=person,
             geraet=gerat,
@@ -1416,8 +1463,10 @@ def leih_gerat_ausgeben(
             stand=Protokoll.STAND_BEARBEITER_OFFEN,
             fotos=0,
             erzeugt_von=ausgefuehrt_von,
+            unterschrift_art="tool",
+            leihe=leihe,
         )
-        return None
+        return leihe
 
     # Nächste Leihnummer und Protokollnummer
     leih_nr = _naechste_leihnummer()
@@ -1996,6 +2045,40 @@ def protokoll_bearbeiter_signieren(
         hashwert=pdf_hash,
     )
 
+    # A-0128: Bei Unterschrift „tool" entstehen Status, Person, Ort
+    # und der Vorgang mit der Signatur des Bearbeiters (F-21, F-135).
+    # Bei Verleih (F-30, F-33): Status Verliehen, Leihe wird weitergeführt.
+    if protokoll.unterschrift_art == "tool":
+        gerat = protokoll.geraet
+        if protokoll.leihe is not None:
+            # Verleih: Status Verliehen, Person gesetzt, Ort leer (F-30).
+            gerat.status = Gerat.STATUS_VERLIEHEN
+            gerat.person = protokoll.person
+            gerat.ort = None
+            gerat.save(update_fields=["status", "person", "ort"])
+            # Leihe weiterführen: Status bleibt „ausgegeben" (F-33).
+            # (Wurde beim Anlegen bereits gesetzt; hier sicherstellen.)
+            if protokoll.leihe.status != Leihe.STATUS_AUSGEGEBEN:
+                protokoll.leihe.status = Leihe.STATUS_AUSGEGEBEN
+                protokoll.leihe.save()
+        else:
+            # Ausgabe: Status In Benutzung, Person und Ort gesetzt (F-20, F-21).
+            gerat.status = Gerat.STATUS_IN_BENUTZUNG
+            gerat.person = protokoll.person
+            if protokoll.ort_ziel is not None:
+                gerat.ort = protokoll.ort_ziel
+            gerat.save(update_fields=["status", "person", "ort"])
+            # Vorgang „Ausgabe" in die Historie (F-21).
+            Vorgang.objects.create(
+                gerat=gerat,
+                typ=Vorgang.TYP_AUSGABE,
+                zeitpunkt=now,
+                erzeugt_von=konto,
+                leihgabe_an=protokoll.person,
+                notiz=f"Ausgabe per Protokoll {protokoll.nr} (F-21)",
+                abschliesst=True,
+            )
+
     # F-136: Token für die Gegenzeichnung erzeugen (14 Tage gültig).
     import secrets
     token = secrets.token_hex(32)
@@ -2329,21 +2412,6 @@ def protokoll_gegenzeichnen(
     # F-135: Bearbeiter muss schon signiert haben.
     if protokoll.bearbeiter_signiert_am is None:
         return protokoll, False, "Der Bearbeiter hat noch nicht signiert."
-
-    # A-0127: Bei Unterschrift "tool" kommen Status, Person und Ort
-    # erst mit der Signatur. Jetzt setzen.
-    if protokoll.art == Protokoll.ART_AUSGABE:
-        protokoll.geraet.status = Gerat.STATUS_IN_BENUTZUNG
-        protokoll.geraet.person = protokoll.person
-        protokoll.geraet.save()
-
-    # A-0127: Bei Unterschrift "tool" kommt der Status Verliehen
-    # erst mit der Signatur. Jetzt setzen.
-    if protokoll.art == Protokoll.ART_AUSGABE and protokoll.unterschrift_art == "tool":
-        protokoll.geraet.status = Gerat.STATUS_VERLIEHEN
-        protokoll.geraet.person = protokoll.person
-        protokoll.geraet.ort = None
-        protokoll.geraet.save()
 
     # F-136: Code suchen.
     code_objekt = SignaturCode.objects.filter(

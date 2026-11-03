@@ -512,6 +512,20 @@ class Protokoll(models.Model):
         "Art der Unterschrift", max_length=16, default="tool"
     )
 
+    # A-0128: Bei Verleih (F-30, F-33): Bezug auf die Leihe, zu der
+    # dieses Protokoll gehört. Bei Ausgabe (F-21, F-135): leer.
+    leihe = models.ForeignKey(
+        "Leihe", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="protokolle", verbose_name="Leihe",
+    )
+
+    # A-0128 (F-20, F-21): Arbeitsort/Zielort, den das Gerät bei der
+    # Ausgabe bekommt. Bei Verleih: leer.
+    ort_ziel = models.ForeignKey(
+        "stammdaten.Ort", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="+", verbose_name="Zielort (Ausgabe)",
+    )
+
     class Meta:
         verbose_name = "Protokoll"
         verbose_name_plural = "Protokolle"

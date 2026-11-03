@@ -680,11 +680,16 @@ def ausgeben(request, inventarnummer: str):
     if request.method == "POST":
         form = GeratAusgabeForm(request.POST, gerat=gerat)
         if form.is_valid():
-            ziel = form.cleaned_data.get("ziel_person") or form.cleaned_data.get("ziel_ort")
+            ziel_person = form.cleaned_data.get("ziel_person")
+            ziel_ort = form.cleaned_data.get("ziel_ort")
+            if ziel_person is None and ziel_ort is None:
+                meldung_error(request, "Ziel muss eine Person oder ein Ort sein.")
+                return redirect("/geraete/" + gerat.inventarnummer + "/")
             try:
                 services.gerat_ausgeben(
                     gerat,
-                    ziel,
+                    ziel=ziel_person or ziel_ort,
+                    ziel_ort=ziel_ort,
                     zustand=form.cleaned_data.get("zustand"),
                     zubehoer_komplett=form.cleaned_data.get("zubehoer_komplett") == "ja",
                     anmerkung=form.cleaned_data.get("anmerkung", ""),
@@ -1631,7 +1636,10 @@ def protokoll_scan_hochladen(request, protokoll_nr):
 def protokoll_abbrechen(request, protokoll_nr: str):
     """A-0127: POST /protokolle/<Nummer>/abbrechen/
 
-    Verwirft das Protokoll, ohne etwas am Gerät zu ändern.
+    Verwirft das Protokoll. Gerät bleibt unverändert (Status war
+    nicht gesetzt, weil Signatur noch fehlt).
+    Bei Verleih (F-30, F-33): die Leihe wird ebenfalls entfernt,
+    damit das Gerät wieder ausgebbar ist.
     Nur für Protokolle auf "bearbeiter-offen".
     """
     protokoll = get_object_or_404(Protokoll, nr=protokoll_nr)
@@ -1641,8 +1649,11 @@ def protokoll_abbrechen(request, protokoll_nr: str):
         meldung_error(request, "Nur Protokolle auf 'bearbeiter-offen' können abgebrochen werden.")
         return redirect(f"/protokolle/{protokoll_nr}/")
 
-    # A-0127: Gerät bleibt unverändert, weil bei "tool" der Status
-    # noch nicht gesetzt wurde. Protokoll wird verworfen.
+    # A-0128: Bei Verleih (F-30, F-33) auch die Leihe entfernen,
+    # damit das Gerät wieder ausgebbar ist.
+    if protokoll.leihe is not None:
+        protokoll.leihe.delete()
+
     protokoll.delete()
     meldung_success(request, "Protokoll abgebrochen. Das Gerät bleibt unverändert.")
     return redirect("/meine-geraete/")

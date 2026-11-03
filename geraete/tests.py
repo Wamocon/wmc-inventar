@@ -18,7 +18,7 @@ from konten.models import Konto
 from stammdaten.models import Kategorie, Ort, Person
 
 from . import services
-from .models import Gerat, GeratKonflikt, Importlauf, Leihe, Protokoll, Vorgang
+from .models import Gerat, GeratKonflikt, Importlauf, Leihe, Protokoll, SignaturCode, Vorgang
 from .services import (
     GeratFehler,
     leihe_ausgeben,
@@ -4235,3 +4235,307 @@ class M6Teil3NeusendenTests(TestCase):
         # Neuer Link funktioniert.
         antwort = self.client.get(f"/signieren/{self.protokoll.gegenzeichnung_token}/")
         self.assertEqual(antwort.status_code, 200)
+
+
+# ---------------------------------------------------------------------------
+# A-0128: Zeitpunkt des Status, Verleih und zweite Ausgabe
+# ---------------------------------------------------------------------------
+
+
+class A0128AusgabeTest(TestCase):
+    """A-0128: Ausgabe mit Signatur im Tool.
+
+    Vor der Signatur: „Auf Lager" ohne Person.
+    Nach der Signatur des Bearbeiters: „In Benutzung" mit Person und Ort.
+    Nach der Gegenzeichnung: weiter „In Benutzung".
+    """
+
+    def setUp(self):
+        self.admin = konto_erstellen("admin0128")
+        self.kat = Kategorie.objects.create(name="Testkategorie A0128")
+        self.person = Person.objects.create(
+            vorname="Anna", nachname="Becker", email="anna.becker@example.com",
+        )
+        self.ort = Ort.objects.create(
+            typ=Ort.TYP_ARBEITSPLATZ, kennung="A0128-AP", name="Raum A0128",
+        )
+        self.g1 = services.gerat_anlegen(
+            kategorie=self.kat, hersteller="Test", modell="A0128",
+            erzeugt_von=self.admin,
+        )
+
+    def test_ausgabe_vor_signatur_auf_lager(self):
+        """F-21: Vor der Signatur steht das Gerät auf „Auf Lager" ohne Person."""
+        self.client.force_login(self.admin)
+        antwort = self.client.post(
+            f"/geraete/{self.g1.inventarnummer}/ausgeben/",
+            {
+                "ziel_person": self.person.pk,
+                "ziel_ort": self.ort.pk,
+                "zustand": 2,
+                "zubehoer_komplett": "ja",
+                "unterschrift": "tool",
+            },
+        )
+        self.assertEqual(antwort.status_code, 302)
+        self.g1.refresh_from_db()
+        self.assertEqual(self.g1.status, Gerat.STATUS_AUF_LAGER)
+        self.assertIsNone(self.g1.person)
+        # Protokoll steht auf bearbeiter-offen.
+        protokoll = Protokoll.objects.filter(geraet=self.g1).first()
+        self.assertIsNotNone(protokoll)
+        self.assertEqual(protokoll.stand, Protokoll.STAND_BEARBEITER_OFFEN)
+        self.assertEqual(protokoll.unterschrift_art, "tool")
+        self.assertEqual(protokoll.ort_ziel, self.ort)
+
+    def test_ausgabe_nach_signatur_in_benutzung(self):
+        """F-21, F-135: Nach der Signatur des Bearbeiters: „In Benutzung" mit Person und Ort."""
+        # Ausgabe anlegen.
+        self.client.force_login(self.admin)
+        self.client.post(
+            f"/geraete/{self.g1.inventarnummer}/ausgeben/",
+            {
+                "ziel_person": self.person.pk,
+                "ziel_ort": self.ort.pk,
+                "zustand": 2,
+                "zubehoer_komplett": "ja",
+                "unterschrift": "tool",
+            },
+        )
+        protokoll = Protokoll.objects.filter(geraet=self.g1).first()
+        # Signieren.
+        self.client.force_login(self.admin)
+        antwort = self.client.post(
+            f"/protokolle/{protokoll.nr}/signieren/",
+            {"passwort": "test-passwort-123"},
+        )
+        self.assertEqual(antwort.status_code, 302)
+        # Gerät ist jetzt „In Benutzung" mit Person und Ort.
+        self.g1.refresh_from_db()
+        self.assertEqual(self.g1.status, Gerat.STATUS_IN_BENUTZUNG)
+        self.assertEqual(self.g1.person, self.person)
+        self.assertEqual(self.g1.ort, self.ort)
+        # Vorgang „Ausgabe" in der Historie.
+        self.assertTrue(
+            Vorgang.objects.filter(
+                gerat=self.g1, typ=Vorgang.TYP_AUSGABE
+            ).exists()
+        )
+
+    def test_ausgabe_nach_gegenzeichnung_weiter_in_benutzung(self):
+        """F-21: Nach der Gegenzeichnung bleibt das Gerät „In Benutzung"."""
+        # Ausgabe anlegen.
+        self.client.force_login(self.admin)
+        self.client.post(
+            f"/geraete/{self.g1.inventarnummer}/ausgeben/",
+            {
+                "ziel_person": self.person.pk,
+                "ziel_ort": self.ort.pk,
+                "zustand": 2,
+                "zubehoer_komplett": "ja",
+                "unterschrift": "tool",
+            },
+        )
+        protokoll = Protokoll.objects.filter(geraet=self.g1).first()
+        # Signieren.
+        self.client.force_login(self.admin)
+        self.client.post(
+            f"/protokolle/{protokoll.nr}/signieren/",
+            {"passwort": "test-passwort-123"},
+        )
+        protokoll.refresh_from_db()
+        # Einmalcode erzeugen und die Gegenzeichnung ausführen.
+        self.client.force_login(self.admin)
+        self.client.post(f"/protokolle/{protokoll.nr}/code-senden/", {})
+        code = SignaturCode.objects.filter(
+            protokoll=protokoll
+        ).order_by("-erstellt_am").first()
+        antwort = self.client.post(
+            f"/signieren/{protokoll.gegenzeichnung_token}/",
+            {"code": code.code},
+        )
+        self.assertEqual(antwort.status_code, 200)
+        # Gerät bleibt „In Benutzung".
+        self.g1.refresh_from_db()
+        self.assertEqual(self.g1.status, Gerat.STATUS_IN_BENUTZUNG)
+        self.assertEqual(self.g1.person, self.person)
+        # Protokoll ist abgeschlossen.
+        protokoll.refresh_from_db()
+        self.assertEqual(protokoll.stand, Protokoll.STAND_ABGESCHLOSSEN)
+
+
+class A0128VerleihTest(TestCase):
+    """A-0128: Verleih mit Signatur im Tool.
+
+    Nach der Signatur des Bearbeiters: „Verliehen".
+    Die Leihe wird weitergeführt.
+    """
+
+    def setUp(self):
+        self.admin = konto_erstellen("admin0128v")
+        self.kat = Kategorie.objects.create(name="Testkategorie A0128V")
+        self.person = Person.objects.create(
+            vorname="Anna", nachname="Becker Verleih",
+            email="anna.becker.verleih@example.com",
+        )
+        self.g1 = services.gerat_anlegen(
+            kategorie=self.kat, hersteller="Test", modell="A0128V",
+            erzeugt_von=self.admin,
+        )
+
+    def test_verleih_nach_signatur_verliehen(self):
+        """F-30, F-33: Nach der Signatur des Bearbeiters: „Verliehen", Leihe weitergeführt."""
+        from datetime import date, timedelta
+        from konten.zeit import jetzt_wie_im_entwicklungsmodus
+        rueckgabe = jetzt_wie_im_entwicklungsmodus().date() + timedelta(days=7)
+        # Verleih anlegen.
+        self.client.force_login(self.admin)
+        self.client.post(
+            f"/geraete/{self.g1.inventarnummer}/verleih/",
+            {
+                "person": self.person.pk,
+                "rueckgabe_bis": rueckgabe,
+                "zweck": "Verleih Test",
+                "unterschrift": "tool",
+            },
+        )
+        self.g1.refresh_from_db()
+        # Vor der Signatur: „Auf Lager".
+        self.assertEqual(self.g1.status, Gerat.STATUS_AUF_LAGER)
+        # Protokoll steht auf bearbeiter-offen.
+        protokoll = Protokoll.objects.filter(geraet=self.g1).first()
+        self.assertIsNotNone(protokoll)
+        self.assertEqual(protokoll.stand, Protokoll.STAND_BEARBEITER_OFFEN)
+        self.assertEqual(protokoll.unterschrift_art, "tool")
+        self.assertIsNotNone(protokoll.leihe)
+        # Leihe ist „ausgegeben".
+        self.assertEqual(protokoll.leihe.status, Leihe.STATUS_AUSGEGEBEN)
+        # Signieren.
+        self.client.force_login(self.admin)
+        antwort = self.client.post(
+            f"/protokolle/{protokoll.nr}/signieren/",
+            {"passwort": "test-passwort-123"},
+        )
+        self.assertEqual(antwort.status_code, 302)
+        # Gerät ist jetzt „Verliehen".
+        self.g1.refresh_from_db()
+        self.assertEqual(self.g1.status, Gerat.STATUS_VERLIEHEN)
+        self.assertEqual(self.g1.person, self.person)
+        # Leihe bleibt „ausgegeben".
+        protokoll.refresh_from_db()
+        self.assertEqual(protokoll.leihe.status, Leihe.STATUS_AUSGEGEBEN)
+
+
+class A0128ZweiteAusgabeTest(TestCase):
+    """A-0128: Zweite Ausgabe wird abgelehnt, solange ein Protokoll
+    auf „bearbeiter-offen" steht."""
+
+    def setUp(self):
+        self.admin = konto_erstellen("admin0128z")
+        self.kat = Kategorie.objects.create(name="Testkategorie A0128Z")
+        self.person = Person.objects.create(
+            vorname="Anna", nachname="Becker Zweite",
+            email="anna.becker.zweite@example.com",
+        )
+        self.ort = Ort.objects.create(
+            typ=Ort.TYP_ARBEITSPLATZ, kennung="A0128Z-AP", name="Raum A0128Z",
+        )
+        self.g1 = services.gerat_anlegen(
+            kategorie=self.kat, hersteller="Test", modell="A0128Z",
+            erzeugt_von=self.admin,
+        )
+
+    def test_zweite_ausgabe_abgelehnt(self):
+        """F-21: Zweite Ausgabe wird abgelehnt."""
+        # Erste Ausgabe anlegen.
+        self.client.force_login(self.admin)
+        self.client.post(
+            f"/geraete/{self.g1.inventarnummer}/ausgeben/",
+            {
+                "ziel_person": self.person.pk,
+                "ziel_ort": self.ort.pk,
+                "zustand": 2,
+                "zubehoer_komplett": "ja",
+                "unterschrift": "tool",
+            },
+        )
+        # Es gibt genau ein Protokoll.
+        self.assertEqual(Protokoll.objects.filter(geraet=self.g1).count(), 1)
+        # Zweite Ausgabe versuchen.
+        antwort = self.client.post(
+            f"/geraete/{self.g1.inventarnummer}/ausgeben/",
+            {
+                "ziel_person": self.person.pk,
+                "ziel_ort": self.ort.pk,
+                "zustand": 2,
+                "zubehoer_komplett": "ja",
+                "unterschrift": "tool",
+            },
+        )
+        # Fehlermeldung, kein zweites Protokoll.
+        self.assertEqual(antwort.status_code, 302)
+        self.assertEqual(Protokoll.objects.filter(geraet=self.g1).count(), 1)
+        # Gerät ist unverändert.
+        self.g1.refresh_from_db()
+        self.assertEqual(self.g1.status, Gerat.STATUS_AUF_LAGER)
+
+
+class A0128AbbrechenTest(TestCase):
+    """A-0128: Abbrechen lässt das Gerät auf „Auf Lager" und
+    macht es wieder ausgebbar."""
+
+    def setUp(self):
+        self.admin = konto_erstellen("admin0128a")
+        self.kat = Kategorie.objects.create(name="Testkategorie A0128A")
+        self.person = Person.objects.create(
+            vorname="Anna", nachname="Becker Abbrechen",
+            email="anna.becker.abbrechen@example.com",
+        )
+        self.ort = Ort.objects.create(
+            typ=Ort.TYP_ARBEITSPLATZ, kennung="A0128A-AP", name="Raum A0128A",
+        )
+        self.g1 = services.gerat_anlegen(
+            kategorie=self.kat, hersteller="Test", modell="A0128A",
+            erzeugt_von=self.admin,
+        )
+
+    def test_abbrechen_laesst_auf_lager(self):
+        """Abbrechen: Gerät bleibt auf „Auf Lager" und ist wieder ausgebbar."""
+        # Ausgabe anlegen.
+        self.client.force_login(self.admin)
+        self.client.post(
+            f"/geraete/{self.g1.inventarnummer}/ausgeben/",
+            {
+                "ziel_person": self.person.pk,
+                "ziel_ort": self.ort.pk,
+                "zustand": 2,
+                "zubehoer_komplett": "ja",
+                "unterschrift": "tool",
+            },
+        )
+        protokoll = Protokoll.objects.filter(geraet=self.g1).first()
+        self.assertIsNotNone(protokoll)
+        # Abbrechen.
+        self.client.force_login(self.admin)
+        antwort = self.client.post(
+            f"/protokolle/{protokoll.nr}/abbrechen/",
+        )
+        self.assertEqual(antwort.status_code, 302)
+        # Protokoll ist gelöscht.
+        self.assertEqual(Protokoll.objects.filter(geraet=self.g1).count(), 0)
+        # Gerät ist wieder „Auf Lager".
+        self.g1.refresh_from_db()
+        self.assertEqual(self.g1.status, Gerat.STATUS_AUF_LAGER)
+        # Neue Ausgabe ist jetzt möglich.
+        antwort = self.client.post(
+            f"/geraete/{self.g1.inventarnummer}/ausgeben/",
+            {
+                "ziel_person": self.person.pk,
+                "ziel_ort": self.ort.pk,
+                "zustand": 2,
+                "zubehoer_komplett": "ja",
+                "unterschrift": "tool",
+            },
+        )
+        self.assertEqual(antwort.status_code, 302)
+        self.assertEqual(Protokoll.objects.filter(geraet=self.g1).count(), 1)

@@ -148,7 +148,7 @@
         <p class="muted">
             Abbrechen verwirft das Protokoll, ohne etwas am Gerät zu ändern.
         </p>
-        <button class="btn" type="submit" data-test="abbrechen-absenden">Abbrechen</button>
+        <button class="btn" type="submit" data-test="abbrechen">Abbrechen</button>
     </form>
     <form method="post" action="/protokolle/{{ protokoll.nr }}/signieren/" data-test="signieren-formular">
         {% csrf_token %}
