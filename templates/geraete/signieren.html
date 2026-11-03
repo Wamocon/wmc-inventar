@@ -1,0 +1,58 @@
+{% extends "basis.html" %}
+
+{% block titel %}Gegenzeichnung · Protokoll {{ protokoll.nr }} · WMC Inventar{% endblock %}
+
+{% block inhalt %}
+<div class="page-head">
+    <div>
+        <h1>Gegenzeichnung</h1>
+        <p class="lead muted">
+            Protokoll {{ protokoll.nr }}
+            · {{ protokoll.person.vorname }} {{ protokoll.person.nachname }}
+        </p>
+    </div>
+</div>
+
+{% if fehler %}
+<div class="meldung meldung-fehler" data-test="signieren-fehler" role="alert">
+    {{ fehler }}
+</div>
+{% endif %}
+
+<section class="abschnitt" data-test="protokoll-ansicht">
+    <h2>Protokoll</h2>
+    <p class="muted">
+        <a class="btn" data-test="protokoll-pdf" href="/protokolle/{{ protokoll.nr }}/pdf/">PDF ansehen</a>
+    </p>
+    <p class="muted">
+        Bitte sehen Sie das Protokoll an und geben Sie unten den Einmalcode ein,
+        der Ihnen per Mail zugesandt wurde.
+    </p>
+</section>
+
+<section class="abschnitt" data-test="signieren-formular">
+    <h2>Einmalcode</h2>
+    <form method="post" action="/signieren/{{ token }}/" data-test="code-formular">
+        {% csrf_token %}
+        <p>
+            <label for="code">Einmalcode (6 Stellen)</label><br>
+            <input type="text" name="code" id="code" maxlength="6"
+                   pattern="[0-9]{6}" required
+                   data-test="code-eingabe"
+                   placeholder="000000">
+        </p>
+        <p class="muted">
+            Der Code ist 10 Minuten gültig und darf 5-mal verwendet werden.
+        </p>
+        <button class="btn" type="submit" data-test="code-absenden">Signieren</button>
+    </form>
+</section>
+
+<section class="abschnitt" data-test="signieren-info">
+    <h2>Hinweis</h2>
+    <p class="muted">
+        Sie haben keine E-Mail erhalten? Wenden Sie sich an die IT,
+        damit ein neuer Code gesendet wird.
+    </p>
+</section>
+{% endblock %}

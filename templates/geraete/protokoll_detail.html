@@ -7,7 +7,7 @@
     <div>
         <h1>Protokoll {{ protokoll.nr }}</h1>
         <p class="lead muted">
-            {{ protokoll.art == "ausgabe" and "Ausgabeprotokoll Hardware (Onboarding)" or "Rücknahmeprotokoll Hardware (Offboarding)" }}
+            {{ protokoll.art_anzeige }}
             · {{ protokoll.datum|date:"d.m.Y" }}
         </p>
     </div>
@@ -29,7 +29,7 @@
         <tr><td class="lbl">Empfänger</td><td>{{ protokoll.empfaenger_anschrift|default:"—" }}</td></tr>
         <tr><td class="lbl">Bearbeiter</td><td>{{ protokoll.bearbeiter|default:"—" }}</td></tr>
         <tr><td class="lbl">Person</td><td>{{ person.vorname }} {{ person.nachname }}</td></tr>
-        <tr><td class="lbl">Gerät</td><td>{{ gerat.inventarnummer }} {{ gerat.geraetename|default:gerat.modell }}</td></tr>
+        <tr><td class="lbl">Gerät</td><td>{{ protokoll.geraet.inventarnummer }} {{ protokoll.geraet.geraetename|default:protokoll.geraet.modell }}</td></tr>
         {% if protokoll.rueckgabe_zu_protokoll %}
         <tr><td class="lbl">Bezug</td><td>Ausgabeprotokoll {{ protokoll.rueckgabe_zu_protokoll.nr }}</td></tr>
         {% endif %}
@@ -129,4 +129,92 @@
         {% endif %}
     </p>
 </section>
+
+{% if protokoll.stand != "abgeschlossen" %}
+<section class="abschnitt" data-test="protokoll-signatur">
+    <h2>Signatur (F-135)</h2>
+    {% if protokoll.ist_gesperrt %}
+    <p class="muted">
+        Gesperrt am {{ protokoll.bearbeiter_signiert_am|date:"d.m.Y H:i" }}
+        durch {{ protokoll.bearbeiter_signiert_von.bezeichnung|default:"—" }}.
+    </p>
+    {% else %}
+    <p class="muted">
+        Prüfen Sie das PDF und signieren Sie mit Ihrem Passwort.
+        Danach ist der Inhalt gesperrt (F-135).
+    </p>
+    <form method="post" action="/protokolle/{{ protokoll.nr }}/signieren/" data-test="signieren-formular">
+        {% csrf_token %}
+        <p>
+            <label for="passwort">Passwort</label><br>
+            <input type="password" name="passwort" id="passwort" required
+                   data-test="signieren-passwort">
+        </p>
+        <button class="btn" type="submit" data-test="signieren-absenden">Signieren</button>
+    </form>
+    {% endif %}
+</section>
+
+{% if protokoll.stand == "gegenzeichnung-offen" %}
+<section class="abschnitt" data-test="protokoll-gegenzeichnung">
+    <h2>Gegenzeichnung (F-136)</h2>
+    <p class="muted">
+        Mail mit Link gesendet an: {{ protokoll.gegenzeichnung_empfaenger|default:"—" }}
+    </p>
+    {% if not protokoll.gegenzeichnung_token_erstellt %}
+    <p class="muted">Der Link wurde noch nicht versendet.</p>
+    {% endif %}
+    <form method="post" action="/protokolle/{{ protokoll.nr }}/code-senden/" data-test="code-senden-formular">
+        {% csrf_token %}
+        <p>
+            <label for="empfaenger">Empfänger (E-Mail, optional)</label><br>
+            <input type="email" name="empfaenger" id="empfaenger"
+                   value="{{ protokoll.gegenzeichnung_empfaenger }}"
+                   data-test="code-senden-empfaenger">
+        </p>
+        <button class="btn" type="submit" data-test="code-senden-absenden">Einmalcode senden</button>
+    </form>
+</section>
+{% endif %}
+{% endif %}
+
+{% if protokoll.ist_gesperrt %}
+<section class="abschnitt" data-test="protokoll-korrigieren">
+    <h2>Korrektur (F-135)</h2>
+    <p class="muted">
+        Das Protokoll ist signiert. Eine Korrektur erzeugt eine neue Fassung
+        mit neuer Nummer.
+    </p>
+    <form method="post" action="/protokolle/{{ protokoll.nr }}/korrigieren/" data-test="korrigieren-formular">
+        {% csrf_token %}
+        <button class="btn" type="submit" data-test="korrigieren-absenden">Neue Fassung erzeugen</button>
+    </form>
+</section>
+
+<section class="abschnitt" data-test="protokoll-pruefprotokoll">
+    <h2>Prüfprotokoll (F-137)</h2>
+    {% if protokoll.aufzeichnungen_liste %}
+    <table class="tabelle">
+        <tr>
+            <th>Art</th>
+            <th>Name</th>
+            <th>E-Mail</th>
+            <th>Zeitpunkt</th>
+            <th>IP</th>
+        </tr>
+        {% for aufz in protokoll.aufzeichnungen_liste %}
+        <tr data-test="pruefprotokoll-eintrag">
+            <td>{{ aufz.art_anzeige }}</td>
+            <td>{{ aufz.name }}</td>
+            <td>{{ aufz.email }}</td>
+            <td>{{ aufz.zeitpunkt|date:"d.m.Y H:i" }}</td>
+            <td>{{ aufz.ip_adresse }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% else %}
+    <p class="muted">Noch keine Signaturen.</p>
+    {% endif %}
+</section>
+{% endif %}
 {% endblock %}

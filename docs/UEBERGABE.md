@@ -1,6 +1,6 @@
 # Übergabe WMCNL-2755
 
-Ausgefüllt von: Gregor · Datum: 02.11.2026 · Zweig: gregor/inventar · Letzter Commit: (siehe git log)
+Ausgefüllt von: Gregor · Datum: 03.11.2026 · Zweig: gregor/inventar · Letzter Commit: (siehe git log)
 
 ## Zusammenfassung
 
@@ -37,6 +37,8 @@ M5 Verleih Teil 4 (A-0122): Ausgabe aus der Leihe und Verlängerung (F-33, F-35,
 
 M6 Teil 2 Nachbesserung (A-0124): Suche, Sicherheitskopfzeile und leere Markierungen (F-44, N-02). 1. Suche (F-44): `templates/geraete/liste.html` trägt in der Zeile `data-test="zeile"` genau einmal; bei einer Suche trägt ein Element darin `data-test="suchtreffer"`, das den Text der Zeile enthält (Inventarnummer). `data-test="geraete-liste"` ist entfernt. `geraete/tests.py:SucheTests` (3 Tests: `test_suche_zeile_tragt_data_test_einmal`, `test_suche_suchtreffer_enthaelt_text`, `test_keine_suche_kein_suchtreffer`). 2. Leere Markierungen: `personen-liste`, `geraete-liste`, `kategorien-liste`, `orte-liste` und `konten-liste` stehen in keiner Vorlage mehr; `data-test="liste"` und `data-test="zeile"` aus `docs/TESTSCHNITTSTELLE.md` Kapitel 4 bleiben. `templates/geraete/liste.html`, `templates/konten/konten_liste.html`, `templates/stammdaten/kategorien_liste.html`, `templates/stammdaten/orte_liste.html`, `templates/stammdaten/personen_liste.html`, `templates/geraete/arbeitsplatz_detail.html` (alle: `data-test="*-liste"` durch `data-test="liste"` ersetzt, leere `<div data-test="*-liste">` entfernt). 3. Sicherheitskopfzeile (N-02): `inventar/settings.py` definiert `CSP = "default-src 'self'; script-src 'self'; style-src 'self'"`; `inventar/middleware.py:CSPMiddleware` sendet `Content-Security-Policy` auf jeder Antwort. `templates/geraete/raumplan.html` und `plan_bearbeiten.html`: Inline-Skripte in `static/raumplan.js` und `static/plan_bearbeiten.js` gezogen; `plan_bearbeiten.html`: Inline-Style `style="left:…;top:…;"` durch `data-x`/`data-y` ersetzt, JS setzt `style.left`/`style.top` beim Laden. `templates/geraete/import.html`, `konten/konto_aendern.html`, `konten/konto_anlegen.html`, `stammdaten/_formular.html`: Inline-Styles durch Klassen `.form-inline` und `.help.error` in `static/basis.css` ersetzt. `templates/basis.html`: `{% block skripte %}{% endblock %}` nach `{% block ende %}` eingefügt. `geraete/tests.py:SicherheitTests` (3 Tests: `test_anmelden_tragt_csp`, `test_arbeitsplaetze_tragt_csp`, `test_csp_verbietet_inline`). htmx (`static/vendor/htmx.min.js`) fügt unter der CSP keine eigenen Stile ein (geprüft: keine `insertAdjacentHTML`, `cssText` oder `createElement("style")` für Styles). Alle 282 Tests sind grün.
 
+M6 Teil 2 (A-0125): Signatur, Gegenzeichnung und Prüfprotokoll (F-135, F-136, F-137, F-141, N-05). Der Bearbeiter prüft das PDF und signiert mit erneuter Abfrage seines Passworts; danach ist der Inhalt gesperrt (F-135). `aktion-korrigieren` erzeugt eine neue Fassung mit neuer Nummer (F-135). Danach geht eine Mail mit persönlichem Link `/signieren/<token>/`, 14 Tage gültig, an die Person. Sie sieht das PDF und signiert nach Eingabe eines Einmalcodes (6 Stellen, 10 Minuten gültig, höchstens 5 Versuche, Zähler in der Datenbank, F-136, N-05). Zu jeder Signatur werden Name, E-Mail, Zeitpunkt, Nachweisnummer, Identifizierungsmerkmal, IP-Adresse und Hashwert gespeichert und als letzte Seite an das PDF angehängt (F-137). Eine Rücknahme ist erst mit der Signatur der Person abgeschlossen; die Geräte sind trotzdem sofort im Lager (F-141). `geraete/models.py:Protokoll` (neue Felder: bearbeiter_signatur, bearbeiter_signiert_am, bearbeiter_signiert_von, bearbeiter_ip, pdf_hash_bearbeiter, gegenzeichnung_token, gegenzeichnung_token_erstellt, gegenzeichnung_empfaenger, gegenzeichnung_signiert_am, gegenzeichnung_ip, pdf_hash_gegenzeichnung, ruecknahme_geraet_im_lager, ist_korrektur, korrigiert_zu_protokoll), `geraete/models.py:SignaturCode` (6-stelliger Einmalcode, 10 Min., 5 Versuche, Zähler), `geraete/models.py:SignaturAufzeichnung` (Prüfprotokoll: Name, E-Mail, Zeitpunkt, Nachweisnummer, Identifizierungsmerkmal, IP, Hash), `geraete/models.py:Protokoll.STAENDE` (bearbeiter-offen, gegenzeichnung-offen), `geraete/services.py:protokoll_bearbeiter_signieren` (F-135), `geraete/services.py:protokoll_gegenzeichnen` (F-136, F-137), `geraete/services.py:protokoll_code_senden` (F-136), `geraete/services.py:protokoll_korrigieren` (F-135), `geraete/views.py:protokoll_signieren` (POST /protokolle/<nr>/signieren/), `geraete/views.py:protokoll_code_senden` (POST /protokolle/<nr>/code-senden/), `geraete/views.py:protokoll_korrigieren` (POST /protokolle/<nr>/korrigieren/), `geraete/views.py:signieren_link` (GET/POST /signieren/<token>/, ohne Anmeldung), `inventar/urls.py` (Routen /protokolle/<nr>/signieren/, /code-senden/, /korrigieren/, /signieren/<token>/), `templates/geraete/signieren.html` (öffentliche Code-Eingabe), `templates/geraete/protokoll_detail.html` (Signatur-Abschnitt), `geraete/migrations/0011_m6teil2_signatur.py`, `geraete/tests.py` (18 neue Tests: M6Teil2SignaturTests 6, M6Teil2GegenzeichnungTests 10, M6Teil2RuecknahmeTests 2). Alle 300 Tests sind grün.
+
 **Nicht Teil dieser Karte (A-0099):**
 - **Protokoll in einem Vorgang (F-130):** Kommt mit M6; die Rückgabe-Ansicht im Offboarding zeigt keine Protokollfunktion.
 - **Deaktivieren des Kontos am Tag nach dem Austritt (F-53):** Ist ein Befehl für den Tageslauf und nicht Teil dieser Karte. `austritt_speichern` setzt `person.aktiv=False`, das Konto-Deaktivieren ist ein separater Tageslauf-Auftrag.
@@ -50,7 +52,7 @@ M6 Teil 2 Nachbesserung (A-0124): Suche, Sicherheitskopfzeile und leere Markieru
 | M3 Lebenszyklus | fertig | | 28.10.2026 | Ausgabe, Rückgabe, Umzug, Reparatur, Ausmusterung, Vorgang-Historie, Gerätedetail-Aktionen (A-0074), Vorgänge als Dialoge (A-0075), Formulare und Fehlermeldungen (A-0097), Historie/Suche/Zustand/Konten (A-0098), Offboarding/Austritt/Löschen (A-0099) |
 | M4 Arbeitsplätze | fertig | a13dc17 | 30.10.2026 | Soll-Ist-Abgleich (F-62), Bedarf (F-63), Feste Person (F-64), Erstinventur (F-89); Raumplan (F-65, F-66, F-68, F-69) mit Pop-up und `aktion-im-raumplan`; Plan pflegen (F-67) mit Upload und Position (A-0107); QR-Code, Etiketten, PDF-Druck (A-0108); Mobile (F-74), Notiz, Geprüft (A-0111) |
 |M5 Verleih | teilweise | | 02.11.2026 | Leihe und Verleih durch die IT (F-30, F-36, F-133, F-20) (A-0115 Teil 1); Leihanfragen und Genehmigung (F-31, F-32, F-34, F-37) (A-0118, A-0119); Meine Geräte, Kurzansicht, Datensparsamkeit (F-110 bis F-113) (A-0120 Teil 3); Ausgabe aus der Leihe und Verlängerung (F-33, F-35) (A-0122 Teil 4) |
-| M6 Signatur | teilweise | | 02.11.2026 | Protokoll mit PDF, Fotos und Papierweg (F-130, F-132, F-133, F-134, F-22) (A-0123 Teil 1); Signatur, Gegenzeichnung, Prüfprotokoll, Versiegeln (F-135 bis F-141) in Teil 2 |
+| M6 Signatur | teilweise | | 03.11.2026 | Protokoll mit PDF, Fotos und Papierweg (F-130, F-132, F-133, F-134, F-22) (A-0123 Teil 1); Signatur des Bearbeiters, Gegenzeichnung, Prüfprotokoll (F-135 bis F-137, F-141) (A-0125 Teil 2); Versiegeln (F-138), Versand und Ablage (F-139), Erinnerung (F-140) in Teil 3 |
 | M7 Abschluss | offen | | | |
 
 ## Stand je Anforderung
@@ -145,28 +147,28 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 | F-132 | M | M6 | Checkliste Zugänge (Ausgabe) | erfüllt | `geraete/models.py:Protokoll.CHECKLISTE_PUNKTE` (6 Punkte), `geraete/protokoll.py:checkliste_beantworten`, `geraete/pdf.py:erzeuge_pdf` (Checkliste im PDF), Test: `ProtokollAusgabeTests.test_ausgabe_zeugt_protokoll_scan_offen` |
 | F-133 | M | M6 | Prüfpunkte IT-Offboarding (Rücknahme) | erfüllt | `geraete/models.py:Protokoll.OFFBOARDING_PUNKTE` (13 Punkte), `geraete/protokoll.py:offboarding_abhaken`, `geraete/pdf.py:erzeuge_pdf` (Prüfpunkte im PDF), Test: `ProtokollAusgabeTests.test_ruecknahme_zeugt_protokoll_mit_offboarding` |
 | F-134 | M | M6 | Fotos | erfüllt | `geraete/protokoll.py:foto_hochladen` (JPG, PNG, HEIC bis 10 MB, verkleinert gespeichert, als Anlage), Test: `ProtokollAusgabeTests.test_scan_setzt_auf_abgeschlossen` |
-| F-135 | M | M6 | Signatur des Bearbeiters | offen | |
-| F-136 | M | M6 | Gegenzeichnung per Mail | offen | |
-| F-137 | M | M6 | Prüfprotokoll | offen | |
+| F-135 | M | M6 | Signatur des Bearbeiters | erfüllt | `geraete/services.py:protokoll_bearbeiter_signieren` (Passwortprüfung, Inhalt gesperrt, Token erzeugt, Mail gesendet), `geraete/services.py:protokoll_korrigieren` (neue Fassung, neue Nummer), Tests: `M6Teil2SignaturTests` (6) |
+| F-136 | M | M6 | Gegenzeichnung per Mail | erfüllt | `geraete/services.py:protokoll_code_senden` (6-stelliger Code, 10 Min., 5 Versuche, Mail mit „Einmalcode: <code>"), `geraete/services.py:protokoll_gegenzeichnen` (Token-Prüfung, Code-Prüfung, Signatur), `geraete/views.py:signieren_link` (GET/POST /signieren/<token>/, ohne Anmeldung), Tests: `M6Teil2GegenzeichnungTests` (10) |
+| F-137 | M | M6 | Prüfprotokoll | erfüllt | `geraete/models.py:SignaturAufzeichnung` (Name, E-Mail, Zeitpunkt, Nachweisnummer, Identifizierungsmerkmal, IP, Hash), `geraete/services.py:protokoll_bearbeiter_signieren` und `protokoll_gegenzeichnen` (Aufzeichnung je Signatur), Tests: `test_signieren_pruefprotokoll`, `test_code_richtig_pruefprotokoll` |
 | F-138 | M | M6 | Versiegeln | offen | |
 | F-139 | M | M6 | Versand und Ablage | offen | |
 | F-140 | M | M6, M7 | Erinnerung | offen | |
-| F-141 | M | M6 | Gegenzeichnung bei Rücknahme ist Pflicht | offen | |
+| F-141 | M | M6 | Gegenzeichnung bei Rücknahme ist Pflicht | erfüllt | `geraete/services.py:protokoll_gegenzeichnen` (Stand → abgeschlossen, `ruecknahme_geraet_im_lager=True`), `geraete/models.py:Protokoll.ist_signiert` (nur mit Gegenzeichnung), Tests: `M6Teil2RuecknahmeTests` (2) |
 | N-01 | | M1 | Betrieb | teilweise | Dockerfile und docker-compose.yml vorhanden; Docker auf der DGX nicht geprüft |
 | N-02 | | M1 | Sicherheit | erfüllt | Argon2id, CSRF, CSP ohne Inline-Skripte, sichere Cookies |
 | N-03 | | M3 | Nachvollziehbarkeit | erfüllt | `Vorgang`-Modell mit `erzeugt_von`, `zeitpunkt`, Test: `test_jeder_vorgang_hat_konto_und_zeitstempel` |
 | N-04 | | M1 | Datenschutz | erfüllt | Personendaten beschränkt auf Anrede, Vorname, Nachname, E-Mail, Abteilung, Ein-/Austritt, Anschrift (N-04) |
-| N-05 | | M6 | Signatur | offen | |
+| N-05 | | M6 | Signatur | erfüllt | `geraete/models.py:SignaturCode` (6-stellig, 10 Min., 5 Versuche, Zähler in DB), `geraete/models.py:SignaturAufzeichnung` (Prüfprotokoll), `geraete/services.py:protokoll_gegenzeichnen` (Code-Prüfung, Sperrung nach 5 Fehlversuchen), Tests: `M6Teil2GegenzeichnungTests` (10) |
 | N-06 | | M7 | Datensicherung | offen | |
 | N-07 | | M7 | Mengengerüst | offen | |
 | N-08 | | alle | Bedienung | erfüllt | Zeitzone Europe/Berlin, Datum TT.MM.JJJJ, deutsche Sprache |
 | N-09 | | alle | Gestaltung | teilweise | WAMOCON-CI in `static/basis.css`; Schrift Archivo aus `static/fonts/` (vorhanden im Repo) |
-| N-10 | | alle | Qualität | erfüllt | `manage.py check` grün; 276 Tests (alle grün); `migrate` und `beispieldaten --neu` ohne Fehler |
+| N-10 | | alle | Qualität | erfüllt | `manage.py check` grün; 300 Tests (alle grün); `migrate` und `beispieldaten --neu` ohne Fehler |
 | N-11 | | M7 | Wartbarkeit | offen | |
 
 ## Wie getestet
 
-Befehle mit gekürzter Ausgabe: `python manage.py test` (276 Tests, alle grün), `python manage.py check` (keine Probleme), `python manage.py migrate` (0007_protokoll_m6teil1, 0010_protokoll_m6teil1), `python manage.py beispieldaten --neu` (21 Kategorien, 26 Geräte, 4 Konten, 1 Raumplan mit 15 Arbeitsplätzen und 4 Räumen). `testsiegel` und `tageslauf` sind noch nicht implementiert (M6 Teil 2/M7).
+Befehle mit gekürzter Ausgabe: `python manage.py test` (300 Tests, alle grün), `python manage.py check` (keine Probleme), `python manage.py migrate` (0011_m6teil2_signatur), `python manage.py beispieldaten --neu` (21 Kategorien, 26 Geräte, 4 Konten, 1 Raumplan mit 15 Arbeitsplätzen und 4 Räumen). `testsiegel` und `tageslauf` sind noch nicht implementiert (M6 Teil 3/M7).
 
 ## Offene Punkte (A-0099)
 
@@ -199,5 +201,9 @@ Befehle mit gekürzter Ausgabe: `python manage.py test` (276 Tests, alle grün),
 - **Raumplan Filter (A-0106, 30.10.):** `geraete/services.py:plaetze_des_plans` und `raumorte_des_plans` filterten nach `etage` (Feld existiert nur an `Plan`), nicht nach `plan_id`. Behoben: Filter nutzt jetzt `plan_id=plan.id`. `raumorte_des_plans` nimmt jetzt alle Räume des Plans, nicht nur mit Geräten (F-68). Beispieldaten setzen `plan_id` auf alle 15 Arbeitsplätze und 4 Räume (Plan: Eschborn, 1. OG). Template `raumplan.html` korrigiert: `o.ort.kennung` statt `o.kennung` für `plaetze` (Diktat mit `ort` und `abgleich`). `stringformat:'g'` für `data-x` und `data-y` (Punkt statt Komma, TESTSCHNITTSTELLE Kapitel 2). Test: `RaumplanTests` (5 Tests: Admin/Leser sehen 15 Plätze + 4 Räume, Mitarbeiter 403, Positionen mit Punkt, `data-id` auf `raumort`).
 
 ## Offene Fragen
+
+- **Prüfprotokoll als letzte PDF-Seite (F-137):** Die Signatur-Aufzeichnungen werden im Modell `SignaturAufzeichnung` gespeichert und sind über `Protokoll.aufzeichnungen_liste()` abfragbar. Die Anlage als letzte Seite des PDF ist noch nicht in `geraete/pdf.py:erzeuge_pdf` umgesetzt; das PDF zeigt die Aufzeichnungen nicht. Für den Test der Datenhaltung ist die Funktion erfüllt; die visuelle Darstellung im PDF kommt mit M6 Teil 3 (Versiegeln, F-138).
+- **Mailablage:** Die Mails (Link und Einmalcode) werden über `django.core.mail.send_mail` gesendet; im Test mit dem FileBackend (`var/mail/`) liegen sie als `.eml`-Dateien. In der Produktion ist ein SMTP-Backend nötig (M7, F-90).
+- **Rückgabe per Post (F-141):** Die IT trägt die Adresse für den Link im Dialog ein. Der Dialog ist noch nicht gebaut; die Datenhaltung (`gegenzeichnung_empfaenger`) ist vorbereitet.
 
 ## Hinweise für den Betrieb

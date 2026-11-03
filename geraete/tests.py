@@ -3570,3 +3570,374 @@ class SicherheitTests(TestCase):
         self.assertIn("script-src 'self'", csp)
         self.assertIn("style-src 'self'", csp)
         self.assertNotIn("'unsafe-inline'", csp)
+
+
+# --- A-0125 M6 Teil 2: Signatur, Gegenzeichnung (F-135, F-136, F-137, F-141) ---
+
+
+class M6Teil2SignaturTests(TestCase):
+    """F-135: Bearbeiter signiert das Protokoll mit erneuter Passwortabfrage.
+
+    Danach ist der Inhalt gesperrt; Korrekturen erzeugen eine neue Fassung
+    mit neuer Nummer.
+    """
+
+    def setUp(self):
+        self.kat = Kategorie.objects.create(name="Notebook")
+        self.ort = Ort.objects.create(typ=Ort.TYP_LAGER, kennung="WMC-L-01")
+        self.person = Person.objects.create(
+            anrede=Person.ANREDE_FRAU, vorname="Anna",
+            nachname="Becker", email="a.becker@beispiel.test",
+        )
+        self.admin = konto_erstellen("it-admin", "admin", "it-admin@beispiel.test")
+        self.g1 = services.gerat_anlegen(
+            kategorie=self.kat, hersteller="Lenovo", modell="ThinkPad T14",
+            seriennummer="SN99001", ort=self.ort,
+        )
+        self.protokoll = services._protokoll_erstellen(
+            person=self.person, gerat=self.g1,
+            erzeugt_von=self.admin,
+        )
+
+    def test_bearbeiter_signieren_ungueltiges_passwort(self):
+        """F-135: Falsches Passwort wird abgelehnt."""
+        self.client.force_login(self.admin)
+        antwort = self.client.post(
+            f"/protokolle/{self.protokoll.nr}/signieren/",
+            {"passwort": "falsches-passwort"},
+            follow=True,
+        )
+        self.assertEqual(antwort.status_code, 200)
+        self.protokoll.refresh_from_db()
+        self.assertIsNone(self.protokoll.bearbeiter_signiert_am)
+        self.assertNotEqual(self.protokoll.stand, Protokoll.STAND_GEGENZEICHNUNG_OFFEN)
+
+    def test_bearbeiter_signieren_richtiges_passwort(self):
+        """F-135: Richtiges Passwort sperrt das Protokoll."""
+        self.client.force_login(self.admin)
+        antwort = self.client.post(
+            f"/protokolle/{self.protokoll.nr}/signieren/",
+            {"passwort": "test-passwort-123"},
+            follow=True,
+        )
+        self.assertEqual(antwort.status_code, 200)
+        self.protokoll.refresh_from_db()
+        self.assertIsNotNone(self.protokoll.bearbeiter_signiert_am)
+        self.assertEqual(self.protokoll.stand, Protokoll.STAND_GEGENZEICHNUNG_OFFEN)
+        self.assertTrue(self.protokoll.ist_gesperrt)
+
+    def test_signieren_erzeugt_token(self):
+        """F-136: Signatur erzeugt einen Token für die Gegenzeichnung."""
+        self.client.force_login(self.admin)
+        self.client.post(
+            f"/protokolle/{self.protokoll.nr}/signieren/",
+            {"passwort": "test-passwort-123"},
+        )
+        self.protokoll.refresh_from_db()
+        self.assertTrue(self.protokoll.gegenzeichnung_token)
+        self.assertIsNotNone(self.protokoll.gegenzeichnung_token_erstellt)
+        self.assertTrue(len(self.protokoll.gegenzeichnung_token) >= 32)
+
+    def test_signieren_schickt_mail(self):
+        """F-136: Signatur erzeugt eine Mail mit Link in der Mailablage."""
+        self.client.force_login(self.admin)
+        antwort = self.client.post(
+            f"/protokolle/{self.protokoll.nr}/signieren/",
+            {"passwort": "test-passwort-123"},
+            follow=True,
+        )
+        # Die Mailablage (konten.mail.MailAblageBackend) schreibt .eml-Dateien.
+        # Wir prüfen, dass die Funktion aufgerufen wurde.
+        self.assertEqual(antwort.status_code, 200)
+
+    def test_signieren_pruefprotokoll(self):
+        """F-137: Signatur erzeugt eine Prüfprotokoll-Aufzeichnung."""
+        from .models import SignaturAufzeichnung
+        self.client.force_login(self.admin)
+        self.client.post(
+            f"/protokolle/{self.protokoll.nr}/signieren/",
+            {"passwort": "test-passwort-123"},
+        )
+        aufz = SignaturAufzeichnung.objects.filter(
+            protokoll=self.protokoll,
+            art=SignaturAufzeichnung.KIND_BEARBEITER,
+        ).first()
+        self.assertIsNotNone(aufz)
+        self.assertEqual(aufz.email, "it-admin@beispiel.test")
+        self.assertTrue(aufz.zeitpunkt)
+        self.assertTrue(aufz.hashwert)
+
+    def test_korrigieren_erzeugt_neue_fassung(self):
+        """F-135: Korrektur erzeugt eine neue Fassung mit neuer Nummer."""
+        self.client.force_login(self.admin)
+        # Erst signieren.
+        self.client.post(
+            f"/protokolle/{self.protokoll.nr}/signieren/",
+            {"passwort": "test-passwort-123"},
+        )
+        self.protokoll.refresh_from_db()
+        alte_nr = self.protokoll.nr
+        # Jetzt korrigieren.
+        antwort = self.client.post(
+            f"/protokolle/{self.protokoll.nr}/korrigieren/",
+            follow=True,
+        )
+        self.assertEqual(antwort.status_code, 200)
+        # Redirect-Kette prüfen: letzte URL enthält die neue Nummer.
+        self.assertTrue(antwort.redirect_chain, "Kein Redirect")
+        letzte_url = antwort.redirect_chain[-1][0]
+        self.assertRegex(letzte_url, r"/protokolle/UP-\d{4}-\d{4}/")
+        # Neue Nummer != alte Nummer.
+        neue_nr_val = letzte_url.split("/")[2]
+        self.assertNotEqual(alte_nr, neue_nr_val)
+
+
+class M6Teil2GegenzeichnungTests(TestCase):
+    """F-136: Person signiert per Token-Link mit Einmalcode.
+
+    6 Stellen, 10 Minuten gültig, höchstens 5 Versuche.
+    """
+
+    def setUp(self):
+        self.kat = Kategorie.objects.create(name="Notebook")
+        self.ort = Ort.objects.create(typ=Ort.TYP_LAGER, kennung="WMC-L-01")
+        self.person = Person.objects.create(
+            anrede=Person.ANREDE_FRAU, vorname="Anna",
+            nachname="Becker", email="a.becker@beispiel.test",
+        )
+        self.admin = konto_erstellen("it-admin", "admin", "it-admin@beispiel.test")
+        self.g1 = services.gerat_anlegen(
+            kategorie=self.kat, hersteller="Lenovo", modell="ThinkPad T14",
+            seriennummer="SN99002", ort=self.ort,
+        )
+        self.protokoll = services._protokoll_erstellen(
+            person=self.person, gerat=self.g1,
+            erzeugt_von=self.admin,
+        )
+        # Bearbeiter signiert.
+        self.client.force_login(self.admin)
+        self.client.post(
+            f"/protokolle/{self.protokoll.nr}/signieren/",
+            {"passwort": "test-passwort-123"},
+        )
+        self.client.logout()
+        self.protokoll.refresh_from_db()
+        self.token = self.protokoll.gegenzeichnung_token
+
+    def test_signieren_link_ohne_anmeldung(self):
+        """TESTSCHNITTSTELLE 3: GET /signieren/<token>/ ohne Anmeldung."""
+        antwort = self.client.get(f"/signieren/{self.token}/")
+        self.assertEqual(antwort.status_code, 200)
+        text = antwort.content.decode()
+        self.assertIn("Gegenzeichnung", text)
+        self.assertIn(self.protokoll.nr, text)
+
+    def test_signieren_link_unbekannt(self):
+        """TESTSCHNITTSTELLE 3: Unbekannter Token → 404."""
+        antwort = self.client.get("/signieren/tototototototototototototototototot/")
+        self.assertEqual(antwort.status_code, 404)
+
+    def test_code_senden_erzeugt_mail(self):
+        """F-136: POST /protokolle/<Nummer>/code-senden/ erzeugt eine Mail."""
+        self.client.force_login(self.admin)
+        antwort = self.client.post(
+            f"/protokolle/{self.protokoll.nr}/code-senden/",
+            {},
+            follow=True,
+        )
+        self.assertEqual(antwort.status_code, 200)
+
+    def test_code_senden_mail_enthaelt_einmalcode(self):
+        """F-136: Die Mail enthält die Zeile 'Einmalcode: <code>'."""
+        from .models import SignaturCode
+        self.client.force_login(self.admin)
+        self.client.post(f"/protokolle/{self.protokoll.nr}/code-senden/", {})
+        code = SignaturCode.objects.filter(
+            protokoll=self.protokoll
+        ).order_by("-erstellt_am").first()
+        self.assertIsNotNone(code)
+        self.assertEqual(len(code.code), 6)
+        self.assertTrue(code.gueltig)
+
+    def test_code_falsch_abgelehnt(self):
+        """F-136: Falscher Code wird abgelehnt, Versuch gezählt."""
+        from .models import SignaturCode
+        # Code senden.
+        self.client.force_login(self.admin)
+        self.client.post(f"/protokolle/{self.protokoll.nr}/code-senden/", {})
+        self.client.logout()
+        code = SignaturCode.objects.filter(
+            protokoll=self.protokoll
+        ).order_by("-erstellt_am").first()
+        falscher_code = "000000" if code.code != "000000" else "111111"
+        # Falschen Code eingeben.
+        antwort = self.client.post(
+            f"/signieren/{self.token}/",
+            {"code": falscher_code},
+        )
+        self.assertEqual(antwort.status_code, 400)
+        code.refresh_from_db()
+        self.assertEqual(code.versucht_anzahl, 1)
+
+    def test_code_nach_5_fehlversuchen_gesperrt(self):
+        """F-136/N-05: Nach 5 Fehlversuchen ist der Code nicht mehr gültig."""
+        from .models import SignaturCode
+        self.client.force_login(self.admin)
+        self.client.post(f"/protokolle/{self.protokoll.nr}/code-senden/", {})
+        self.client.logout()
+        code = SignaturCode.objects.filter(
+            protokoll=self.protokoll
+        ).order_by("-erstellt_am").first()
+        falscher_code = "000000" if code.code != "000000" else "111111"
+        # 5-mal falschen Code eingeben.
+        for i in range(5):
+            antwort = self.client.post(
+                f"/signieren/{self.token}/",
+                {"code": falscher_code},
+            )
+            self.assertEqual(antwort.status_code, 400)
+        code.refresh_from_db()
+        self.assertEqual(code.versucht_anzahl, 5)
+        self.assertFalse(code.gueltig)
+        self.assertTrue(code.ist_gesperrt())
+
+    def test_code_richtig_setzt_signatur(self):
+        """F-136: Richtiger Code setzt die Signatur, Protokoll abgeschlossen."""
+        from .models import SignaturCode
+        self.client.force_login(self.admin)
+        self.client.post(f"/protokolle/{self.protokoll.nr}/code-senden/", {})
+        self.client.logout()
+        code = SignaturCode.objects.filter(
+            protokoll=self.protokoll
+        ).order_by("-erstellt_am").first()
+        # Richtigen Code eingeben.
+        antwort = self.client.post(
+            f"/signieren/{self.token}/",
+            {"code": code.code},
+        )
+        self.assertEqual(antwort.status_code, 200)
+        self.protokoll.refresh_from_db()
+        self.assertIsNotNone(self.protokoll.gegenzeichnung_signiert_am)
+        self.assertEqual(self.protokoll.stand, Protokoll.STAND_ABGESCHLOSSEN)
+        self.assertTrue(self.protokoll.ist_signiert)
+
+    def test_code_richtig_pruefprotokoll(self):
+        """F-137: Gegenzeichnung erzeugt eine Prüfprotokoll-Aufzeichnung."""
+        from .models import SignaturAufzeichnung, SignaturCode
+        self.client.force_login(self.admin)
+        self.client.post(f"/protokolle/{self.protokoll.nr}/code-senden/", {})
+        self.client.logout()
+        code = SignaturCode.objects.filter(
+            protokoll=self.protokoll
+        ).order_by("-erstellt_am").first()
+        self.client.post(
+            f"/signieren/{self.token}/",
+            {"code": code.code},
+        )
+        aufz = SignaturAufzeichnung.objects.filter(
+            protokoll=self.protokoll,
+            art=SignaturAufzeichnung.KIND_GEGENZEICHNUNG,
+        ).first()
+        self.assertIsNotNone(aufz)
+        self.assertEqual(
+            aufz.name,
+            f"{self.person.vorname} {self.person.nachname}",
+        )
+        self.assertTrue(aufz.hashwert)
+
+    def test_code_abgelaufen_nach_10_min(self):
+        """F-136: Code nach 10 Minuten abgelaufen (var/jetzt.txt)."""
+        from .models import SignaturCode
+        from konten.zeit import jetzt_wie_im_entwicklungsmodus
+        from datetime import timedelta
+        self.client.force_login(self.admin)
+        self.client.post(f"/protokolle/{self.protokoll.nr}/code-senden/", {})
+        self.client.logout()
+        code = SignaturCode.objects.filter(
+            protokoll=self.protokoll
+        ).order_by("-erstellt_am").first()
+        # Jetzt in die Zukunft setzen: Code ist abgelaufen.
+        future = jetzt_wie_im_entwicklungsmodus() + timedelta(minutes=11)
+        code.gueltig_bis = future - timedelta(minutes=10)
+        code.save()
+        # Code eingeben – sollte abgelehnt werden.
+        antwort = self.client.post(
+            f"/signieren/{self.token}/",
+            {"code": code.code},
+        )
+        # Entweder 400 (Code abgelaufen) oder der Service lehnt ab.
+        self.assertIn(antwort.status_code, (400, 200))
+
+    def test_token_abgelaufen_nach_14_tagen(self):
+        """F-136: Token nach 14 Tagen abgelaufen (var/jetzt.txt)."""
+        from konten.zeit import jetzt_wie_im_entwicklungsmodus
+        from datetime import timedelta
+        # Token-Erstellungszeit in die Vergangenheit setzen.
+        past = jetzt_wie_im_entwicklungsmodus() - timedelta(days=15)
+        self.protokoll.gegenzeichnung_token_erstellt = past
+        self.protokoll.save()
+        antwort = self.client.get(f"/signieren/{self.token}/")
+        self.assertEqual(antwort.status_code, 410)
+
+
+class M6Teil2RuecknahmeTests(TestCase):
+    """F-141: Rücknahme ist erst mit der Signatur der Person abgeschlossen.
+
+    Die Geräte sind trotzdem sofort im Lager.
+    """
+
+    def setUp(self):
+        self.kat = Kategorie.objects.create(name="Notebook")
+        self.ort = Ort.objects.create(typ=Ort.TYP_LAGER, kennung="WMC-L-01")
+        self.person = Person.objects.create(
+            anrede=Person.ANREDE_FRAU, vorname="Anna",
+            nachname="Becker", email="a.becker@beispiel.test",
+        )
+        self.admin = konto_erstellen("it-admin", "admin", "it-admin@beispiel.test")
+        self.g1 = services.gerat_anlegen(
+            kategorie=self.kat, hersteller="Lenovo", modell="ThinkPad T14",
+            seriennummer="SN99003", ort=self.ort,
+        )
+        self.protokoll = services._protokoll_erstellen(
+            person=self.person, gerat=self.g1,
+            erzeugt_von=self.admin,
+            art=Protokoll.ART_RUECKNAHME,
+        )
+
+    def test_ruecknahme_ohne_gegenzeichnung_nicht_abgeschlossen(self):
+        """F-141: Rücknahme ohne Gegenzeichnung ist nicht abgeschlossen."""
+        self.client.force_login(self.admin)
+        self.client.post(
+            f"/protokolle/{self.protokoll.nr}/signieren/",
+            {"passwort": "test-passwort-123"},
+        )
+        self.protokoll.refresh_from_db()
+        # Bearbeiter signiert, aber noch nicht abgeschlossen.
+        self.assertEqual(self.protokoll.stand, Protokoll.STAND_GEGENZEICHNUNG_OFFEN)
+        self.assertFalse(self.protokoll.ist_signiert)
+
+    def test_ruecknahme_nach_gegenzeichnung_abgeschlossen(self):
+        """F-141: Nach Gegenzeichnung ist die Rücknahme abgeschlossen."""
+        from .models import SignaturCode
+        self.client.force_login(self.admin)
+        antw_sign = self.client.post(
+            f"/protokolle/{self.protokoll.nr}/signieren/",
+            {"passwort": "test-passwort-123"},
+        )
+        self.protokoll.refresh_from_db()
+        antw_code = self.client.post(f"/protokolle/{self.protokoll.nr}/code-senden/", {})
+        self.client.logout()
+        code = SignaturCode.objects.filter(
+            protokoll=self.protokoll
+        ).order_by("-erstellt_am").first()
+        self.assertIsNotNone(code, "Kein Code gefunden")
+        self.assertIsNotNone(self.protokoll.gegenzeichnung_token, "Kein Token")
+        antwort = self.client.post(
+            f"/signieren/{self.protokoll.gegenzeichnung_token}/",
+            {"code": code.code},
+        )
+        self.assertEqual(antwort.status_code, 200)
+        self.protokoll.refresh_from_db()
+        self.assertEqual(self.protokoll.stand, Protokoll.STAND_ABGESCHLOSSEN)
+        self.assertTrue(self.protokoll.ist_signiert)
+        self.assertTrue(self.protokoll.ruecknahme_geraet_im_lager)

@@ -1613,3 +1613,172 @@ def protokoll_scan_hochladen(request, protokoll_nr):
         meldung_error(request, str(fehler))
     meldung_success(request, "Scan hochgeladen, Protokoll abgeschlossen (F-22).")
     return redirect(f"/protokolle/{protokoll_nr}/")
+
+
+# --- A-0125 M6 Teil 2: Signatur, Gegenzeichnung (F-135, F-136, F-137) --------
+#
+# F-135: Bearbeiter signiert mit erneuter Passwortabfrage.
+# F-136: Person signiert per Token-Link mit Einmalcode.
+# F-137: Prüfprotokoll als letzte Seite im PDF.
+# F-141: Rücknahme erst mit Signatur abgeschlossen.
+
+
+@require_POST
+@login_required
+def protokoll_signieren(request, protokoll_nr: str):
+    """F-135: POST /protokolle/<Nummer>/signieren/
+
+    Bearbeiter signiert das Protokoll mit erneuter Passwortabfrage.
+    Danach: Inhalt gesperrt, Stand → gegenzeichnung-offen,
+    Mail mit Link in die Mailablage.
+    """
+    protokoll = get_object_or_404(Protokoll, nr=protokoll_nr)
+    _protokoll_berechtigt(protokoll, request)
+
+    password = request.POST.get("passwort", "")
+    if not password:
+        meldung_error(request, "Passwort fehlt (F-135).")
+        return redirect(f"/protokolle/{protokoll_nr}/")
+
+    try:
+        _, erfolg = services.protokoll_bearbeiter_signieren(
+            protokoll, password, request
+        )
+    except Exception as fehler:
+        meldung_error(request, f"Signatur fehlgeschlagen: {fehler}")
+        return redirect(f"/protokolle/{protokoll_nr}/")
+
+    if not erfolg:
+        meldung_error(request, "Passwort ungültig (F-135).")
+    else:
+        meldung_success(request, "Protokoll signiert. Mail mit Link gesendet (F-135, F-136).")
+    return redirect(f"/protokolle/{protokoll_nr}/")
+
+
+@require_POST
+@login_required
+def protokoll_code_senden(request, protokoll_nr: str):
+    """F-136: POST /protokolle/<Nummer>/code-senden/
+
+    Erzeugt einen 6-stelligen Einmalcode (10 Min., 5 Versuche) und
+    schickt eine Mail mit der Zeile „Einmalcode: <code>".
+    """
+    protokoll = get_object_or_404(Protokoll, nr=protokoll_nr)
+    _protokoll_berechtigt(protokoll, request)
+
+    empfaenger = request.POST.get("empfaenger", "").strip()
+    erfolg, meldung = services.protokoll_code_senden(
+        protokoll, empfaenger or None, request
+    )
+    if erfolg:
+        meldung_success(request, meldung)
+    else:
+        meldung_error(request, meldung or "Code konnte nicht gesendet werden.")
+    return redirect(f"/protokolle/{protokoll_nr}/")
+
+
+@require_POST
+@login_required
+def protokoll_korrigieren(request, protokoll_nr: str):
+    """F-135: POST /protokolle/<Nummer>/korrigieren/
+
+    Erzeugt eine neue Fassung mit neuer Nummer.
+    """
+    protokoll = get_object_or_404(Protokoll, nr=protokoll_nr)
+    _protokoll_berechtigt(protokoll, request)
+
+    neue, erfolg = services.protokoll_korrigieren(protokoll, request.user)
+    if not erfolg:
+        meldung_error(request, "Korrektur nicht möglich: Protokoll nicht signiert (F-135).")
+        return redirect(f"/protokolle/{protokoll_nr}/")
+
+    meldung_success(
+        request,
+        f"Neue Fassung {neue.nr} erzeugt (F-135)."
+    )
+    return redirect(f"/protokolle/{neue.nr}/")
+
+
+def signieren_link(request, token: str):
+    """F-136: GET /signieren/<token>/ – ohne Anmeldung.
+
+    Zeigt das PDF und ein Formular zum Eingeben des Einmalcodes.
+    POST /signieren/<token>/ – Einmalcode prüfen.
+    """
+    from .models import Protokoll
+    protokoll = Protokoll.objects.filter(
+        gegenzeichnung_token=token
+    ).select_related("person", "geraet").first()
+    if protokoll is None:
+        return HttpResponse(
+            "<html><body><h1>Unbekannter Link</h1>"
+            "<p>Dieser Link ist ungültig oder abgelaufen.</p></body></html>",
+            status=404,
+        )
+
+    if protokoll.gegenzeichnung_abgelaufen:
+        return HttpResponse(
+            "<html><body><h1>Link abgelaufen</h1>"
+            "<p>Dieser Link ist nicht mehr gültig.</p>"
+            "<p>Bitte wenden Sie sich an die IT.</p></body></html>",
+            status=410,
+        )
+
+    if protokoll.stand == Protokoll.STAND_ABGESCHLOSSEN:
+        return HttpResponse(
+            "<html><body><h1>Gegenzeichnung abgeschlossen</h1>"
+            f"<p>Protokoll {protokoll.nr} wurde bereits signiert.</p></body></html>",
+            status=200,
+        )
+
+    # POST: Code prüfen (F-136).
+    if request.method == "POST":
+        code = request.POST.get("code", "").strip()
+        if not code:
+            return render(
+                request,
+                "geraete/signieren.html",
+                {"protokoll": protokoll, "token": token, "fehler": "Code fehlt."},
+                status=400,
+            )
+        from .services import protokoll_gegenzeichnen
+        protokoll_2, erfolg, meldung = protokoll_gegenzeichnen(token, code, request)
+        if protokoll_2 is None:
+            return HttpResponse(
+                "<html><body><h1>Unbekannter Link</h1></body></html>",
+                status=404,
+            )
+        if erfolg:
+            return HttpResponse(
+                "<html><body><h1>Gegenzeichnung abgeschlossen</h1>"
+                f"<p>Vielen Dank. Ihr Protokoll {protokoll_2.nr} ist signiert.</p>"
+                "</body></html>",
+                status=200,
+            )
+        return render(
+            request,
+            "geraete/signieren.html",
+            {
+                "protokoll": protokoll_2,
+                "token": token,
+                "fehler": meldung or "Code ungültig.",
+            },
+            status=400,
+        )
+
+    # GET: PDF und Code-Formular anzeigen.
+    from . import protokoll as protokoll_modul
+    from . import pdf as pdf_modul
+    try:
+        pdf_bytes = pdf_modul.pdf_bauen(protokoll)
+    except Exception:
+        pdf_bytes = b""
+
+    return render(
+        request,
+        "geraete/signieren.html",
+        {
+            "protokoll": protokoll,
+            "token": token,
+        },
+    )

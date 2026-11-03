@@ -354,8 +354,13 @@ class Protokoll(models.Model):
 
     STAND_SCAN_OFFEN = "scan-offen"
     STAND_ABGESCHLOSSEN = "abgeschlossen"
+    # A-0125 M6 Teil 2: Stände für die Signatur-Kette (F-135, F-136).
+    STAND_BEARBEITER_OFFEN = "bearbeiter-offen"
+    STAND_GEGENZEICHNUNG_OFFEN = "gegenzeichnung-offen"
     STAENDE = [
         (STAND_SCAN_OFFEN, "Unterschrift offen: Scan fehlt"),
+        (STAND_BEARBEITER_OFFEN, "Bearbeiter-Signatur offen (F-135)"),
+        (STAND_GEGENZEICHNUNG_OFFEN, "Gegenzeichnung offen (F-136)"),
         (STAND_ABGESCHLOSSEN, "Abgeschlossen"),
     ]
 
@@ -403,6 +408,58 @@ class Protokoll(models.Model):
     # Das PDF entsteht erst, wenn jeder Punkt beantwortet ist.
     checkliste = models.JSONField(
         "Checkliste Zugänge", default=dict, blank=True
+    )
+
+    # --- A-0125 M6 Teil 2: Signatur, Gegenzeichnung (F-135, F-136, F-137, F-141) ---
+    # F-135: Signatur des Bearbeiters (Passwort, Zeitpunkt, IP).
+    bearbeiter_signatur = models.CharField(
+        "Bearbeiter-Signatur (Passwort-Code)", max_length=6, blank=True, default=""
+    )
+    bearbeiter_signiert_am = models.DateTimeField(
+        "Bearbeiter signierte am", null=True, blank=True
+    )
+    bearbeiter_signiert_von = models.ForeignKey(
+        "konten.Konto", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="protokolle_signiert", verbose_name="Bearbeiter signiert von",
+    )
+    bearbeiter_ip = models.CharField(
+        "Bearbeiter IP-Adresse", max_length=45, blank=True, default=""
+    )
+    # F-136: Gegenzeichnung per Mail-Link (Token, 14 Tage gültig).
+    gegenzeichnung_token = models.CharField(
+        "Gegenzeichnung-Token", max_length=64, blank=True, default=""
+    )
+    gegenzeichnung_token_erstellt = models.DateTimeField(
+        "Token erstellt am", null=True, blank=True
+    )
+    gegenzeichnung_empfaenger = models.CharField(
+        "Gegenzeichnung-Empfänger (E-Mail)", max_length=254, blank=True, default=""
+    )
+    gegenzeichnung_signiert_am = models.DateTimeField(
+        "Gegenzeichnung signierte am", null=True, blank=True
+    )
+    gegenzeichnung_ip = models.CharField(
+        "Gegenzeichnung IP-Adresse", max_length=45, blank=True, default=""
+    )
+    # F-141: Rücknahme – Geräte sofort im Lager, aber Protokoll erst mit
+    # Gegenzeichnung abgeschlossen.
+    ruecknahme_geraet_im_lager = models.BooleanField(
+        "Gerät sofort im Lager (F-141)", default=False
+    )
+    # F-137: Hashwert des PDFs zum Zeitpunkt der Signatur.
+    pdf_hash_bearbeiter = models.CharField(
+        "PDF-Hash (Bearbeiter-Signatur)", max_length=128, blank=True, default=""
+    )
+    pdf_hash_gegenzeichnung = models.CharField(
+        "PDF-Hash (Gegenzeichnung)", max_length=128, blank=True, default=""
+    )
+    # F-135: Korrekturen erzeugen eine neue Fassung mit neuer Nummer.
+    korrigiert_zu_protokoll = models.ForeignKey(
+        "self", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="korrekturen", verbose_name="Korrigiert zu Protokoll",
+    )
+    ist_korrektur = models.BooleanField(
+        "Ist Korrektur (neue Fassung)", default=False
     )
     # F-133: Prüfpunkte IT-Offboarding, 13 Punkte, nur bei Rücknahme.
     offboarding = models.JSONField(
@@ -458,6 +515,44 @@ class Protokoll(models.Model):
     @property
     def art_anzeige(self) -> str:
         return dict(self.ARTEN).get(self.art, self.art) or self.art
+
+    # --- A-0125 M6 Teil 2: Signatur-Status (F-135, F-136, F-141) ---------------
+    @property
+    def ist_signiert(self) -> bool:
+        """F-135/F-136: True, wenn Bearbeiter und Gegenzeichnung vorliegen."""
+        return (
+            self.bearbeiter_signiert_am is not None
+            and self.gegenzeichnung_signiert_am is not None
+        )
+
+    @property
+    def ist_gesperrt(self) -> bool:
+        """F-135: Inhalt gesperrt, wenn Bearbeiter signiert hat."""
+        return self.bearbeiter_signiert_am is not None
+
+    @property
+    def gegenzeichnung_abgelaufen(self) -> bool:
+        """F-136: Token abgelaufen nach 14 Tagen (TESTSCHNITTSTELLE 3)."""
+        from datetime import timedelta
+        from konten.zeit import jetzt_wie_im_entwicklungsmodus
+        if self.gegenzeichnung_token_erstellt is None:
+            return False
+        return (
+            jetzt_wie_im_entwicklungsmodus()
+            - self.gegenzeichnung_token_erstellt
+            > timedelta(days=14)
+        )
+
+    def aufzeichnungen_liste(self) -> list:
+        """F-137: Signatur-Aufzeichnungen, chronologisch."""
+        return list(self.aufzeichnungen.order_by("zeitpunkt"))
+
+    def aktiver_code(self):
+        """F-136: Der aktuell gültigste Code, falls vorhanden."""
+        from .models import SignaturCode
+        return SignaturCode.objects.filter(
+            protokoll=self, gueltig=True
+        ).order_by("-erstellt_am").first()
 
     # --- F-132: Checkliste Zugänge (sechs Punkte) ------------------------------
     # Wortlaut aus docs/vorlagen/FRM-001.md Abschnitt 3, Vorbelegung
@@ -632,3 +727,91 @@ class Leihe(models.Model):
             self.STATUS_ZURUECKGEZOGEN: "muted",
         }
         return mapping.get(self.status, "muted")
+
+
+# --- A-0125 M6 Teil 2: Signatur und Gegenzeichnung (F-135, F-136, F-137) ------
+
+class SignaturCode(models.Model):
+    """Einmalcode für die Gegenzeichnung (F-136).
+
+    6 Stellen, 10 Minuten gültig, höchstens 5 Versuche.
+    Zähler in der Datenbank (N-05).
+    """
+    protokoll = models.ForeignKey(
+        Protokoll, on_delete=models.CASCADE, related_name="codes"
+    )
+    code = models.CharField("Code", max_length=6, unique=True)
+    erstellt_am = models.DateTimeField("Erstellt am", default=timezone.now)
+    gueltig_bis = models.DateTimeField("Gültig bis")
+    versucht_anzahl = models.PositiveIntegerField("Versucht (Anzahl)", default=0)
+    gueltig = models.BooleanField("Gültig", default=True)
+    verifiziert_am = models.DateTimeField(
+        "Verifiziert am", null=True, blank=True
+    )
+    verifiziert_von_ip = models.CharField(
+        "Verifiziert von IP", max_length=45, blank=True, default=""
+    )
+
+    class Meta:
+        verbose_name = "Einmalcode"
+        verbose_name_plural = "Einmalcodes"
+        ordering = ["-erstellt_am"]
+
+    def __str__(self):
+        return f"Code für Protokoll {self.protokoll_id}: {self.code[:2]}… ({self.gueltig})"
+
+    def ist_gueltig(self) -> bool:
+        """F-136: Code gültig, wenn noch in der Gültigkeitszeit und < 5 Versuche."""
+        from konten.zeit import jetzt_wie_im_entwicklungsmodus
+        if not self.gueltig:
+            return False
+        if self.verifiziert_am is not None:
+            return False
+        if self.versucht_anzahl >= 5:
+            return False
+        return jetzt_wie_im_entwicklungsmodus() < self.gueltig_bis
+
+    def ist_gesperrt(self) -> bool:
+        """F-136/N-05: Nach 5 Fehlversuchen ist der Code endgültig gesperrt."""
+        return self.versucht_anzahl >= 5
+
+
+class SignaturAufzeichnung(models.Model):
+    """Prüfprotokoll: Name, E-Mail, Zeitpunkt, Nachweisnummer,
+    Identifizierungsmerkmal, IP-Adresse, Hashwert (F-137).
+
+    Wird als letzte Seite an das PDF angehängt.
+    """
+    KIND_BEARBEITER = "bearbeiter"
+    KIND_GEGENZEICHNUNG = "gegenzeichnung"
+    ARTEN = [
+        (KIND_BEARBEITER, "Bearbeiter-Signatur"),
+        (KIND_GEGENZEICHNUNG, "Gegenzeichnung"),
+    ]
+    protokoll = models.ForeignKey(
+        Protokoll, on_delete=models.CASCADE, related_name="aufzeichnungen"
+    )
+    art = models.CharField("Art", max_length=24, choices=ARTEN)
+    name = models.CharField("Name", max_length=120)
+    email = models.CharField("E-Mail", max_length=254)
+    zeitpunkt = models.DateTimeField("Zeitpunkt")
+    nachweisnummer = models.CharField(
+        "Nachweisnummer", max_length=24, blank=True, default=""
+    )
+    identifikationsmerkmal = models.CharField(
+        "Identifizierungsmerkmal", max_length=240, blank=True, default=""
+    )
+    ip_adresse = models.CharField("IP-Adresse", max_length=45, blank=True, default="")
+    hashwert = models.CharField("Hashwert", max_length=128, blank=True, default="")
+
+    class Meta:
+        verbose_name = "Signatur-Aufzeichnung"
+        verbose_name_plural = "Signatur-Aufzeichnungen"
+        ordering = ["-zeitpunkt"]
+
+    def __str__(self):
+        return f"{self.art_anzeige}: {self.name} ({self.zeitpunkt:%d.%m.%Y %H:%M})"
+
+    @property
+    def art_anzeige(self) -> str:
+        return dict(self.ARTEN).get(self.art, self.art) or self.art
