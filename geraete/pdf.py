@@ -312,15 +312,83 @@ def _anhaenge(protokoll: Protokoll) -> list[dict]:
     return ergebnis
 
 
+# --- Einstellungen laden (F-122, F-130) — M7 Teil 1 (A-0905) -----------------
+
+def _einstellungen_laden():
+    """Einstellungen aus der Datenbank laden.
+
+    Fallback auf Standardwerte, wenn keine Einstellungen vorhanden sind.
+    """
+    try:
+        from stammdaten.models import Einstellungen
+        return Einstellungen.aktuelles()
+    except Exception:
+        return None
+
+
+def _absender_einstellungen() -> dict:
+    """Firmendaten aus Einstellungen (F-122)."""
+    e = _einstellungen_laden()
+    if e is not None:
+        return {
+            "firmenname": e.firmenname,
+            "absenderzeile": e.absenderzeile,
+            "telefon": e.telefon,
+            "email_it": e.email_it,
+        }
+    return {
+        "firmenname": "Wamocon GmbH",
+        "absenderzeile": "Wamocon GmbH · IT",
+        "telefon": "0157 77709235",
+        "email_it": "it@wamocon.de",
+    }
+
+
+def _protokolltexte(typ: str) -> dict:
+    """Protokolltexte aus Einstellungen (F-130).
+
+    typ: "ausgabe" oder "ruecknahme"
+    """
+    e = _einstellungen_laden()
+    if e is None:
+        return {}
+    if typ == "ausgabe":
+        return {
+            "nutzung": e.nutzungsbedingungen_ausgabe,
+            "nutzung_version": e.nutzungsbedingungen_version,
+            "erklaerungen": e.erklaerungen_ausgabe,
+            "erklaerungen_version": e.erklaerungen_version,
+            "unterzeichnung": e.unterzeichnung_ausgabe,
+            "unterzeichnung_version": e.unterzeichnung_version,
+        }
+    else:
+        return {
+            "erklaerungen": e.erklaerungen_ruecknahme,
+            "erklaerungen_version": e.erklaerungen_ruecknahme_version,
+            "unterzeichnung": e.unterzeichnung_ruecknahme,
+            "unterzeichnung_version": e.unterzeichnung_ruecknahme_version,
+        }
+
+
 def _anrede(person) -> str:
     return getattr(person, "anrede", "h") or "h"
 
 
 def _render_pdf_html(protokoll: Protokoll) -> str:
-    """Rendert die HTML-Zeile für das PDF (ohne Weasyprint)."""
+    """Rendert die HTML-Zeile für das PDF (ohne Weasyprint).
+
+    F-122, F-130 (M7 Teil 1, A-0905): Absenderzeile und Protokolltexte
+    aus den Einstellungen; neue Version gilt nur für neue Protokolle.
+    """
     formular = "WMC-IT-FRM-001" if protokoll.art == Protokoll.ART_AUSGABE else "WMC-IT-FRM-002"
     vorlage = _HTML_AUSGABE if protokoll.art == Protokoll.ART_AUSGABE else _HTML_RUECKNAHME
     template = Template(vorlage)
+
+    # Einstellungen laden (F-122, F-130)
+    absender = _absender_einstellungen()
+    typ = "ausgabe" if protokoll.art == Protokoll.ART_AUSGABE else "ruecknahme"
+    texte = _protokolltexte(typ)
+
     kontext = {
         "protokoll": protokoll,
         "gerat": protokoll.geraet,
@@ -332,8 +400,16 @@ def _render_pdf_html(protokoll: Protokoll) -> str:
         "rueckgabe_zu": protokoll.rueckgabe_zu_protokoll,
         "formular": formular,
         "fassung": protokoll.fassung or "1.1",
-        "nutzung": "",
-        "erklaerung": "",
+        "absenderzeile": absender.get("absenderzeile", "") or protokoll.absenderzeile or "",
+        "firmenname": absender.get("firmenname", ""),
+        "telefon": absender.get("telefon", ""),
+        "email_it": absender.get("email_it", ""),
+        "nutzung": texte.get("nutzung", "") or protokoll.nutzungsbedingungen_text or "",
+        "erklaerung": texte.get("erklaerungen", "") or protokoll.erklaerungen_text or "",
+        "unterzeichnung": texte.get("unterzeichnung", ""),
+        "nutzung_version": texte.get("nutzung_version", ""),
+        "erklaerungen_version": texte.get("erklaerungen_version", ""),
+        "unterzeichnung_version": texte.get("unterzeichnung_version", ""),
     }
     html = template.render(Context(kontext))
     schrift = _schrift_css()

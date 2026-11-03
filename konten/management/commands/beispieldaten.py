@@ -377,7 +377,52 @@ class Command(BaseCommand):
         self.stdout.write(f"  {Gerat.objects.count()} Geräte")
 
     def _anlegen_einstellungen(self):
-        # F-122: Einstellungen (TESTSCHNITTSTELLE 2)
-        # In M1 noch kein eigenes Modell für Einstellungen – die Werte
-        # stehen in den Variablen der Anwendung und werden in M7 ausgeführt.
-        self.stdout.write("  Einstellungen (F-122) in M7 umgesetzt")
+        # F-122, F-90, F-96, F-130, N-02: Einstellungen (TESTSCHNITTSTELLE 2)
+        from stammdaten.models import Einstellungen
+        einstellungen = Einstellungen.objects.filter(pk=1).first()
+        if einstellungen is None:
+            einstellungen = Einstellungen.objects.create(pk=1)
+        einstellungen.firmenname = "Wamocon GmbH"
+        einstellungen.absenderzeile = "Wamocon GmbH · IT"
+        einstellungen.telefon = "0157 77709235"
+        einstellungen.email_it = "it@wamocon.de"
+        einstellungen.nutzungsbedingungen_ausgabe = (
+            "Beispieltext Nutzungsbedingungen, WMC-IT-FRM-001. "
+            "Den verbindlichen Text pflegt die IT in den Einstellungen."
+        )
+        einstellungen.nutzungsbedingungen_version = "1"
+        einstellungen.erklaerungen_ausgabe = (
+            "Beispieltext Erklärungen, WMC-IT-FRM-001."
+        )
+        einstellungen.erklaerungen_version = "1"
+        einstellungen.unterzeichnung_ausgabe = (
+            "Beispieltext Elektronische Unterzeichnung, WMC-IT-FRM-001.\n"
+            "Den verbindlichen Text pflegt die IT in den Einstellungen."
+        )
+        einstellungen.unterzeichnung_version = "1"
+        einstellungen.erklaerungen_ruecknahme = (
+            "Beispieltext Erklärungen, WMC-IT-FRM-002. "
+            "Den verbindlichen Text pflegt die IT in den Einstellungen."
+        )
+        einstellungen.erklaerungen_ruecknahme_version = "1"
+        einstellungen.unterzeichnung_ruecknahme = (
+            "Beispieltext Elektronische Unterzeichnung, WMC-IT-FRM-002.\n"
+            "Den verbindlichen Text pflegt die IT in den Einstellungen."
+        )
+        einstellungen.unterzeichnung_ruecknahme_version = "1"
+        einstellungen.etikettenformat = "a4"
+        einstellungen.erinnerungsfrist_tage = 7
+        einstellungen.smtp_server = "mail.beispiel.test"
+        einstellungen.smtp_port = 587
+        einstellungen.smtp_tls = True
+        einstellungen.smtp_absender = "it@beispiel.test"
+        einstellungen.smtp_benutzer = "it@beispiel.test"
+        einstellungen.smtp_passwort = "BeispielPasswort123"
+        einstellungen.mail_verleih_anfrage = True
+        einstellungen.mail_verleih_ablehnung = True
+        einstellungen.mail_verleih_genehmigung = True
+        einstellungen.mail_verleih_zuruecknahme = True
+        einstellungen.mail_protokoll_gesendet = True
+        einstellungen.mail_protokoll_unterzeichnet = True
+        einstellungen.save()
+        self.stdout.write("  Einstellungen (F-122, F-90, F-96, F-130, N-02)")

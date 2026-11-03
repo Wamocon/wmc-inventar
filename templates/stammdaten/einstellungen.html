@@ -1,0 +1,254 @@
+{% extends "basis.html" %}
+{% block titel %}Einstellungen · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div>
+    <h1>Einstellungen</h1>
+    <p class="muted lead">Firmendaten, Protokolltexte, SMTP und Mailtypen (F-122, F-90, F-96, F-130, N-02).</p>
+  </div>
+</div>
+
+{% if messages %}
+<div class="meldungen" data-test="meldungen">
+  {% for m in messages %}
+    <div class="meldung {{ m.tags }}" data-test="meldung">{{ m }}</div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<form method="post" enctype="multipart/form-data" novalidate data-test="einstellungen-formular">
+  {% csrf_token %}
+
+  <div class="meldungen">
+    {% include "fragmente/fehler.html" %}
+  </div>
+
+  <fieldset class="card">
+    <legend class="card-head"><h2>Firma und Absender (F-122)</h2></legend>
+    <div class="form-grid">
+      <div class="field">
+        <label for="id_firmenname" class="req">Firmenname</label>
+        <input type="text" id="id_firmenname" name="firmenname" value="{{ einstellungen.firmenname }}" required>
+      </div>
+      <div class="field">
+        <label for="id_absenderzeile">Absenderzeile</label>
+        <input type="text" id="id_absenderzeile" name="absenderzeile" value="{{ einstellungen.absenderzeile }}" data-test="absenderzeile">
+        <small class="help">Standauf jeder Seite des Protokoll-PDFs und im Absender der E-Mails.</small>
+      </div>
+      <div class="field">
+        <label for="id_telefon">Telefon der IT</label>
+        <input type="tel" id="id_telefon" name="telefon" value="{{ einstellungen.telefon }}">
+      </div>
+      <div class="field">
+        <label for="id_email_it">E-Mail der IT</label>
+        <input type="email" id="id_email_it" name="email_it" value="{{ einstellungen.email_it }}">
+      </div>
+    </div>
+  </fieldset>
+
+  <fieldset class="card">
+    <legend class="card-head"><h2>Logo (N-02)</h2></legend>
+    <div class="form-grid">
+      <div class="field">
+        <label for="id_logo">Logo (PNG oder SVG)</label>
+        <input type="file" id="id_logo" name="logo" accept="image/png,image/svg+xml" data-test="logo">
+        <small class="help">SVG wird nur als Bild eingebunden, nie als Inline-SVG (N-02).</small>
+        {% if einstellungen.logo %}
+        <small class="help">Aktuell: <a href="/media/{{ einstellungen.logo.name }}">{{ einstellungen.logo.name }}</a></small>
+        {% endif %}
+      </div>
+    </div>
+  </fieldset>
+
+  <fieldset class="card">
+    <legend class="card-head"><h2>Protokolltexte (F-130)</h2></legend>
+    <p class="muted small">Neue Version gilt nur für neue Protokolle. `{Firmenname}` im Text wird ersetzt.</p>
+
+    <div class="field">
+      <label for="id_nutzungsbedingungen_ausgabe">Nutzungsbedingungen (Ausgabeprotokoll)</label>
+      <textarea id="id_nutzungsbedingungen_ausgabe" name="nutzungsbedingungen_ausgabe" rows="4" data-test="nutzungsbedingungen">{{ einstellungen.nutzungsbedingungen_ausgabe }}</textarea>
+    </div>
+    <div class="form-grid">
+      <div class="field">
+        <label for="id_nutzungsbedingungen_version">Version</label>
+        <input type="text" id="id_nutzungsbedingungen_version" name="nutzungsbedingungen_version" value="{{ einstellungen.nutzungsbedingungen_version }}" data-test="version-nutzung">
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="id_erklaerungen_ausgabe">Erklärungen (Ausgabeprotokoll)</label>
+      <textarea id="id_erklaerungen_ausgabe" name="erklaerungen_ausgabe" rows="3" data-test="erklaerungen">{{ einstellungen.erklaerungen_ausgabe }}</textarea>
+    </div>
+    <div class="form-grid">
+      <div class="field">
+        <label for="id_erklaerungen_version">Version</label>
+        <input type="text" id="id_erklaerungen_version" name="erklaerungen_version" value="{{ einstellungen.erklaerungen_version }}" data-test="version-erklaerungen">
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="id_unterzeichnung_ausgabe">Elektronische Unterzeichnung (Ausgabeprotokoll)</label>
+      <textarea id="id_unterzeichnung_ausgabe" name="unterzeichnung_ausgabe" rows="4" data-test="unterzeichnung">{{ einstellungen.unterzeichnung_ausgabe }}</textarea>
+      <small class="help">Erster Absatz fett, Kasten mit hellroter Fläche im PDF.</small>
+    </div>
+    <div class="form-grid">
+      <div class="field">
+        <label for="id_unterzeichnung_version">Version</label>
+        <input type="text" id="id_unterzeichnung_version" name="unterzeichnung_version" value="{{ einstellungen.unterzeichnung_version }}" data-test="version-unterzeichnung">
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="id_erklaerungen_ruecknahme">Erklärungen (Rücknahmeprotokoll)</label>
+      <textarea id="id_erklaerungen_ruecknahme" name="erklaerungen_ruecknahme" rows="3">{{ einstellungen.erklaerungen_ruecknahme }}</textarea>
+    </div>
+    <div class="form-grid">
+      <div class="field">
+        <label for="id_erklaerungen_ruecknahme_version">Version</label>
+        <input type="text" id="id_erklaerungen_ruecknahme_version" name="erklaerungen_ruecknahme_version" value="{{ einstellungen.erklaerungen_ruecknahme_version }}">
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="id_unterzeichnung_ruecknahme">Elektronische Unterzeichnung (Rücknahmeprotokoll)</label>
+      <textarea id="id_unterzeichnung_ruecknahme" name="unterzeichnung_ruecknahme" rows="4">{{ einstellungen.unterzeichnung_ruecknahme }}</textarea>
+    </div>
+    <div class="form-grid">
+      <div class="field">
+        <label for="id_unterzeichnung_ruecknahme_version">Version</label>
+        <input type="text" id="id_unterzeichnung_ruecknahme_version" name="unterzeichnung_ruecknahme_version" value="{{ einstellungen.unterzeichnung_ruecknahme_version }}">
+      </div>
+    </div>
+  </fieldset>
+
+  <fieldset class="card">
+    <legend class="card-head"><h2>Etiketten und Fristen</h2></legend>
+    <div class="form-grid">
+      <div class="field">
+        <label for="id_etikettenformat">Etikettenformat</label>
+        <select id="id_etikettenformat" name="etikettenformat" data-test="etikettenformat">
+          <option value="a4" {% if einstellungen.etikettenformat == "a4" %}selected{% endif %}>A4, 10 Etiketten je Seite</option>
+          <option value="a5" {% if einstellungen.etikettenformat == "a5" %}selected{% endif %}>A5, 10 Etiketten je Seite</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="id_erinnerungsfrist_tage">Erinnerungsfrist (Tage vor Fälligkeit)</label>
+        <input type="number" id="id_erinnerungsfrist_tage" name="erinnerungsfrist_tage" min="1" max="90" value="{{ einstellungen.erinnerungsfrist_tage }}" data-test="erinnerungsfrist">
+      </div>
+    </div>
+  </fieldset>
+
+  <fieldset class="card">
+    <legend class="card-head"><h2>SMTP (F-90)</h2></legend>
+    <div class="form-grid">
+      <div class="field">
+        <label for="id_smtp_server">SMTP-Server</label>
+        <input type="text" id="id_smtp_server" name="smtp_server" value="{{ einstellungen.smtp_server }}" data-test="smtp-server">
+      </div>
+      <div class="field">
+        <label for="id_smtp_port">Port</label>
+        <input type="number" id="id_smtp_port" name="smtp_port" min="1" max="65535" value="{{ einstellungen.smtp_port }}" data-test="smtp-port">
+      </div>
+      <div class="field">
+        <label class="check" for="id_smtp_tls"><input type="checkbox" id="id_smtp_tls" name="smtp_tls" {% if einstellungen.smtp_tls %}checked{% endif %} data-test="smtp-tls"> TLS</label>
+      </div>
+      <div class="field">
+        <label for="id_smtp_absender">Absender</label>
+        <input type="email" id="id_smtp_absender" name="smtp_absender" value="{{ einstellungen.smtp_absender }}" data-test="smtp-absender">
+      </div>
+      <div class="field">
+        <label for="id_smtp_benutzer">Benutzer</label>
+        <input type="text" id="id_smtp_benutzer" name="smtp_benutzer" value="{{ einstellungen.smtp_benutzer }}" data-test="smtp-benutzer">
+      </div>
+      <div class="field">
+        <label for="id_smtp_passwort">Passwort (leer = unverändert)</label>
+        <input type="password" id="id_smtp_passwort" name="smtp_passwort" autocomplete="new-password" placeholder="leer = unverändert" data-test="smtp-passwort">
+      </div>
+    </div>
+
+    <div class="field" style="margin-top:12px">
+      <label for="testmail-adresse">Testmail an</label>
+      <input type="email" id="testmail-adresse" name="testmail_adresse" placeholder="empfaenger@beispiel.test" data-test="testmail-adresse">
+      <button type="button" class="btn" id="btn-testmail" data-test="testmail" style="margin-top:8px">Testmail senden</button>
+      <span id="testmail-ergebnis" data-test="testmail-ergebnis" style="margin-left:12px"></span>
+    </div>
+  </fieldset>
+
+  <fieldset class="card">
+    <legend class="card-head"><h2>Mailtypen (F-96)</h2></legend>
+    <p class="muted small">Abgeschaltete Mailart erzeugt keine Mail.</p>
+    <div class="form-grid">
+      <div class="field">
+        <label class="check" for="id_mail_verleih_anfrage">
+          <input type="checkbox" id="id_mail_verleih_anfrage" name="mail_verleih_anfrage" {% if einstellungen.mail_verleih_anfrage %}checked{% endif %} data-test="mail-verleih-anfrage">
+          Verleihanfrage
+        </label>
+      </div>
+      <div class="field">
+        <label class="check" for="id_mail_verleih_ablehnung">
+          <input type="checkbox" id="id_mail_verleih_ablehnung" name="mail_verleih_ablehnung" {% if einstellungen.mail_verleih_ablehnung %}checked{% endif %} data-test="mail-verleih-ablehnung">
+          Verleih-Ablehnung
+        </label>
+      </div>
+      <div class="field">
+        <label class="check" for="id_mail_verleih_genehmigung">
+          <input type="checkbox" id="id_mail_verleih_genehmigung" name="mail_verleih_genehmigung" {% if einstellungen.mail_verleih_genehmigung %}checked{% endif %} data-test="mail-verleih-genehmigung">
+          Verleih-Genehmigung
+        </label>
+      </div>
+      <div class="field">
+        <label class="check" for="id_mail_verleih_zuruecknahme">
+          <input type="checkbox" id="id_mail_verleih_zuruecknahme" name="mail_verleih_zuruecknahme" {% if einstellungen.mail_verleih_zuruecknahme %}checked{% endif %} data-test="mail-verleih-zuruecknahme">
+          Verleih-Zurücknahme
+        </label>
+      </div>
+      <div class="field">
+        <label class="check" for="id_mail_protokoll_gesendet">
+          <input type="checkbox" id="id_mail_protokoll_gesendet" name="mail_protokoll_gesendet" {% if einstellungen.mail_protokoll_gesendet %}checked{% endif %} data-test="mail-protokoll-gesendet">
+          Protokoll gesendet
+        </label>
+      </div>
+      <div class="field">
+        <label class="check" for="id_mail_protokoll_unterzeichnet">
+          <input type="checkbox" id="id_mail_protokoll_unterzeichnet" name="mail_protokoll_unterzeichnet" {% if einstellungen.mail_protokoll_unterzeichnet %}checked{% endif %} data-test="mail-protokoll-unterzeichnet">
+          Protokoll unterzeichnet
+        </label>
+      </div>
+    </div>
+  </fieldset>
+
+  <div class="actions" style="margin-top:16px">
+    <button type="submit" class="btn primary" data-test="speichern">Speichern</button>
+  </div>
+</form>
+{% endblock %}
+
+{% block skripte %}
+<script>
+(function(){
+  var btn = document.getElementById('btn-testmail');
+  if (!btn) return;
+  btn.addEventListener('click', function(){
+    var adresse = document.getElementById('testmail-adresse').value.trim();
+    var ergebnis = document.getElementById('testmail-ergebnis');
+    if (!adresse) { ergebnis.textContent = 'Bitte eine E-Mail-Adresse angeben.'; return; }
+    ergebnis.textContent = 'Sende…';
+    var csrf = document.querySelector('meta[name="csrf-token"]').content;
+    var body = new URLSearchParams();
+    body.append('empfaenger', adresse);
+    body.append('csrfmiddlewaretoken', csrf);
+    fetch('/einstellungen/testmail/', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRFToken': csrf},
+      body: body.toString()
+    })
+    .then(function(r){ return r.json().then(function(j){ return {status: r.status, j: j}; }); })
+    .then(function(res){
+      if (res.j.ok) { ergebnis.textContent = res.j.meldung; ergebnis.style.color = '#0a0'; }
+      else { ergebnis.textContent = res.j.meldung || 'Fehler'; ergebnis.style.color = '#c00'; }
+    })
+    .catch(function(e){ ergebnis.textContent = 'Fehler: ' + e; ergebnis.style.color = '#c00'; });
+  });
+})();
+</script>
+{% endblock %}

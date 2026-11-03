@@ -175,6 +175,177 @@ class Ort(models.Model):
         return self.position_x is not None and self.position_y is not None
 
 
+class Einstellungen(models.Model):
+    """M7 Teil 1 (A-0905): Einstellungen (F-122, F-90, F-96, F-130, N-02).
+
+    Singleton-Modell: genau eine Zeile (pk=1). ``beispieldaten`` legt die
+    Platzhalterwerte aus TESTSCHNITTSTELLE.md Abschnitt 2 an.
+
+    F-122: Firmenname, Absenderzeile, Telefon und E-Mail der IT.
+    N-02:  Logo als PNG oder SVG; SVG wird nur als Bild eingebunden
+           (``<img src=...>``), nie als Inline-SVG.
+    F-130: Protokolltexte (Nutzungsbedingungen, Erklärungen,
+           Elektronische Unterzeichnung) mit Versionsnummer.
+           Eine neue Version gilt nur für neue Protokolle.
+    F-90:  SMTP-Zugang; „Testmail senden“ erzeugt eine Mail in der Mailablage.
+    F-96:  Schalter je Mailart; abgeschaltete Mailart erzeugt keine Mail.
+    """
+
+    # --- Firma / Absender (F-122) ---
+    firmenname = models.CharField(
+        max_length=200, default="",
+        verbose_name="Firmenname",
+    )
+    absenderzeile = models.CharField(
+        max_length=255, default="",
+        verbose_name="Absenderzeile",
+    )
+    telefon = models.CharField(
+        max_length=50, default="",
+        verbose_name="Telefon der IT",
+    )
+    email_it = models.EmailField(
+        blank=True, default="",
+        verbose_name="E-Mail der IT",
+    )
+
+    # --- Logo (N-02) ---
+    logo = models.FileField(
+        upload_to="logo/",
+        blank=True, default="",
+        verbose_name="Logo (PNG oder SVG)",
+    )
+
+    # --- Protokolltexte mit Versionsnummer (F-130) ---
+    nutzungsbedingungen_ausgabe = models.TextField(
+        blank=True, default="",
+        verbose_name="Nutzungsbedingungen (Ausgabeprotokoll)",
+    )
+    nutzungsbedingungen_version = models.CharField(
+        max_length=20, default="1",
+        verbose_name="Version Nutzungsbedingungen",
+    )
+    erklaerungen_ausgabe = models.TextField(
+        blank=True, default="",
+        verbose_name="Erklärungen (Ausgabeprotokoll)",
+    )
+    erklaerungen_version = models.CharField(
+        max_length=20, default="1",
+        verbose_name="Version Erklärungen",
+    )
+    unterzeichnung_ausgabe = models.TextField(
+        blank=True, default="",
+        verbose_name="Elektronische Unterzeichnung (Ausgabeprotokoll)",
+    )
+    unterzeichnung_version = models.CharField(
+        max_length=20, default="1",
+        verbose_name="Version Elektronische Unterzeichnung",
+    )
+    erklaerungen_ruecknahme = models.TextField(
+        blank=True, default="",
+        verbose_name="Erklärungen (Rücknahmeprotokoll)",
+    )
+    erklaerungen_ruecknahme_version = models.CharField(
+        max_length=20, default="1",
+        verbose_name="Version Erklärungen (Rücknahme)",
+    )
+    unterzeichnung_ruecknahme = models.TextField(
+        blank=True, default="",
+        verbose_name="Elektronische Unterzeichnung (Rücknahmeprotokoll)",
+    )
+    unterzeichnung_ruecknahme_version = models.CharField(
+        max_length=20, default="1",
+        verbose_name="Version Elektronische Unterzeichnung (Rücknahme)",
+    )
+
+    # --- Etiketten ---
+    etikettenformat = models.CharField(
+        max_length=20, default="a4",
+        choices=[("a4", "A4, 10 Etiketten je Seite"), ("a5", "A5, 10 Etiketten je Seite")],
+        verbose_name="Etikettenformat",
+    )
+
+    # --- Erinnerungsfristen ---
+    erinnerungsfrist_tage = models.PositiveIntegerField(
+        default=7,
+        verbose_name="Erinnerungsfrist (Tage vor Fälligkeit)",
+    )
+
+    # --- SMTP (F-90) ---
+    smtp_server = models.CharField(
+        max_length=255, default="",
+        verbose_name="SMTP-Server",
+    )
+    smtp_port = models.PositiveIntegerField(
+        default=587,
+        verbose_name="SMTP-Port",
+    )
+    smtp_tls = models.BooleanField(
+        default=True,
+        verbose_name="TLS",
+    )
+    smtp_absender = models.EmailField(
+        blank=True, default="",
+        verbose_name="SMTP-Absender",
+    )
+    smtp_benutzer = models.CharField(
+        max_length=255, default="",
+        verbose_name="SMTP-Benutzer",
+    )
+    smtp_passwort = models.CharField(
+        max_length=255, default="",
+        verbose_name="SMTP-Passwort",
+    )
+
+    # --- Mailtypen (F-96) ---
+    mail_verleih_anfrage = models.BooleanField(
+        default=True,
+        verbose_name="E-Mail: Verleihanfrage",
+    )
+    mail_verleih_ablehnung = models.BooleanField(
+        default=True,
+        verbose_name="E-Mail: Verleih-Ablehnung",
+    )
+    mail_verleih_genehmigung = models.BooleanField(
+        default=True,
+        verbose_name="E-Mail: Verleih-Genehmigung",
+    )
+    mail_verleih_zuruecknahme = models.BooleanField(
+        default=True,
+        verbose_name="E-Mail: Verleih-Zurücknahme",
+    )
+    mail_protokoll_gesendet = models.BooleanField(
+        default=True,
+        verbose_name="E-Mail: Protokoll gesendet",
+    )
+    mail_protokoll_unterzeichnet = models.BooleanField(
+        default=True,
+        verbose_name="E-Mail: Protokoll unterzeichnet",
+    )
+
+    # --- Zeitstempel ---
+    aktualisiert_am = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Einstellungen"
+        verbose_name_plural = "Einstellungen"
+
+    @classmethod
+    def aktuelles(cls) -> "Einstellungen":
+        """Einzige Zeile lesen oder anlegen (Singleton)."""
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def save(self, *args, **kwargs) -> None:
+        # Singleton: pk immer 1
+        if self.pk is None:
+            self.pk = 1
+        super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        return f"Einstellungen (pk={self.pk})"
+
+
 class Ausstattungsprofil(models.Model):
     """Ausstattungsprofil (F-61, Kapitel 3.2).
 

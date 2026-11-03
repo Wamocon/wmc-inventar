@@ -5,6 +5,9 @@ from . import views
 app_name = "stammdaten"
 
 urlpatterns = [
+    # Einstellungen (F-122, F-90, F-96, F-130, N-02) — M7 Teil 1 (A-0905)
+    path("einstellungen/", views.einstellungen_sehen, name="einstellungen"),
+    path("einstellungen/testmail/", views.einstellungen_testmail, name="einstellungen-testmail"),
     # Kategorien (F-120)
     path("kategorien/", views.kategorien_liste, name="kategorien-liste"),
     path("kategorien/neu/", views.kategorien_anlegen, name="kategorien-anlegen"),

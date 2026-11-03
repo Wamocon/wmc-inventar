@@ -10,14 +10,18 @@ from __future__ import annotations
 
 from django.contrib import messages
 from django.core.files import File
-from django.http import Http404, HttpResponse
+from django.core.files.base import ContentFile
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from .models import Ausstattungsprofil, Ort, Person, Kategorie, Plan
-from .forms import KategorieForm, PersonForm, OrtForm, ProfilForm, ProfilpositionForm
+from .models import Ausstattungsprofil, Ort, Person, Kategorie, Plan, Einstellungen
+from .forms import (
+    KategorieForm, PersonForm, OrtForm, ProfilForm, ProfilpositionForm,
+    EinstellungenForm,
+)
 
 
 def _keine_berechtigung(request):
@@ -432,3 +436,203 @@ def plan_bearbeiten(request, plan_id: int):
             "grundriss_typ": grundriss_typ,
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Einstellungen (F-122, F-90, F-96, F-130, N-02) — M7 Teil 1 (A-0905)
+# ---------------------------------------------------------------------------
+
+def _logo_aufnehmen( Einstellungen_obj, datei):
+    """Logo als PNG oder SVG speichern (N-02).
+
+    Alte Datei wird gelöscht. SVG bleibt eine Datei, die per
+    ``<img src=...>`` eingebunden wird — nie als Inline-SVG.
+    """
+    from django.core.files.storage import default_storage
+
+    if not datei or not datei.size:
+        return
+    name = (datei.name or "").lower()
+    if name.endswith(".png"):
+        dateiname = "logo.png"
+    elif name.endswith(".svg"):
+        dateiname = "logo.svg"
+    else:
+        raise ValueError("Das Logo muss eine PNG- oder SVG-Datei sein (N-02).")
+
+    # Alte Datei löschen
+    if Einstellungen_obj.logo and Einstellungen_obj.logo.name:
+        try:
+            default_storage.delete(Einstellungen_obj.logo.name)
+        except OSError:
+            pass
+
+    daten = datei.read()
+    pfad = default_storage.save(f"logo/{dateiname}", ContentFile(daten))
+    Einstellungen_obj.logo.name = pfad
+    Einstellungen_obj.save(update_fields=["logo"])
+
+
+def _testmail_senden(einstellungen: Einstellungen, empfaenger: str) -> bool:
+    """F-90: Testmail senden.
+
+    Erzeugt eine Mail in der Mailablage (``MAILDIR``) oder nutzt
+    den konfigurierten SMTP-Zugang. Rückgabe: True bei Erfolg.
+    """
+    import os
+    from email.message import EmailMessage
+    from pathlib import Path
+
+    absender = einstellungen.smtp_absender or einstellungen.email_it or "it@beispiel.test"
+    firma = einstellungen.firmenname or "Wamocon GmbH"
+    zeile = einstellungen.absenderzeile or f"{firma} · IT"
+
+    msg = EmailMessage()
+    msg["From"] = f"{zeile} <{absender}>"
+    msg["To"] = empfaenger
+    msg["Subject"] = f"Testmail aus WMC Inventar — {firma}"
+    msg.set_content(
+        "Dies ist eine Testmail aus den Einstellungen von WMC Inventar.\n"
+        "Die Verbindung zum Mailserver wurde geprüft (F-90).\n"
+        f"\nAbsenderzeile: {zeile}\nFirma: {firma}\nTelefon: {einstellungen.telefon or '—'}\nE-Mail IT: {einstellungen.email_it or '—'}\n"
+    )
+
+    maildir = os.environ.get("MAILDIR", "")
+    if maildir:
+        # Ablage: MAILDIR/<empfaenger>/<timestamp>.eml
+        ablage = Path(maildir) / empfaenger.replace("@", "_at_").replace(".", "_")
+        ablage.mkdir(parents=True, exist_ok=True)
+        stempel = timezone.now().strftime("%Y%m%d_%H%M%S")
+        pfad = ablage / f"{stempel}.eml"
+        pfad.write_bytes(msg.as_bytes())
+        return True
+
+    # Fallback: Django MailBackend
+    from django.core.mail import EmailMessage as DJEmail
+    mail = DJEmail(
+        subject=msg["Subject"],
+        body=msg.get_content(),
+        from_email=absender,
+        to=[empfaenger],
+    )
+    mail.send()
+    return True
+
+
+def einstellungen_sehen(request):
+    """/einstellungen/ — Einstellungen anzeigen und pflegen.
+
+    Nur Admin (TESTSCHNITTSTELLE.md Kapitel 3).
+    Für Admin 200, für Leser und Mitarbeiter 403.
+    """
+    user = request.user
+    if not user.is_authenticated or not user.ist_admin:
+        return _keine_berechtigung(request)
+
+    einstellungen = Einstellungen.aktuelles()
+
+    if request.method == "POST":
+        form = EinstellungenForm(request.POST, request.FILES, instance=einstellungen)
+        if form.is_valid():
+            data = form.cleaned_data
+
+            # Passwort: leer = unverändert
+            if not data.get("smtp_passwort"):
+                # Altes Passwort beibehalten
+                data["smtp_passwort"] = einstellungen.smtp_passwort
+            # Logo-Datei aus den FILES extrahieren
+            logo_datei = request.FILES.get("logo")
+            instanz = form.save()
+            if logo_datei is not None:
+                try:
+                    _logo_aufnehmen(instanz, logo_datei)
+                except ValueError as fehler:
+                    messages.error(request, str(fehler))
+                    form.add_error("logo", str(fehler))
+                    return render(request, "stammdaten/einstellungen.html", {
+                        "form": form,
+                        "einstellungen": Einstellungen.aktuelles(),
+                        "testmail_ok": False,
+                        "testmail_aktuell": False,
+                    })
+            messages.success(request, "Einstellungen gespeichert.")
+            return redirect(reverse("stammdaten:einstellungen"))
+        # Fehler: Formular neu rendern
+        return render(request, "stammdaten/einstellungen.html", {
+            "form": form,
+            "einstellungen": Einstellungen.aktuelles(),
+            "testmail_ok": False,
+            "testmail_aktuell": False,
+        })
+    else:
+        form = EinstellungenForm(instance=einstellungen)
+
+    return render(request, "stammdaten/einstellungen.html", {
+        "form": form,
+        "einstellungen": einstellungen,
+        "testmail_ok": False,
+        "testmail_aktuell": False,
+    })
+
+
+@require_POST
+def einstellungen_testmail(request):
+    """F-90: „Testmail senden“ — erzeugt eine Mail in der Mailablage.
+
+    POST /einstellungen/testmail/?empfaenger=<adresse>
+    Nur Admin. Antwort: JSON {ok: true/false, meldung: "..."}.
+    """
+    user = request.user
+    if not user.is_authenticated or not user.ist_admin:
+        return JsonResponse({"ok": False, "meldung": "Keine Berechtigung."}, status=403)
+
+    empfaenger = request.POST.get("empfaenger", "").strip()
+    if not empfaenger or "@" not in empfaenger:
+        return JsonResponse({"ok": False, "meldung": "Bitte eine gültige E-Mail-Adresse angeben."}, status=400)
+
+    einstellungen = Einstellungen.aktuelles()
+    try:
+        _testmail_senden(einstellungen, empfaenger)
+        return JsonResponse({"ok": True, "meldung": f"Testmail an {empfaenger} gesendet."})
+    except Exception as fehler:
+        return JsonResponse({"ok": False, "meldung": f"Testmail fehlgeschlagen: {fehler}"}, status=500)
+
+
+@require_POST
+def einstellungen_speichern(request):
+    """Einstellungen speichern (POST /einstellungen/).
+
+    Wird von der Formularseite aufgerufen; leitet an /einstellungen/ um.
+    """
+    user = request.user
+    if not user.is_authenticated or not user.ist_admin:
+        return _keine_berechtigung(request)
+
+    einstellung = Einstellungen.aktuelles()
+    form = EinstellungenForm(request.POST, request.FILES, instance=einstellung)
+    if not form.is_valid():
+        return render(request, "stammdaten/einstellungen.html", {
+            "form": form,
+            "einstellungen": einstellung,
+            "testmail_ok": False,
+            "testmail_aktuell": False,
+        })
+
+    data = form.cleaned_data
+    # Passwort: leer = unverändert
+    if not data.get("smtp_passwort"):
+        data["smtp_passwort"] = einstellung.smtp_passwort
+
+    instanz = form.save()
+
+    # Logo
+    logo_datei = request.FILES.get("logo")
+    if logo_datei is not None:
+        try:
+            _logo_aufnehmen(instanz, logo_datei)
+        except ValueError as fehler:
+            messages.error(request, str(fehler))
+            return redirect(reverse("stammdaten:einstellungen"))
+
+    messages.success(request, "Einstellungen gespeichert.")
+    return redirect(reverse("stammdaten:einstellungen"))
