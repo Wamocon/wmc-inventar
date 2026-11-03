@@ -6,9 +6,15 @@ from django.contrib import admin
 from django.urls import path, include
 from geraete import views as geraete_views
 from geraete import import_views
+from geraete import uebersicht as uebersicht_views
 from stammdaten import views as stammdaten_views
 
 urlpatterns = [
+    # M7 Teil 3 (A-0907): Übersicht / für Admin und Leser (F-100 bis F-104).
+    # Steht vor den includes, damit der neue Stand die alte Startseite ablöst.
+    path("", uebersicht_views.uebersicht, name="uebersicht"),
+    path("exporte/", uebersicht_views.liste_export, name="uebersicht-export"),
+    path("api/kennzahlen", uebersicht_views.api_kennzahlen, name="api-kennzahlen"),
     path("", include("konten.urls")),
     path("", include("stammdaten.urls")),
     # QR-Code: /g/<Inventarnummer> leitet zu /geraete/<Inventarnummer>/ weiter (F-70)

@@ -68,6 +68,35 @@ def _keine_berechtigung(request, pfad: str):
 
 # --- Liste (F-41) -------------------------------------------------------------
 
+def _geraete_export(request, geraete: list, format_export: str):
+    """F-103: Liste der Geräte mit aktuellem Filter als .csv oder .xlsx."""
+    from . import export as _export
+    kopfzeile = [
+        "Inventarnummer", "Status", "Hersteller", "Modell", "Person",
+        "Ort", "Kategorie", "Kaufdatum", "Garantie bis",
+    ]
+    daten = []
+    for gerat in geraete:
+        daten.append({
+            "Inventarnummer": gerat.inventarnummer,
+            "Status": gerat.status_anzeige,
+            "Hersteller": gerat.hersteller,
+            "Modell": gerat.modell,
+            "Person": (
+                f"{gerat.person.vorname} {gerat.person.nachname}".strip()
+                if gerat.person
+                else ""
+            ),
+            "Ort": gerat.ort.kennung if gerat.ort else "",
+            "Kategorie": gerat.kategorie.name if gerat.kategorie else "",
+            "Kaufdatum": gerat.kaufdatum or "",
+            "Garantie bis": gerat.garantie_bis or "",
+        })
+    if format_export == "csv":
+        return _export.antwort_csv(kopfzeile, daten, "geraete")
+    return _export.antwort_xlsx(kopfzeile, daten, "geraete")
+
+
 @login_required
 def liste(request):
     """Liste aller Geräte (F-41): Standard aufsteigend nach Inventarnummer,
@@ -120,6 +149,11 @@ def liste(request):
         qs = [g for g in qs if g.ist_unvollstaendig()]
     else:
         qs = list(qs)
+
+    # F-103 (A-0907, M7 Teil 3): Export der Liste mit aktuellem Filter.
+    format_export = (request.GET.get("format") or "").strip().lower()
+    if format_export in ("csv", "xlsx"):
+        return _geraete_export(request, qs, format_export)
 
     # Erstinventur-Fortschritt je Ort, sobald nach ort gefiltert (F-89, Kap. 4):
     # Markierung ``inventur-fortschritt`` mit ``ist`` und ``gesamt``.

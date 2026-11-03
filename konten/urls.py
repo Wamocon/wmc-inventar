@@ -5,7 +5,7 @@ from . import views
 app_name = "konten"
 
 urlpatterns = [
-    path("", views.uebersicht, name="uebersicht"),
+    # Die Übersicht / wurde mit M7 Teil 3 (A-0907) nach geraete.uebersicht verlegt.
     path("anmelden/", views.anmelden, name="anmelden"),
     path("abmelden/", views.abmelden, name="abmelden"),
     path("passwort-vergessen/", views.passwort_vergessen, name="passwort-vergessen"),

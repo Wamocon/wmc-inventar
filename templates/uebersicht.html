@@ -1,0 +1,94 @@
+{% extends "basis.html" %}{% load betraegeuro %}
+{% block titel %}Übersicht · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div>
+    <h1>Übersicht</h1>
+    <p class="lead muted">Stand der Daten: <strong data-test="stand">{{ stand }}</strong></p>
+  </div>
+</div>
+
+{# Kennzahlen (F-100) #}
+<section class="abschnitt" data-test="kennzahlen">
+  <h2>Kennzahlen</h2>
+  <table data-test="liste">
+    <thead>
+      <tr><th>Zeiger</th><th>IST</th><th>Gesamt</th><th>Δ Vortag</th></tr>
+    </thead>
+    <tbody>
+      {% for kz in kennzahlen %}
+      <tr data-test="kennzahl" data-id="{{ kz.data_id }}">
+        <td>{{ kz.titel }}</td>
+        <td class="num" data-test="ist">{% if kz.ist is not None %}{{ kz.ist }}{% else %}–{% endif %}</td>
+        <td class="num" data-test="gesamt">{% if kz.gesamt is not None %}{{ kz.gesamt }}{% else %}–{% endif %}</td>
+        <td class="num" data-test="delta">{% if kz.delta is None %}–{% elif kz.delta == 0 %}±0{% elif kz.delta > 0 %}+{{ kz.delta }}{% else %}−{{ kz.delta_abs }}{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{# Inventarwert (F-104) #}
+<section class="abschnitt" data-test="inventarwert">
+  <h2>Inventarwert</h2>
+  <p class="num" style="font-size:24px;font-weight:700">
+    <span data-test="wert">{{ inventarwert|betraegeuro }}</span>
+  </p>
+  <p class="muted">Summe der Kaufpreise aller aktiven Geräte (nicht ausgemustert).</p>
+</section>
+
+{# Arbeitslisten (F-102, F-36, F-88, F-133) #}
+<section class="abschnitt" data-test="arbeitslisten">
+  <h2>Arbeitslisten</h2>
+
+  {% for liste in arbeitslisten %}
+  <div class="abschnitt" data-test="arbeitsliste" data-id="{{ liste.data_id }}">
+    <h3>
+      {{ liste.titel }}
+      <span class="muted small" data-test="anzahl">{{ liste.zeilen|length }}</span>
+    </h3>
+    {% if liste.zeilen %}
+    <table data-test="liste">
+      <thead>
+        <tr><th>Eintrag</th><th>Detail</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for z in liste.zeilen %}
+        <tr data-test="zeile" data-id="{% if z.nr %}{{ z.nr }}{% elif z.kennung %}{{ z.kennung }}{% else %}{{ z.person }}{% endif %}">
+          <td><a href="{{ z.link }}" data-test="sprung">{% if z.nr %}{{ z.nr }}{% elif z.kennung %}{{ z.kennung }}{% else %}{{ z.person }}{% endif %}</a></td>
+          <td>
+            {% if liste.data_id == "ueberfaellig" or liste.data_id == "anfragen" %}
+              {{ z.gerat }} · {{ z.person }}{% if z.frist %} · Rückgabe {{ z.frist|date:"d.m.Y" }}{% endif %}{% if z.zweck %} · {{ z.zweck }}{% endif %}
+            {% elif liste.data_id == "arbeitsplaetze-unvollstaendig" %}
+              {{ z.standort }} · {{ z.mangel }}
+            {% elif liste.data_id == "garantie" %}
+              {{ z.modell }} · Garantie bis {{ z.garantie_bis|date:"d.m.Y" }}
+            {% elif liste.data_id == "unterschriften-offen" %}
+              {{ z.stand }} · {{ z.person }}
+            {% elif liste.data_id == "daten-unvollstaendig" %}
+              {{ z.modell }} · fehlt: {{ z.luecken|join:", " }}
+            {% elif liste.data_id == "offene-punkte" %}
+              Offene Punkte: {{ z.punkte|length }}
+            {% elif liste.data_id == "austritte" %}
+              Austritt {{ z.austritt|date:"d.m.Y" }} · {{ z.geraete }} Gerät(e)
+            {% endif %}
+          </td>
+          <td class="actions">
+            <a class="btn small" href="{% url 'uebersicht-export' %}?liste={{ liste.data_id }}&format=csv" data-test="export-csv">CSV</a>
+            <a class="btn small" href="{% url 'uebersicht-export' %}?liste={{ liste.data_id }}&format=xlsx" data-test="export-xlsx">XLSX</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted" data-test="leer">{{ liste.leer_text }}</p>
+    <div class="actions">
+      <a class="btn small" href="{% url 'uebersicht-export' %}?liste={{ liste.data_id }}&format=csv" data-test="export-csv">CSV</a>
+      <a class="btn small" href="{% url 'uebersicht-export' %}?liste={{ liste.data_id }}&format=xlsx" data-test="export-xlsx">XLSX</a>
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</section>
+{% endblock %}
