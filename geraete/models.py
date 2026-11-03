@@ -536,7 +536,17 @@ class Protokoll(models.Model):
 
     @property
     def stand_anzeige(self) -> str:
-        return dict(self.STAENDE).get(self.stand, self.stand) or self.stand
+        """Anzeigetext aus TESTSCHNITTSTELLE §5 (F-22, F-135, F-136)."""
+        stand = self.stand
+        if stand == self.STAND_SCAN_OFFEN:
+            return "Unterschrift offen: Scan fehlt"
+        if stand == self.STAND_BEARBEITER_OFFEN:
+            return "Unterschrift offen: Bearbeiter"
+        if stand == self.STAND_GEGENZEICHNUNG_OFFEN:
+            return "Unterschrift offen: Gegenzeichnung"
+        if stand == self.STAND_ABGESCHLOSSEN:
+            return "abgeschlossen"
+        return stand
 
     @property
     def stand_class(self) -> str:

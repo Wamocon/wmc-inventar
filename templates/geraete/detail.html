@@ -216,6 +216,22 @@
 {% endif %}
 
 <div class="abschnitt">
+  <h2>Protokolle</h2>
+  {% if gerat.protokolle.exists %}
+  <div class="liste" data-test="protokolle">
+    {% for p in gerat.protokolle.all %}
+    <div class="zeile" data-test="protokoll" data-id="{{ p.nr }}" data-stand="{{ p.stand }}">
+      <a href="/protokolle/{{ p.nr }}/" data-test="protokoll-link">{{ p.nr }}</a>
+      <span class="chip-status {{ p.stand_class }}">{{ p.stand_anzeige }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">Noch keine Protokolle.</p>
+  {% endif %}
+</div>
+
+<div class="abschnitt">
   <h2>Historie</h2>
   {% if gerat.vorgaenge.exists %}
   <div class="liste" data-test="historie">

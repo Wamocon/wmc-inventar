@@ -4539,3 +4539,141 @@ class A0128AbbrechenTest(TestCase):
         )
         self.assertEqual(antwort.status_code, 302)
         self.assertEqual(Protokoll.objects.filter(geraet=self.g1).count(), 1)
+
+
+# ---------------------------------------------------------------------------
+# A-0904: Protokolle am Gerät und an der Person (F-139)
+# ---------------------------------------------------------------------------
+
+
+class A0904ProtokollDetailGeraetTest(TestCase):
+    """A-0904: Auf /geraete/<Nr>/ steht ein Element protokoll je Protokoll.
+
+    Nach einer Ausgabe mit Signatur im Tool: data-stand bearbeiter-offen.
+    Nach einer Ausgabe mit Papier: data-stand scan-offen.
+    """
+
+    def setUp(self):
+        self.admin = konto_erstellen("admin0904")
+        self.kat = Kategorie.objects.create(name="Testkategorie A0904")
+        self.person = Person.objects.create(
+            vorname="Anna", nachname="Becker", email="anna.becker.a0904@example.com",
+        )
+        self.ort = Ort.objects.create(
+            typ=Ort.TYP_ARBEITSPLATZ, kennung="A0904-AP", name="Raum A0904",
+        )
+
+    def _ausgabe(self, unterschrift: str):
+        g = services.gerat_anlegen(
+            kategorie=self.kat, hersteller="Test", modell=f"A0904-{unterschrift}",
+            erzeugt_von=self.admin,
+        )
+        self.client.force_login(self.admin)
+        antwort = self.client.post(
+            f"/geraete/{g.inventarnummer}/ausgeben/",
+            {
+                "ziel_person": self.person.pk,
+                "ziel_ort": self.ort.pk,
+                "zustand": 2,
+                "zubehoer_komplett": "ja",
+                "unterschrift": unterschrift,
+            },
+        )
+        assert antwort.status_code == 302
+        return g
+
+    def test_geraetedetail_zeigt_protokoll_bearbeiter_offen(self):
+        """F-139: Ausgabe mit Signatur im Tool → data-stand bearbeiter-offen."""
+        g = self._ausgabe("tool")
+        self.client.force_login(self.admin)
+        antwort = self.client.get(f"/geraete/{g.inventarnummer}/")
+        self.assertEqual(antwort.status_code, 200)
+        content = antwort.content.decode("utf-8")
+        self.assertIn('data-test="protokoll"', content)
+        self.assertIn('data-stand="bearbeiter-offen"', content)
+        protokoll = Protokoll.objects.filter(geraet=g).first()
+        self.assertIsNotNone(protokoll)
+        self.assertIn(f"/protokolle/{protokoll.nr}/", content)
+        # Anzeigetext aus Kapitel 5.
+        self.assertIn("Unterschrift offen: Bearbeiter", content)
+        # Genau ein Element protokoll.
+        self.assertEqual(content.count('data-test="protokoll" data-id='), 1)
+
+    def test_geraetedetail_zeigt_protokoll_scan_offen(self):
+        """F-139, F-22: Ausgabe mit Papier → data-stand scan-offen."""
+        g = self._ausgabe("papier")
+        self.client.force_login(self.admin)
+        antwort = self.client.get(f"/geraete/{g.inventarnummer}/")
+        self.assertEqual(antwort.status_code, 200)
+        content = antwort.content.decode("utf-8")
+        self.assertIn('data-test="protokoll"', content)
+        self.assertIn('data-stand="scan-offen"', content)
+        protokoll = Protokoll.objects.filter(geraet=g).first()
+        self.assertIsNotNone(protokoll)
+        self.assertIn(f"/protokolle/{protokoll.nr}/", content)
+        # Anzeigetext aus Kapitel 5.
+        self.assertIn("Unterschrift offen: Scan fehlt", content)
+        # Genau ein Element protokoll.
+        self.assertEqual(content.count('data-test="protokoll" data-id='), 1)
+
+
+class A0904ProtokollDetailPersonTest(TestCase):
+    """A-0904: Auf der Detailseite der Person stehen die Protokolle der Person."""
+
+    def setUp(self):
+        self.admin = konto_erstellen("admin0904p")
+        self.kat = Kategorie.objects.create(name="Testkategorie A0904P")
+        self.person = Person.objects.create(
+            vorname="Anna", nachname="Becker Person",
+            email="anna.becker.person@example.com",
+        )
+        self.ort = Ort.objects.create(
+            typ=Ort.TYP_ARBEITSPLATZ, kennung="A0904P-AP", name="Raum A0904P",
+        )
+
+    def _ausgabe(self, unterschrift: str):
+        g = services.gerat_anlegen(
+            kategorie=self.kat, hersteller="Test", modell=f"A0904P-{unterschrift}",
+            erzeugt_von=self.admin,
+        )
+        self.client.force_login(self.admin)
+        antwort = self.client.post(
+            f"/geraete/{g.inventarnummer}/ausgeben/",
+            {
+                "ziel_person": self.person.pk,
+                "ziel_ort": self.ort.pk,
+                "zustand": 2,
+                "zubehoer_komplett": "ja",
+                "unterschrift": unterschrift,
+            },
+        )
+        assert antwort.status_code == 302
+        return g
+
+    def test_personendetail_zeigt_protokoll_bearbeiter_offen(self):
+        """F-139: Ausgabe mit Signatur im Tool → Personendetail zeigt bearbeiter-offen."""
+        self._ausgabe("tool")
+        self.client.force_login(self.admin)
+        antwort = self.client.get(f"/personen/{self.person.pk}/")
+        self.assertEqual(antwort.status_code, 200)
+        content = antwort.content.decode("utf-8")
+        self.assertIn('data-test="protokoll"', content)
+        self.assertIn('data-stand="bearbeiter-offen"', content)
+        protokoll = Protokoll.objects.filter(person=self.person).first()
+        self.assertIsNotNone(protokoll)
+        self.assertIn(f"/protokolle/{protokoll.nr}/", content)
+        self.assertIn("Unterschrift offen: Bearbeiter", content)
+
+    def test_personendetail_zeigt_protokoll_scan_offen(self):
+        """F-139, F-22: Ausgabe mit Papier → Personendetail zeigt scan-offen."""
+        self._ausgabe("papier")
+        self.client.force_login(self.admin)
+        antwort = self.client.get(f"/personen/{self.person.pk}/")
+        self.assertEqual(antwort.status_code, 200)
+        content = antwort.content.decode("utf-8")
+        self.assertIn('data-test="protokoll"', content)
+        self.assertIn('data-stand="scan-offen"', content)
+        protokoll = Protokoll.objects.filter(person=self.person).first()
+        self.assertIsNotNone(protokoll)
+        self.assertIn(f"/protokolle/{protokoll.nr}/", content)
+        self.assertIn("Unterschrift offen: Scan fehlt", content)

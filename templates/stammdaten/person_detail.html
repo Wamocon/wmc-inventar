@@ -18,6 +18,21 @@
   <dt>Eintritt</dt><dd>{% if person.eintritt %}{{ person.eintritt }}{% else %}—{% endif %}</dd>
   <dt>Austritt</dt><dd>{% if person.austritt %}{{ person.austritt }}{% else %}—{% endif %}</dd>
   <dt>Anschrift</dt><dd>{{ person.anschrift|default:"—" }}</dd>
-  <dt>Status</dt><dd>{{ "aktiv" if person.aktiv else "inaktiv" }}</dd>
+  <dt>Status</dt><dd>{% if person.aktiv %}aktiv{% else %}inaktiv{% endif %}</dd>
 </dl>
+<div class="abschnitt">
+  <h2>Protokolle</h2>
+  {% if person.protokolle.exists %}
+  <div class="liste" data-test="protokolle">
+    {% for p in person.protokolle.all %}
+    <div class="zeile" data-test="protokoll" data-id="{{ p.nr }}" data-stand="{{ p.stand }}">
+      <a href="/protokolle/{{ p.nr }}/" data-test="protokoll-link">{{ p.nr }}</a>
+      <span class="chip-status {{ p.stand_class }}">{{ p.stand_anzeige }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">Noch keine Protokolle.</p>
+  {% endif %}
+</div>
 {% endblock %}
