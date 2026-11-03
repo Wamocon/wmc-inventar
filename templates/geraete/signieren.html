@@ -13,6 +13,12 @@
     </div>
 </div>
 
+{% if meldung %}
+<div class="meldung meldung-erfolg" data-test="signieren-meldung">
+    {{ meldung }}
+</div>
+{% endif %}
+
 {% if fehler %}
 <div class="meldung meldung-fehler" data-test="signieren-fehler" role="alert">
     {{ fehler }}
@@ -22,7 +28,7 @@
 <section class="abschnitt" data-test="protokoll-ansicht">
     <h2>Protokoll</h2>
     <p class="muted">
-        <a class="btn" data-test="protokoll-pdf" href="/protokolle/{{ protokoll.nr }}/pdf/">PDF ansehen</a>
+        <a class="btn" data-test="protokoll-pdf" href="/signieren/{{ token }}/pdf/">PDF ansehen</a>
     </p>
     <p class="muted">
         Bitte sehen Sie das Protokoll an und geben Sie unten den Einmalcode ein,
@@ -32,6 +38,14 @@
 
 <section class="abschnitt" data-test="signieren-formular">
     <h2>Einmalcode</h2>
+    <p class="muted">
+        Sie haben keine E-Mail erhalten?
+    </p>
+    <form method="post" action="/signieren/{{ token }}/code-senden/" data-test="code-senden-formular">
+        {% csrf_token %}
+        <button class="btn" type="submit" data-test="code-senden">Code senden</button>
+    </form>
+    <hr>
     <form method="post" action="/signieren/{{ token }}/" data-test="code-formular">
         {% csrf_token %}
         <p>
@@ -46,13 +60,5 @@
         </p>
         <button class="btn" type="submit" data-test="code-absenden">Signieren</button>
     </form>
-</section>
-
-<section class="abschnitt" data-test="signieren-info">
-    <h2>Hinweis</h2>
-    <p class="muted">
-        Sie haben keine E-Mail erhalten? Wenden Sie sich an die IT,
-        damit ein neuer Code gesendet wird.
-    </p>
 </section>
 {% endblock %}

@@ -1882,3 +1882,85 @@ def signieren_link(request, token: str):
             "token": token,
         },
     )
+
+
+@require_POST
+def signieren_code_senden(request, token: str):
+    """F-136: POST /signieren/<token>/code-senden/ – ohne Anmeldung.
+
+    Schickt einen neuen Einmalcode per Mail an die Person.
+    """
+    from .models import Protokoll
+    protokoll = Protokoll.objects.filter(
+        gegenzeichnung_token=token
+    ).select_related("person", "geraet").first()
+    if protokoll is None:
+        return HttpResponse(
+            "<html><body><h1>Unbekannter Link</h1></body></html>",
+            status=404,
+        )
+    if protokoll.gegenzeichnung_abgelaufen:
+        return HttpResponse(
+            "<html><body><h1>Link abgelaufen</h1></body></html>",
+            status=410,
+        )
+    if protokoll.stand == Protokoll.STAND_ABGESCHLOSSEN:
+        return HttpResponse(
+            "<html><body><h1>Gegenzeichnung abgeschlossen</h1></body></html>",
+            status=200,
+        )
+
+    from . import services
+    erfolg, meldung = services.protokoll_code_senden(protokoll)
+    if erfolg:
+        return render(
+            request,
+            "geraete/signieren.html",
+            {
+                "protokoll": protokoll,
+                "token": token,
+                "meldung": "Code per Mail gesendet (F-136).",
+            },
+        )
+    return render(
+        request,
+        "geraete/signieren.html",
+        {
+            "protokoll": protokoll,
+            "token": token,
+            "fehler": meldung or "Code konnte nicht gesendet werden.",
+        },
+        status=400,
+    )
+
+
+def signieren_pdf(request, token: str):
+    """F-136: GET /signieren/<token>/pdf/ – ohne Anmeldung.
+
+    Liefert das PDF des Protokolls über den Token, ohne Anmeldung.
+    """
+    from .models import Protokoll
+    from . import pdf as pdf_modul
+    protokoll = Protokoll.objects.filter(
+        gegenzeichnung_token=token
+    ).select_related("person", "geraet").first()
+    if protokoll is None:
+        return HttpResponse(
+            "<html><body><h1>Unbekannter Link</h1></body></html>",
+            status=404,
+        )
+    try:
+        pdf_bytes = pdf_modul.pdf_bauen(protokoll)
+    except Exception:
+        return HttpResponse(
+            "<html><body><h1>PDF konnte nicht erzeugt werden</h1></body></html>",
+            status=500,
+        )
+    response = HttpResponse(
+        pdf_bytes,
+        content_type="application/pdf",
+    )
+    response["Content-Disposition"] = (
+        f'inline; filename="Protokoll-{protokoll.nr}.pdf"'
+    )
+    return response
