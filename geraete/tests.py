@@ -4677,3 +4677,57 @@ class A0904ProtokollDetailPersonTest(TestCase):
         self.assertIsNotNone(protokoll)
         self.assertIn(f"/protokolle/{protokoll.nr}/", content)
         self.assertIn("Unterschrift offen: Scan fehlt", content)
+
+
+# --- N-07 Mengengerüst (A-0908, M7 Teil 4) ---------------------------------
+
+class MengengeruestTests(TestCase):
+    """N-07: bis 1.000 Geräte, 100 Konten, 10 gleichzeitige Nutzer.
+
+    Listen laden in unter 1 Sekunde.
+    """
+
+    def test_geraete_anlegen_1000(self):
+        """N-07: 1.000 Geräte können angelegt werden."""
+        kat = Kategorie.objects.create(name="Notebook")
+        self.admin = konto_erstellen("admin", "admin")
+        for i in range(1000):
+            services.gerat_anlegen(
+                kategorie=kat,
+                hersteller="Lenovo",
+                modell=f"ThinkPad T14-{i}",
+                erzeugt_von=self.admin,
+            )
+        self.assertEqual(Gerat.objects.count(), 1000)
+
+    def test_geraeteliste_ladt_unter_einer_sekunde(self):
+        """N-07: Geräteliste lädt in unter 1 Sekunde mit 1.000 Geräten."""
+        kat = Kategorie.objects.create(name="Notebook")
+        self.admin = konto_erstellen("admin", "admin")
+        for i in range(1000):
+            services.gerat_anlegen(
+                kategorie=kat,
+                hersteller="Lenovo",
+                modell=f"ThinkPad T14-{i}",
+                erzeugt_von=self.admin,
+            )
+        self.client.force_login(self.admin)
+        import time
+        start = time.monotonic()
+        antwort = self.client.get("/geraete/")
+        dauer = time.monotonic() - start
+        self.assertEqual(antwort.status_code, 200)
+        self.assertLess(
+            dauer,
+            1.0,
+            f"Geräteliste hat {dauer:.2f} Sekunden gebraucht, muss unter 1 Sekunde sein (N-07)",
+        )
+
+    def test_100_konten_koennen_angelegt_werden(self):
+        """N-07: 100 Konten können angelegt werden."""
+        for i in range(100):
+            email = f"konten{i}@wamocon.de"
+            k = Konto(email=email, rolle=Konto.ROLLE_MITARBEITER)
+            k.set_password("test-passwort-123")
+            k.save()
+        self.assertEqual(Konto.objects.count() >= 100, True)
