@@ -194,7 +194,7 @@
     </p>
     <form method="post" action="/protokolle/{{ protokoll.nr }}/korrigieren/" data-test="korrigieren-formular">
         {% csrf_token %}
-        <button class="btn" type="submit" data-test="korrigieren-absenden">Neue Fassung erzeugen</button>
+        <button class="btn" type="submit" data-test="aktion-korrigieren">Neue Fassung erzeugen</button>
     </form>
 </section>
 
