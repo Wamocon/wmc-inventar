@@ -45,8 +45,8 @@
             <tr>
                 <td>{{ punkt.text }}</td>
                 <td>
-                    <label><input type="radio" name="checkliste.{{ forloop.counter }}" value="1" {% if punkt.wert == 1 %}checked{% endif %}> ja</label>
-                    <label><input type="radio" name="checkliste.{{ forloop.counter }}" value="0" {% if punkt.wert == 0 %}checked{% endif %}> nein</label>
+                    <label><input type="radio" name="checkliste.{{ punkt.schluessel }}" value="1" {% if punkt.wert == 1 %}checked{% endif %}> ja</label>
+                    <label><input type="radio" name="checkliste.{{ punkt.schluessel }}" value="0" {% if punkt.wert == 0 %}checked{% endif %}> nein</label>
                 </td>
             </tr>
             {% endfor %}

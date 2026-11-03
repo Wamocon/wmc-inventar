@@ -1537,7 +1537,7 @@ def protokoll_detail(request, protokoll_nr):
     _protokoll_berechtigt(protokoll, request)
 
     checkliste = [
-        {"text": text, "wert": (protokoll.checkliste or {}).get(schluessel)}
+        {"schluessel": schluessel, "text": text, "wert": (protokoll.checkliste or {}).get(schluessel)}
         for schluessel, text in Protokoll.CHECKLISTE_PUNKTE
     ]
     offboarding = [
@@ -1604,7 +1604,8 @@ def protokoll_checkliste_beantworten(request, protokoll_nr):
         protokoll_services.checkliste_beantworten(protokoll, werte, request.user)
     except services.GeratFehler as fehler:
         meldung_error(request, str(fehler))
-    meldung_success(request, "Checkliste gespeichert (F-132).")
+    else:
+        meldung_success(request, "Checkliste gespeichert (F-132).")
     return redirect(f"/protokolle/{protokoll_nr}/")
 
 
@@ -1629,7 +1630,8 @@ def protokoll_foto_hochladen(request, protokoll_nr):
         protokoll_services.foto_hochladen(protokoll, datei, request.user)
     except services.GeratFehler as fehler:
         meldung_error(request, str(fehler))
-    meldung_success(request, "Foto als Anlage gespeichert (F-134).")
+    else:
+        meldung_success(request, "Foto als Anlage gespeichert (F-134).")
     return redirect(f"/protokolle/{protokoll_nr}/")
 
 
@@ -1653,7 +1655,8 @@ def protokoll_scan_hochladen(request, protokoll_nr):
         protokoll_services.scan_hochladen(protokoll, datei, request.user)
     except services.GeratFehler as fehler:
         meldung_error(request, str(fehler))
-    meldung_success(request, "Scan hochgeladen, Protokoll abgeschlossen (F-22).")
+    else:
+        meldung_success(request, "Scan hochgeladen, Protokoll abgeschlossen (F-22).")
     return redirect(f"/protokolle/{protokoll_nr}/")
 
 
