@@ -1570,7 +1570,7 @@ def protokoll_pdf(request, protokoll_nr):
 
     from . import pdf as protokoll_pdf_modul
     try:
-        inhalt = protokoll_pdf_modul.pdf_bauen(protokoll)
+        inhalt = protokoll_pdf_modul.pdf_fertig_bauen(protokoll)
     except services.GeratFehler as fehler:
         meldung_error(request, str(fehler))
         return redirect(f"/protokolle/{protokoll_nr}/")
@@ -1950,7 +1950,7 @@ def signieren_pdf(request, token: str):
             status=404,
         )
     try:
-        pdf_bytes = pdf_modul.pdf_bauen(protokoll)
+        pdf_bytes = pdf_modul.pdf_fertig_bauen(protokoll)
     except Exception:
         return HttpResponse(
             "<html><body><h1>PDF konnte nicht erzeugt werden</h1></body></html>",

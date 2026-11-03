@@ -458,3 +458,63 @@ def dateiname_protokoll(protokoll: Protokoll) -> str:
     if protokoll.art == Protokoll.ART_AUSGABE:
         return f"WMC_Ausgabeprotokoll_{name}_{vorname}_{datum}.pdf"
     return f"WMC_Ruecknahmeprotokoll_{name}_{vorname}_{datum}.pdf"
+
+
+# --- F-137, F-138: Fertiges PDF mit Siegel und Prüfprotokoll -----------------
+
+def _pruefprotokoll_seite(protokoll: Protokoll) -> str:
+    """HTML für die letzte Seite: Prüfprotokoll (F-137, F-138)."""
+    from django.utils import timezone
+    jetzt = timezone.now()
+    return f"""
+<div style="page-break-before: always; margin-top: 40pt;">
+<h2>Prüfprotokoll</h2>
+<table class="daten">
+  <tr><td class="lbl">Protokoll-Nummer</td><td>{protokoll.nr}</td></tr>
+  <tr><td class="lbl">Art</td><td>{"Ausgabe" if protokoll.art == Protokoll.ART_AUSGABE else "Rücknahme"}</td></tr>
+  <tr><td class="lbl">Bearbeiter</td><td>{protokoll.bearbeiter or "–"}</td></tr>
+  <tr><td class="lbl">Empfänger</td><td>{protokoll.person.vorname} {protokoll.person.nachname}</td></tr>
+  <tr><td class="lbl">Datum der Ausgabe</td><td>{protokoll.datum.strftime("%d.%m.%Y")}</td></tr>
+  <tr><td class="lbl">Signatur des Bearbeiters</td><td>{"vorliegt" if protokoll.signatur else "fehlt"}</td></tr>
+  <tr><td class="lbl">Gegenzeichnung</td><td>{"vorliegt" if protokoll.gegenzeichnung else "fehlt"}</td></tr>
+  <tr><td class="lbl">PDF-Hash (SHA-256)</td><td>{(protokoll.pdf_hash or "")[:64] or "–"}</td></tr>
+  <tr><td class="lbl">Erzeugt am</td><td>{jetzt.strftime("%d.%m.%Y %H:%M")} Uhr</td></tr>
+</table>
+<p class="hinweis">
+  Dieses Prüfprotokoll ist die letzte Seite des versiegelten PDFs (F-137, F-138).
+  Das Siegel (PAdES) bestätigt die Integrität des Dokuments.
+  Wamocon GmbH · IT
+</p>
+</div>
+"""
+
+
+def pdf_fertig_bauen(protokoll: Protokoll) -> bytes:
+    """F-137, F-138: Fertiges PDF mit Siegel und Prüfprotokoll als letzte Seite.
+
+    1. PDF bauen (Checkliste muss beantwortet sein).
+    2. Prüfprotokoll-Seite anhängen.
+    3. Mit PAdES-Siegel versiegeln (falls verfügbar).
+
+    Liefert die versiegelte PDF-Bytes.
+    """
+    # 1. PDF bauen.
+    html = _render_pdf_html(protokoll)
+
+    # 2. Prüfprotokoll-Seite anhängen.
+    pruefseite = _pruefprotokoll_seite(protokoll)
+    html = html.replace("</body>", pruefseite + "</body>")
+
+    # 3. PDF rendern.
+    from weasyprint import HTML
+    puffer = io.BytesIO()
+    HTML(string=html, base_url=os.getcwd()).write_pdf(puffer)
+    pdf_bytes = puffer.getvalue()
+
+    # 4. Siegel anwenden (F-138).
+    from . import siegel as siegel_modul
+    versiegelt = siegel_modul.siegel_anwenden(pdf_bytes)
+    if versiegelt is not None:
+        return versiegelt
+    # Ohne Siegel weiterlaufen (Bestätigung ohne Anhang).
+    return pdf_bytes

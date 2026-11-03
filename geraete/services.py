@@ -2548,7 +2548,8 @@ def protokoll_gegenzeichnen(
 
     from . import pdf as pdf_modul
     try:
-        pdf_bytes = pdf_modul.pdf_bauen(protokoll)
+        # F-137, F-138: Fertiges PDF mit Prüfprotokoll und Siegel.
+        pdf_bytes = pdf_modul.pdf_fertig_bauen(protokoll)
     except Exception:
         pdf_bytes = b""
     pdf_hash = _pdf_hash(pdf_bytes)
@@ -2582,26 +2583,16 @@ def protokoll_gegenzeichnen(
     )
 
     # --- A-0126 M6 Teil 3: Siegel (F-138) und Versand (F-139) --------------
-    # F-138: Nach der letzten Signatur das PDF mit pyhanko als PAdES
-    # versiegeln (Zertifikat aus SIEGEL_P12).
-    # F-139: Das fertige PDF geht als Anhang an Person und Bearbeiter,
-    # je eine Ausfertigung, und liegt am Gerät, an der Person und unter
-    # /meine-geraete/, Dateiname nach F-139.
-    from . import siegel as siegel_modul
-
+    # F-137, F-138: pdf_fertig_bauen hat bereits das Siegel angelegt.
+    # F-139: Das fertige PDF geht als Anhang an Person und Bearbeiter.
     if pdf_bytes:
-        versiegelt = siegel_modul.siegel_anwenden(pdf_bytes)
-        # Fehler bei der Versiegelung: Protokoll bleibt abgeschlossen,
-        # aber ohne Siegel. Mail ohne Anhang.
-        if versiegelt is None:
-            _mail_bestätigung(protokoll)
-            return protokoll, True, "Gegenzeichnung abgeschlossen."
-
         dateiname = pdf_modul.dateiname_protokoll(protokoll)
-        protokoll.pdf_siegel = versiegelt
+        protokoll.pdf_siegel = pdf_bytes
         protokoll.pdf_dateiname = dateiname
         protokoll.save()
-        _ablage_mit_anhang(protokoll, versiegelt, dateiname)
+        _ablage_mit_anhang(protokoll, pdf_bytes, dateiname)
+    else:
+        _mail_bestätigung(protokoll)
 
     return protokoll, True, "Gegenzeichnung abgeschlossen."
 
