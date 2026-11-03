@@ -494,6 +494,19 @@ class Protokoll(models.Model):
         related_name="rueckgaben",
         verbose_name="Rücknahme zu Protokoll",
     )
+    # --- A-0126 M6 Teil 3: Siegel (PAdES) und Versand (F-138, F-139, F-140) ---
+    # F-138: Versiegeltes PDF (PAdES mit pyhanko), nach der Gegenzeichnung.
+    pdf_siegel = models.BinaryField(
+        "Versiegeltes PDF (PAdES)", null=True, blank=True,
+    )
+    # F-139: Dateiname nach F-139 (WMC_Ausgabeprotokoll_Nachname_Vorname_TT.MM.JJJJ.pdf).
+    pdf_dateiname = models.CharField(
+        "PDF-Dateiname (F-139)", max_length=256, blank=True, default=""
+    )
+    # F-140: Link neu gesendet (Zeitpunkt der letzten Neusendung).
+    link_neu_gesendet_am = models.DateTimeField(
+        "Link neu gesendet am (F-140)", null=True, blank=True
+    )
 
     class Meta:
         verbose_name = "Protokoll"

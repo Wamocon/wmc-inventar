@@ -10,6 +10,7 @@ F-84 bis F-88 (Importkonflikte, Datenlücken).
 """
 from __future__ import annotations
 
+import os
 from datetime import date
 
 from django.db import transaction
@@ -2049,6 +2050,208 @@ def protokoll_code_senden(
     return True, "Code gesendet."
 
 
+def _mail_versand_mit_anhang(
+    protokoll: Protokoll,
+    pdf_bytes: bytes,
+    dateiname: str,
+) -> None:
+    """F-139: Mail an Person und Bearbeiter mit dem PDF als Anhang.
+
+    Je eine Ausfertigung. Dateiname nach F-139.
+    """
+    from django.core.mail import EmailMessage
+
+    empfaenger = protokoll.person.email or protokoll.person.email_arbeit
+    if not empfaenger:
+        return
+
+    betref = f"Protokoll {protokoll.nr} – Gegenzeichnung abgeschlossen"
+    inhalt = (
+        f"Vielen Dank. Ihre Gegenzeichnung des Protokolls {protokoll.nr} "
+        f"ist abgeschlossen.\n\n"
+        f"Anbei erhalten Sie das versiegelte Protokoll-PDF "
+        f"({dateiname}).\n\n"
+        f"Wamocon GmbH · IT"
+    )
+
+    msg = EmailMessage(
+        subject=betref,
+        body=inhalt,
+        from_email="it@wamocon.de",
+        to=[empfaenger],
+    )
+    msg.attach(dateiname, pdf_bytes, "application/pdf")
+    msg.send(fail_silently=True)
+
+    # Bearbeiter-Kopie (falls vorhanden und anders als die Person).
+    bearbeiter_email = ""
+    if protokoll.erzeugt_von is not None:
+        bearbeiter_email = protokoll.erzeugt_von.email or ""
+    if bearbeiter_email and bearbeiter_email != empfaenger:
+        msg2 = EmailMessage(
+            subject=betref,
+            body=inhalt,
+            from_email="it@wamocon.de",
+            to=[bearbeiter_email],
+        )
+        msg2.attach(dateiname, pdf_bytes, "application/pdf")
+        msg2.send(fail_silently=True)
+
+
+def _mail_bestätigung(protokoll: Protokoll) -> None:
+    """Bestätigungsmail an die Person, wenn das Siegel nicht verfügbar ist."""
+    from django.core.mail import send_mail
+
+    empfaenger = protokoll.person.email or protokoll.person.email_arbeit
+    if empfaenger:
+        send_mail(
+            f"Gegenzeichnung abgeschlossen: Protokoll {protokoll.nr}",
+            (
+                f"Vielen Dank. Ihre Gegenzeichnung des Protokolls {protokoll.nr} "
+                f"ist abgeschlossen.\n\nWamocon GmbH · IT"
+            ),
+            "it@wamocon.de",
+            [empfaenger],
+            fail_silently=True,
+        )
+
+
+def _ablage_mit_anhang(
+    protokoll: Protokoll,
+    pdf_bytes: bytes,
+    dateiname: str,
+) -> None:
+    """F-139: Das fertige PDF ablegen und als Anhang senden.
+
+    Ablageorte:
+    - Am Gerät: var/protokolle/<Gerat>/<dateiname>
+    - An der Person: var/personen/<person_id>/<dateiname>
+    - Unter /meine-geraete/: var/meine-geraete/<person_id>/<dateiname>
+
+    Mail: Person und Bearbeiter (falls vorhanden), je eine Ausfertigung
+    mit dem PDF als Anhang.
+    """
+    from pathlib import Path
+
+    from django.conf import settings
+
+    var_root = Path(settings.DATEIABLAGE)
+    person_id = str(protokoll.person_id)
+
+    # Am Gerät ablegen.
+    gerat_dir = var_root / "protokolle" / str(protokoll.geraet_id)
+    gerat_dir.mkdir(parents=True, exist_ok=True)
+    (gerat_dir / dateiname).write_bytes(pdf_bytes)
+
+    # An der Person ablegen.
+    person_dir = var_root / "personen" / person_id
+    person_dir.mkdir(parents=True, exist_ok=True)
+    (person_dir / dateiname).write_bytes(pdf_bytes)
+
+    # Unter /meine-geraete/ ablegen.
+    meine_geraete_dir = var_root / "meine-geraete" / person_id
+    meine_geraete_dir.mkdir(parents=True, exist_ok=True)
+    (meine_geraete_dir / dateiname).write_bytes(pdf_bytes)
+
+    # Mail an Person.
+    person_email = protokoll.person.email or protokoll.person.email_arbeit
+    if person_email:
+        _mail_anhang(protokoll, pdf_bytes, dateiname, person_email)
+
+    # Mail an Bearbeiter (falls vorhanden und anders als die Person).
+    if protokoll.erzeugt_von is not None:
+        bearbeiter_email = protokoll.erzeugt_von.email or ""
+        if bearbeiter_email and bearbeiter_email != person_email:
+            _mail_anhang(protokoll, pdf_bytes, dateiname, bearbeiter_email)
+
+
+def _mail_anhang(
+    protokoll: Protokoll,
+    pdf_bytes: bytes,
+    dateiname: str,
+    empfaenger: str,
+) -> None:
+    """F-139: Mail mit dem PDF als Anhang an einen Empfänger."""
+    from django.core.mail import EmailMessage
+
+    msg = EmailMessage(
+        subject=f"Protokoll {protokoll.nr} – Gegenzeichnung abgeschlossen",
+        body=(
+            f"Vielen Dank. Die Gegenzeichnung des Protokolls {protokoll.nr} "
+            f"ist abgeschlossen.\n\n"
+            f"Anbei erhalten Sie das versiegelte Protokoll-PDF "
+            f"({dateiname}).\n\n"
+            f"Wamocon GmbH · IT"
+        ),
+        from_email="it@wamocon.de",
+        to=[empfaenger],
+    )
+    msg.attach(dateiname, pdf_bytes, "application/pdf")
+    msg.send(fail_silently=True)
+
+
+def protokoll_link_neu_senden(
+    protokoll: Protokoll,
+) -> tuple[Protokoll, bool, str]:
+    """F-140: Abgelaufener Link wird neu gesendet (neuer Token, neue Mail).
+
+    Erinnerung am dritten Tag kommt mit dem Tageslauf in M7.
+    """
+    from datetime import timedelta
+    from konten.zeit import jetzt_wie_im_entwicklungsmodus
+    from .models import SignaturCode
+    import secrets
+
+    now = jetzt_wie_im_entwicklungsmodus()
+
+    # F-135: Bearbeiter muss schon signiert haben.
+    if protokoll.bearbeiter_signiert_am is None:
+        return protokoll, False, "Der Bearbeiter hat noch nicht signiert."
+
+    # Alte Codes ungültig machen.
+    SignaturCode.objects.filter(protokoll=protokoll, gueltig=True).update(
+        gueltig=False
+    )
+
+    # Neuer Token.
+    neuer_token = secrets.token_urlsafe(32)
+    protokoll.gegenzeichnung_token = neuer_token
+    protokoll.gegenzeichnung_token_erstellt = now
+    protokoll.link_neu_gesendet_am = now
+    protokoll.stand = Protokoll.STAND_GEGENZEICHNUNG_OFFEN
+    protokoll.save()
+
+    # Neue Mail mit Link und Code.
+    from django.core.mail import send_mail
+    empfaenger = protokoll.person.email or protokoll.person.email_arbeit
+    if empfaenger:
+        code = secrets.choice("23456789") + secrets.choice("23456789") + secrets.choice("23456789")
+        SignaturCode.objects.create(
+            protokoll=protokoll,
+            code=code,
+            erstellt_am=now,
+            gueltig_bis=now + timedelta(minutes=10),
+            gueltig=True,
+        )
+        basis = os.environ.get("INVENTAR_BASIS_URL", "http://127.0.0.1:8000")
+        link = f"{basis}/signieren/{neuer_token}/"
+        send_mail(
+            f"Protokoll {protokoll.nr} – neuer Link zur Gegenzeichnung",
+            (
+                f"Ihr alter Link zur Gegenzeichnung ist abgelaufen. "
+                f"Bitte nutzen Sie den neuen Link:\n\n"
+                f"{link}\n\n"
+                f"Einmalcode: {code}\n\n"
+                f"Wamocon GmbH · IT"
+            ),
+            "it@wamocon.de",
+            [empfaenger],
+            fail_silently=True,
+        )
+
+    return protokoll, True, "Neuer Link gesendet."
+
+
 def protokoll_gegenzeichnen(
     token: str,
     code: str,
@@ -2151,18 +2354,27 @@ def protokoll_gegenzeichnen(
         hashwert=pdf_hash,
     )
 
-    # F-136: Mail an die Person (Bestätigung).
-    empfaenger = protokoll.person.email or protokoll.person.email_arbeit
-    if empfaenger:
-        from django.core.mail import send_mail
-        send_mail(
-            f"Gegenzeichnung abgeschlossen: Protokoll {protokoll.nr}",
-            f"Vielen Dank. Ihre Gegenzeichnung des Protokolls {protokoll.nr} "
-            f"ist abgeschlossen.\n\nWamocon GmbH · IT",
-            "it@wamocon.de",
-            [empfaenger],
-            fail_silently=True,
-        )
+    # --- A-0126 M6 Teil 3: Siegel (F-138) und Versand (F-139) --------------
+    # F-138: Nach der letzten Signatur das PDF mit pyhanko als PAdES
+    # versiegeln (Zertifikat aus SIEGEL_P12).
+    # F-139: Das fertige PDF geht als Anhang an Person und Bearbeiter,
+    # je eine Ausfertigung, und liegt am Gerät, an der Person und unter
+    # /meine-geraete/, Dateiname nach F-139.
+    from . import siegel as siegel_modul
+
+    if pdf_bytes:
+        versiegelt = siegel_modul.siegel_anwenden(pdf_bytes)
+        # Fehler bei der Versiegelung: Protokoll bleibt abgeschlossen,
+        # aber ohne Siegel. Mail ohne Anhang.
+        if versiegelt is None:
+            _mail_bestätigung(protokoll)
+            return protokoll, True, "Gegenzeichnung abgeschlossen."
+
+        dateiname = pdf_modul.dateiname_protokoll(protokoll)
+        protokoll.pdf_siegel = versiegelt
+        protokoll.pdf_dateiname = dateiname
+        protokoll.save()
+        _ablage_mit_anhang(protokoll, versiegelt, dateiname)
 
     return protokoll, True, "Gegenzeichnung abgeschlossen."
 

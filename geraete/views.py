@@ -1679,6 +1679,25 @@ def protokoll_code_senden(request, protokoll_nr: str):
 
 @require_POST
 @login_required
+def protokoll_link_neu_senden(request, protokoll_nr: str):
+    """F-140: POST /protokolle/<Nummer>/link-neu-senden/
+
+    Abgelaufener Link wird neu gesendet (neuer Token, neue Mail).
+    Erinnerung am dritten Tag kommt mit dem Tageslauf in M7.
+    """
+    protokoll = get_object_or_404(Protokoll, nr=protokoll_nr)
+    _protokoll_berechtigt(protokoll, request)
+
+    _, erfolg, meldung = services.protokoll_link_neu_senden(protokoll)
+    if erfolg:
+        meldung_success(request, meldung)
+    else:
+        meldung_error(request, meldung or "Link konnte nicht neu gesendet werden.")
+    return redirect(f"/protokolle/{protokoll_nr}/")
+
+
+@require_POST
+@login_required
 def protokoll_korrigieren(request, protokoll_nr: str):
     """F-135: POST /protokolle/<Nummer>/korrigieren/
 

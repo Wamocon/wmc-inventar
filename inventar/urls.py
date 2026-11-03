@@ -53,6 +53,8 @@ urlpatterns = [
     path("protokolle/<str:protokoll_nr>/signieren/", geraete_views.protokoll_signieren, name="protokoll-signieren"),
     path("protokolle/<str:protokoll_nr>/code-senden/", geraete_views.protokoll_code_senden, name="protokoll-code-senden"),
     path("protokolle/<str:protokoll_nr>/korrigieren/", geraete_views.protokoll_korrigieren, name="protokoll-korrigieren"),
+    # F-140 (M6 Teil 3): Abgelaufener Link neu senden.
+    path("protokolle/<str:protokoll_nr>/link-neu-senden/", geraete_views.protokoll_link_neu_senden, name="protokoll-link-neu-senden"),
     path("signieren/<str:token>/", geraete_views.signieren_link, name="signieren-link"),
     path("admin/", admin.site.urls),
 ]

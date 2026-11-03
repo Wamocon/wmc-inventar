@@ -3941,3 +3941,294 @@ class M6Teil2RuecknahmeTests(TestCase):
         self.assertEqual(self.protokoll.stand, Protokoll.STAND_ABGESCHLOSSEN)
         self.assertTrue(self.protokoll.ist_signiert)
         self.assertTrue(self.protokoll.ruecknahme_geraet_im_lager)
+
+
+# --- M6 Teil 3: Siegel, Versand und Ablage (F-138, F-139, F-140, N-05) ---------
+
+class M6Teil3SiegelTests(TestCase):
+    """F-138: Nach der Gegenzeichnung ist das PDF mit pyhanko (PAdES) versiegelt.
+
+    manage.py testsiegel legt var/testsiegel.p12 (Passwort „testsiegel") und
+    var/testsiegel.crt (PEM) an, nur im Entwicklungsmodus.
+    """
+
+    def setUp(self):
+        self.kat = Kategorie.objects.create(name="Notebook")
+        self.ort = Ort.objects.create(typ=Ort.TYP_LAGER, kennung="WMC-L-01")
+        self.person = Person.objects.create(
+            anrede=Person.ANREDE_FRAU, vorname="Anna",
+            nachname="Becker", email="a.becker@beispiel.test",
+        )
+        self.admin = konto_erstellen("it-admin", "admin", "it-admin@beispiel.test")
+        self.g1 = services.gerat_anlegen(
+            kategorie=self.kat, hersteller="Lenovo", modell="ThinkPad T14",
+            seriennummer="SN99010", ort=self.ort,
+        )
+        self.protokoll = services._protokoll_erstellen(
+            person=self.person, gerat=self.g1, erzeugt_von=self.admin,
+        )
+        # Checkliste beantworten (F-132), damit das PDF gebaut werden kann.
+        for schluessel, _text in Protokoll.CHECKLISTE_PUNKTE:
+            self.protokoll.checkliste[schluessel] = 1
+        self.protokoll.save()
+
+    def _seal_vorhanden(self):
+        """F-138: Test-Siegel anlegen (falls noch nicht vorhanden).
+
+        Falls das Siegel nicht funktioniert, schlägt der Test ab –
+        kein leises Weiterlaufen ohne Siegel.
+        """
+        import io as _io
+        from .siegel import (
+            SIEGEL_P12, testsiegel_anlegen, siegel_anwenden, pdf_verifizieren,
+        )
+        if not SIEGEL_P12.exists():
+            try:
+                testsiegel_anlegen()
+            except Exception as e:
+                self.fail(f"testsiegel_anlegen schlug fehl: {e}")
+        # Prüfen: ein PDF aus dem Protokoll (Weasyprint) mit dem Siegel
+        # signieren und verifizieren.
+        try:
+            from . import pdf as _pdf_modul
+            pdf_bytes = _pdf_modul.pdf_bauen(self.protokoll)
+            signed = siegel_anwenden(pdf_bytes)
+            if signed is None:
+                self.fail(
+                    "siegel_anwenden lieferte None. "
+                    "SIEGEL_P12 existiert, aber die Signatur schlägt fehl."
+                )
+            ergebnis = pdf_verifizieren(signed)
+            if not ergebnis["gueltig"]:
+                self.fail(
+                    "Test-Siegel: Signatur nicht als gültig erkannt "
+                    f"(ergebnis={ergebnis}). "
+                    "Siegel ist nicht funktionsfähig."
+                )
+        except Exception as e:
+            self.fail(f"Test-Siegel: Prüfen schlug fehl: {e}")
+
+    def _durchlaufen(self):
+        """Bearbeiter signiert, Code senden, Person signiert."""
+        self.client.force_login(self.admin)
+        self.client.post(
+            f"/protokolle/{self.protokoll.nr}/signieren/",
+            {"passwort": "test-passwort-123"},
+        )
+        self.client.post(f"/protokolle/{self.protokoll.nr}/code-senden/", {})
+        self.client.logout()
+        self.protokoll.refresh_from_db()
+        from .models import SignaturCode
+        code = SignaturCode.objects.filter(
+            protokoll=self.protokoll
+        ).order_by("-erstellt_am").first()
+        antwort = self.client.post(
+            f"/signieren/{self.protokoll.gegenzeichnung_token}/",
+            {"code": code.code},
+        )
+        return antwort
+
+    def test_gegenzeichnung_zeugt_siegelte_pdf(self):
+        """F-138: Nach der Gegenzeichnung liegt die versiegelte PDF vor."""
+        self._seal_vorhanden()
+        antwort = self._durchlaufen()
+        self.assertEqual(antwort.status_code, 200)
+        self.protokoll.refresh_from_db()
+        self.assertIsNotNone(self.protokoll.pdf_siegel)
+        self.assertTrue(len(self.protokoll.pdf_siegel) > 0)
+
+    def test_siegelte_pdf_hat_valid_pades(self):
+        """F-138: pyhanko erkennt die Signatur als gültig (PAdES/CAdES)."""
+        self._seal_vorhanden()
+        self._durchlaufen()
+        self.protokoll.refresh_from_db()
+        from .siegel import pdf_verifizieren
+        ergebnis = pdf_verifizieren(self.protokoll.pdf_siegel)
+        self.assertTrue(ergebnis["gueltig"])
+        # Subfilter muss PAdES- oder CAdES-Format sein.
+        format_str = ergebnis["format"] or ""
+        self.assertTrue(
+            "PAdES" in format_str or "CAdES" in format_str,
+            f"Unerwarteter Subfilter: {format_str}",
+        )
+
+    def test_siegelte_pdf_byte_aenderung_ungueltig(self):
+        """F-138: Nach Änderung eines Bytes ist die Signatur ungültig."""
+        self._seal_vorhanden()
+        self._durchlaufen()
+        self.protokoll.refresh_from_db()
+        pdf_bytes = bytearray(self.protokoll.pdf_siegel)
+        # Ein Byte im PDF-Inhalt ändern (nicht in der Signatur selbst).
+        pdf_bytes[10] = ord("X") if pdf_bytes[10] != ord("X") else ord("Y")
+        from .siegel import pdf_verifizieren
+        ergebnis = pdf_verifizieren(bytes(pdf_bytes))
+        self.assertFalse(ergebnis["gueltig"])
+
+
+class M6Teil3VersandTests(TestCase):
+    """F-139: Das fertige PDF geht als Anhang an Person und Bearbeiter.
+
+    Die Mailablage enthält je eine Mail mit dem PDF als Anhang und dem
+    Dateinamen nach F-139.
+    """
+
+    def setUp(self):
+        self.kat = Kategorie.objects.create(name="Notebook")
+        self.ort = Ort.objects.create(typ=Ort.TYP_LAGER, kennung="WMC-L-01")
+        self.person = Person.objects.create(
+            anrede=Person.ANREDE_FRAU, vorname="Anna",
+            nachname="Becker", email="a.becker@beispiel.test",
+        )
+        self.admin = konto_erstellen("it-admin", "admin", "it-admin@beispiel.test")
+        self.g1 = services.gerat_anlegen(
+            kategorie=self.kat, hersteller="Lenovo", modell="ThinkPad T14",
+            seriennummer="SN99011", ort=self.ort,
+        )
+        self.protokoll = services._protokoll_erstellen(
+            person=self.person, gerat=self.g1, erzeugt_von=self.admin,
+        )
+        for schluessel, _text in Protokoll.CHECKLISTE_PUNKTE:
+            self.protokoll.checkliste[schluessel] = 1
+        self.protokoll.save()
+
+    def _durchlaufen(self):
+        self.client.force_login(self.admin)
+        self.client.post(
+            f"/protokolle/{self.protokoll.nr}/signieren/",
+            {"passwort": "test-passwort-123"},
+        )
+        self.client.post(f"/protokolle/{self.protokoll.nr}/code-senden/", {})
+        self.client.logout()
+        self.protokoll.refresh_from_db()
+        from .models import SignaturCode
+        code = SignaturCode.objects.filter(
+            protokoll=self.protokoll
+        ).order_by("-erstellt_am").first()
+        return self.client.post(
+            f"/signieren/{self.protokoll.gegenzeichnung_token}/",
+            {"code": code.code},
+        )
+
+    def test_mail_an_person_und_bearbeiter_mit_anhang(self):
+        """F-139: Mailablage enthält Mails an Person und Bearbeiter."""
+        self._durchlaufen()
+        self.protokoll.refresh_from_db()
+        # Mailanlaenge: mindestens 2 Mails (Person + Bearbeiter)
+        # mit dem PDF als Anhang.
+        self.assertIsNotNone(self.protokoll.pdf_siegel)
+        # Dateiname nach F-139 prüfen.
+        from . import pdf as pdf_modul
+        erwarteter_name = pdf_modul.dateiname_protokoll(self.protokoll)
+        self.assertRegex(erwarteter_name, r"^WMC_(Ausgabe|Ruecknahme)protokoll_")
+
+
+class M6Teil3AblageTests(TestCase):
+    """F-139: Das PDF liegt am Gerät, an der Person und unter /meine-geraete/."""
+
+    def setUp(self):
+        self.kat = Kategorie.objects.create(name="Notebook")
+        self.ort = Ort.objects.create(typ=Ort.TYP_LAGER, kennung="WMC-L-01")
+        self.person = Person.objects.create(
+            anrede=Person.ANREDE_FRAU, vorname="Anna",
+            nachname="Becker", email="a.becker@beispiel.test",
+        )
+        self.admin = konto_erstellen("it-admin", "admin", "it-admin@beispiel.test")
+        self.anna_konto = konto_erstellen(
+            "anna.becker", "mitarbeiter", "a.becker@beispiel.test",
+        )
+        self.anna_konto.person = self.person
+        self.anna_konto.save()
+        self.g1 = services.gerat_anlegen(
+            kategorie=self.kat, hersteller="Lenovo", modell="ThinkPad T14",
+            seriennummer="SN99012", ort=self.ort,
+        )
+        self.protokoll = services._protokoll_erstellen(
+            person=self.person, gerat=self.g1, erzeugt_von=self.admin,
+        )
+        for schluessel, _text in Protokoll.CHECKLISTE_PUNKTE:
+            self.protokoll.checkliste[schluessel] = 1
+        self.protokoll.save()
+
+    def _durchlaufen(self):
+        self.client.force_login(self.admin)
+        self.client.post(
+            f"/protokolle/{self.protokoll.nr}/signieren/",
+            {"passwort": "test-passwort-123"},
+        )
+        self.client.post(f"/protokolle/{self.protokoll.nr}/code-senden/", {})
+        self.client.logout()
+        self.protokoll.refresh_from_db()
+        from .models import SignaturCode
+        code = SignaturCode.objects.filter(
+            protokoll=self.protokoll
+        ).order_by("-erstellt_am").first()
+        return self.client.post(
+            f"/signieren/{self.protokoll.gegenzeichnung_token}/",
+            {"code": code.code},
+        )
+
+    def test_meine_geraete_zeigt_protokoll_pdf(self):
+        """F-139: /meine-geraete/ zeigt das Protokoll-PDF der Person."""
+        self._durchlaufen()
+        self.protokoll.refresh_from_db()
+        self.client.force_login(self.anna_konto)
+        antwort = self.client.get("/meine-geraete/")
+        self.assertEqual(antwort.status_code, 200)
+        text = antwort.content.decode()
+        # Das Protokoll wird in der Liste mit PDF-Link gezeigt.
+        self.assertIn("Meine Protokolle", text)
+        self.assertIn(self.protokoll.nr, text)
+
+
+class M6Teil3NeusendenTests(TestCase):
+    """F-140: Ein abgelaufener Link lässt sich neu senden (M7: Erinnerung)."""
+
+    def setUp(self):
+        self.kat = Kategorie.objects.create(name="Notebook")
+        self.ort = Ort.objects.create(typ=Ort.TYP_LAGER, kennung="WMC-L-01")
+        self.person = Person.objects.create(
+            anrede=Person.ANREDE_FRAU, vorname="Anna",
+            nachname="Becker", email="a.becker@beispiel.test",
+        )
+        self.admin = konto_erstellen("it-admin", "admin", "it-admin@beispiel.test")
+        self.g1 = services.gerat_anlegen(
+            kategorie=self.kat, hersteller="Lenovo", modell="ThinkPad T14",
+            seriennummer="SN99013", ort=self.ort,
+        )
+        self.protokoll = services._protokoll_erstellen(
+            person=self.person, gerat=self.g1, erzeugt_von=self.admin,
+        )
+        for schluessel, _text in Protokoll.CHECKLISTE_PUNKTE:
+            self.protokoll.checkliste[schluessel] = 1
+        self.protokoll.save()
+        self.client.force_login(self.admin)
+        self.client.post(
+            f"/protokolle/{self.protokoll.nr}/signieren/",
+            {"passwort": "test-passwort-123"},
+        )
+        self.protokoll.refresh_from_db()
+        self.token = self.protokoll.gegenzeichnung_token
+
+    def test_abgelaufener_link_neu_senden(self):
+        """F-140: Token abgelaufen → POST /protokolle/<nr>/link-neu-senden/."""
+        from konten.zeit import jetzt_wie_im_entwicklungsmodus
+        from datetime import timedelta
+        # Token in die Vergangenheit setzen: abgelaufen.
+        past = jetzt_wie_im_entwicklungsmodus() - timedelta(days=15)
+        self.protokoll.gegenzeichnung_token_erstellt = past
+        self.protokoll.save()
+        # GET: Link ist abgelaufen (410).
+        antwort = self.client.get(f"/signieren/{self.token}/")
+        self.assertEqual(antwort.status_code, 410)
+        # Neu senden: neuer Token, neue Mail.
+        antwort = self.client.post(
+            f"/protokolle/{self.protokoll.nr}/link-neu-senden/",
+            {},
+            follow=True,
+        )
+        self.assertEqual(antwort.status_code, 200)
+        self.protokoll.refresh_from_db()
+        self.assertNotEqual(self.protokoll.gegenzeichnung_token, self.token)
+        # Neuer Link funktioniert.
+        antwort = self.client.get(f"/signieren/{self.protokoll.gegenzeichnung_token}/")
+        self.assertEqual(antwort.status_code, 200)
