@@ -18,7 +18,7 @@ from django.db.models import Max
 from django.utils import timezone
 
 from konten.models import Konto
-from stammdaten.models import Ausstattungsprofil, Kategorie, Ort, Person
+from stammdaten.models import Ausstattungsprofil, Kategorie, Ort, Person, Einstellungen
 
 from .models import Gerat, GeratKonflikt, Importlauf, Leihe, Protokoll, Vorgang
 from konten.zeit import jetzt_wie_im_entwicklungsmodus
@@ -1581,6 +1581,93 @@ def leihe_zurueckgeben(
         )
 
 
+# --- F-93, F-32: Mails bei Leihanfrage und Entscheidung (M7 Teil 2) -----------
+
+def _mail_anfrage_an_it(leihe: Leihe) -> None:
+    """F-93: Neue Leihanfrage → sofort Mail an die IT.
+
+    Abschaltbar über Einstellungen (F-96).
+    """
+    from django.core.mail import send_mail
+    from django.conf import settings as _settings
+
+    einstellungen = Einstellungen.aktuelles()
+    if not einstellungen.mail_leihe_neu:
+        return
+    it_email = einstellungen.email_it
+    if not it_email:
+        return
+    kat_name = leihe.kat.name if leihe.kat else ""
+    gerat_name = leihe.gerat.inventarnummer if leihe.gerat else "keines (Kategorie)"
+    beginn = leihe.beginn.strftime("%d.%m.%Y") if leihe.beginn else ""
+    ende = leihe.ende.strftime("%d.%m.%Y") if leihe.ende else ""
+    basis = _settings.BASIS_URL.rstrip("/") if _settings.BASIS_URL else "http://127.0.0.1:8000"
+    send_mail(
+        subject=f"Neue Leihanfrage – {leihe.person.vorname} {leihe.person.nachname}",
+        message=(
+            f"Neue Leihanfrage eingegangen.\n\n"
+            f"Person: {leihe.person.vorname} {leihe.person.nachname}\n"
+            f"Kategorie: {kat_name}\n"
+            f"Gerät: {gerat_name}\n"
+            f"Zeitraum: {beginn} bis {ende}\n"
+            f"Zweck: {leihe.zweck}\n\n"
+            f"Entscheidung: {basis}/verleih/\n\n"
+            f"{einstellungen.absenderzeile or 'Wamocon GmbH · IT'}"
+        ),
+        from_email=_settings.DEFAULT_FROM_EMAIL or "inventar@beispiel.test",
+        recipient_list=[it_email],
+        fail_silently=True,
+    )
+
+
+def _mail_entscheidung_an_person(leihe: Leihe, genehmigt: bool, begruendung: str = "") -> None:
+    """F-32: Entscheidung über Leihanfrage → sofort Mail an die Person.
+
+    Abschaltbar über Einstellungen (F-96).
+    """
+    from django.core.mail import send_mail
+    from django.conf import settings as _settings
+
+    einstellungen = Einstellungen.aktuelles()
+    if genehmigt:
+        if not einstellungen.mail_verleih_genehmigung:
+            return
+    else:
+        if not einstellungen.mail_verleih_ablehnung:
+            return
+    empfaenger = leihe.person.email
+    if not empfaenger:
+        return
+    basis = _settings.BASIS_URL.rstrip("/") if _settings.BASIS_URL else "http://127.0.0.1:8000"
+    if genehmigt:
+        gerat_name = leihe.gerat.inventarnummer if leihe.gerat else ""
+        beginn = leihe.beginn.strftime("%d.%m.%Y") if leihe.beginn else ""
+        ende = leihe.ende.strftime("%d.%m.%Y") if leihe.ende else ""
+        betrag = (
+            f"Ihre Leihanfrage wurde genehmigt.\n\n"
+            f"Gerät: {gerat_name}\n"
+            f"Zeitraum: {beginn} bis {ende}\n\n"
+            f"Details: {basis}/verleih/\n\n"
+            f"{einstellungen.absenderzeile or 'Wamocon GmbH · IT'}"
+        )
+        subject = f"Leihanfrage genehmigt – {gerat_name}"
+    else:
+        betrag = (
+            f"Ihre Leihanfrage wurde abgelehnt.\n\n"
+            f"Begründung: {begruendung}\n\n"
+            f"Details: {basis}/verleih/\n\n"
+            f"{einstellungen.absenderzeile or 'Wamocon GmbH · IT'}"
+        )
+        subject = "Leihanfrage abgelehnt"
+    send_mail(
+        subject=subject,
+        message=betrag,
+        from_email=_settings.DEFAULT_FROM_EMAIL or "inventar@beispiel.test",
+        recipient_list=[empfaenger],
+        fail_silently=True,
+    )
+
+
 def leihe_anfragen(
     person: Person,
     kat: Kategorie,
@@ -1627,6 +1714,8 @@ def leihe_anfragen(
         )
         if gerat is not None:
             _gerat_reserve_halten(gerat, beginn, ende)
+        # F-93: sofort Mail an die IT
+        _mail_anfrage_an_it(leihe)
         return leihe
 
 
@@ -1672,6 +1761,8 @@ def leihe_genehmigen(
             notiz="Leihe genehmigt und Gerät reserviert (F-32).",
             abschliesst=False,
         )
+        # F-32: Mail an die Person
+        _mail_entscheidung_an_person(leihe, genehmigt=True)
         return leihe
 
 
@@ -1715,6 +1806,8 @@ def leihe_ablehnen(
                 notiz="Leihe abgelehnt (F-32).",
                 abschliesst=False,
             )
+        # F-32: Mail an die Person
+        _mail_entscheidung_an_person(leihe, genehmigt=False, begruendung=begruendung.strip())
         return leihe
 
 

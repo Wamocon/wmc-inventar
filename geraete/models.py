@@ -441,6 +441,11 @@ class Protokoll(models.Model):
     gegenzeichnung_ip = models.CharField(
         "Gegenzeichnung IP-Adresse", max_length=45, blank=True, default=""
     )
+    # F-140: Erinnerung an die Gegenzeichnung – einmalig am dritten Tag
+    # nach dem Versand des Links.
+    gegenzeichnung_erinnerung_gesendet = models.DateTimeField(
+        "Erinnerung Gegenzeichnung gesendet am", null=True, blank=True
+    )
     # F-141: Rücknahme – Geräte sofort im Lager, aber Protokoll erst mit
     # Gegenzeichnung abgeschlossen.
     ruecknahme_geraet_im_lager = models.BooleanField(

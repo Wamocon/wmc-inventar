@@ -322,6 +322,31 @@ class Einstellungen(models.Model):
         default=True,
         verbose_name="E-Mail: Protokoll unterzeichnet",
     )
+    # --- Mailtypen Tageslauf (F-96, M7 Teil 2) ---
+    mail_leihe_endet_morgen = models.BooleanField(
+        default=True,
+        verbose_name="E-Mail: Leihe endet morgen",
+    )
+    mail_leihe_ueberfaellig = models.BooleanField(
+        default=True,
+        verbose_name="E-Mail: Leihe überfällig",
+    )
+    mail_leihe_neu = models.BooleanField(
+        default=True,
+        verbose_name="E-Mail: Leihanfrage an die IT",
+    )
+    mail_garantie_sammelmail = models.BooleanField(
+        default=True,
+        verbose_name="E-Mail: Sammelmail Garantie",
+    )
+    mail_unterzeichen_sammelmail = models.BooleanField(
+        default=True,
+        verbose_name="E-Mail: Sammelmail Unterschriften",
+    )
+    mail_gegenzeichnung_erinnerung = models.BooleanField(
+        default=True,
+        verbose_name="E-Mail: Erinnerung Gegenzeichnung",
+    )
 
     # --- Zeitstempel ---
     aktualisiert_am = models.DateTimeField(auto_now=True)
@@ -344,6 +369,60 @@ class Einstellungen(models.Model):
 
     def __str__(self) -> str:
         return f"Einstellungen (pk={self.pk})"
+
+
+class Zaehlerstand(models.Model):
+    """F-101 (M7 Teil 2): Zählerstand des Tageslaufs.
+
+    Ein Eintrag je Stichtag. Das Delta einer Kennzahl ist die
+    Differenz zum Vortag; ohne Vortag fehlt das Delta (TESTSCHNITTSTELLE 4).
+    """
+
+    stichtag = models.DateField("Stichtag", unique=True)
+    kennzahlen = models.JSONField(
+        "Kennzahlen (Werte je Kennzahl)", default=dict, blank=True
+    )
+    erzeugt_am = models.DateTimeField("Erzeugt am", null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Zählerstand"
+        verbose_name_plural = "Zählerstände"
+        ordering = ["-stichtag"]
+
+    def __str__(self) -> str:
+        return f"Zählerstand {self.stichtag:%d.%m.%Y}"
+
+
+class Mailversand(models.Model):
+    """F-96 / M7 Teil 2: Versand-Log für den Tageslauf.
+
+    Ein Eintrag je Stichtag + Mailtyp. Damit verschickt ein zweiter
+    Lauf für denselben Stichtag nichts doppelt.
+    """
+
+    MAILTYP_F91 = "f91_leihe_endet_morgen"
+    MAILTYP_F92 = "f92_leihe_ueberfaellig"
+    MAILTYP_F94 = "f94_garantie_sammelmail"
+    MAILTYP_F95 = "f95_unterzeichen_sammelmail"
+    MAILTYP_F140 = "f140_gegenzeichnung_erinnerung"
+
+    stichtag = models.DateField("Stichtag")
+    mailtyp = models.CharField("Mailtyp", max_length=48)
+    anzahl = models.PositiveIntegerField("Anzahl Mails", default=0)
+    erzeugt_am = models.DateTimeField("Erzeugt am", null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Mailversand"
+        verbose_name_plural = "Mailversände"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["stichtag", "mailtyp"],
+                name="unique_stichtag_mailtyp",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"Mailversand {self.stichtag:%d.%m.%Y} {self.mailtyp} ({self.anzahl})"
 
 
 class Ausstattungsprofil(models.Model):

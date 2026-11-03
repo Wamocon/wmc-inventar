@@ -47,6 +47,8 @@ M6 Teil 3 Nachbesserung (A-0127): Pop-up, Status ab Signatur, Suche, Plan am Ort
 
 M7 Teil 1 (A-0905): Einstellungen (F-122, F-90, F-96, F-130, N-02). `/einstellungen/` für den Admin: Firmenname, Absenderzeile, Telefon und E-Mail der IT (F-122), Logo als PNG oder SVG (N-02: SVG nur als Bild, nie als Inline-SVG), Protokolltexte der Abschnitte Nutzungsbedingungen, Erklärungen und Elektronische Unterzeichnung mit Versionsnummer (F-130), Etikettenformat, Erinnerungsfristen, SMTP-Server, Port, TLS, Absender und Zugang mit „Testmail senden“ (F-90), dazu je Mailart einen Schalter (F-96). Die vorhandene Pflege von Kategorien, Profilen und Konten hängt unter /einstellungen/. Die PDFs aus M6 nehmen Kopf und Texte aus diesen Einstellungen; eine neue Version der Texte gilt für neue Protokolle. `stammdaten/models.py:Einstellungen` (Singleton, pk=1), `stammdaten/forms.py:EinstellungenForm`, `stammdaten/views.py:einstellungen_sehen` (GET/POST), `stammdaten/views.py:einstellungen_testmail` (POST, F-90), `stammdaten/urls.py` (Routen `/einstellungen/`, `/einstellungen/testmail/`), `templates/stammdaten/einstellungen.html` (Formular mit allen Feldern), `geraete/pdf.py` (Absenderzeile und Protokolltexte aus Einstellungen), `konten/management/commands/beispieldaten.py:_anlegen_einstellungen` (Werte aus TESTSCHNITTSTELLE.md Kapitel 2), `stammdaten/migrations/0005_einstellungen.py` (neue Migration), `stammdaten/tests_einstellungen.py` (6 Tests: Rechte 200/403, Beispieldaten, Absenderzeile änderbar, Mailtyp deaktiviert, Testmail in Mailablage, SVG-Logo nur als Bild). Alle 292 Tests sind grün.
 
+M7 Teil 2 (A-0906): Mails und Tageslauf (F-91 bis F-96, F-140, F-53, F-101, F-93, F-32). `konten/management/commands/tageslauf.py`: Befehl `tageslauf --stichtag JJJJ-MM-TT` ohne Stichtag = heute. Erledigt: F-91 Leihe endet morgen → Mail an die Person (einmal je Stichtag, zweiter Lauf keine); F-92 Leihe überfällig → Mail an Person und IT (einmal je Stichtag); F-94 Garantie endet in 30 Tagen → Sammelmail an die IT (nur Montag); F-95 Unterschriften seit mehr als 3 Tagen offen → in derselben Sammelmail; F-140 Erinnerung an die Gegenzeichnung am dritten Tag nach dem Versand des Links (einmal, `Protokoll.gegenzeichnung_erinnerung_gesendet`); F-101 Zählerstand für das Delta (`stammdaten/models.py:Zaehlerstand`, `delta_zum_vortag`); F-53 Deaktivierung von Konten am Tag nach dem Austritt. `stammdaten/models.py:Mailversand` (Deduplizierung je Stichtag + Mailtyp, F-96); `stammdaten/models.py:Einstellungen` (6 neue Schalter: `mail_leihe_endet_morgen`, `mail_leihe_ueberfaellig`, `mail_leihe_neu`, `mail_garantie_sammelmail`, `mail_unterzeichen_sammelmail`, `mail_gegenzeichnung_erinnerung`). `geraete/models.py:Protokoll.gegenzeichnung_erinnerung_gesendet` (DateTimeField, null=True). `geraete/services.py:_mail_anfrage_an_it` (F-93, Leihanfrage → Mail an die IT), `geraete/services.py:_mail_entscheidung_an_person` (F-32, Genehmigung/Ablehnung → Mail an die Person), aufgerufen in `leihe_anfragen`, `leihe_genehmigen`, `leihe_ablehnen`. `stammdaten/migrations/0006_m7_t2_mailversand_zaehlerstand.py`, `geraete/migrations/0015_protokoll_gegenzeichnung_erinnerung_gesendet.py`. `konten/tests_m7_t2.py` (15 Tests: `TageslaufF91Tests` 2, `TageslaufF92Tests` 2, `TageslaufF94Tests` 2, `TageslaufF140Tests` 2, `KontoDeaktivierungTests` 2, `LeihanfrageMailTests` 3, `ZaehlerstandTests` 2). Alle M7-Teil-2-Tests grün.
+
 ## Stand je Meilenstein
 
 | Meilenstein | Stand | Commit | Datum | Hinweis |
@@ -57,7 +59,7 @@ M7 Teil 1 (A-0905): Einstellungen (F-122, F-90, F-96, F-130, N-02). `/einstellun
 | M4 Arbeitsplätze | fertig | a13dc17 | 30.10.2026 | Soll-Ist-Abgleich (F-62), Bedarf (F-63), Feste Person (F-64), Erstinventur (F-89); Raumplan (F-65, F-66, F-68, F-69) mit Pop-up und `aktion-im-raumplan`; Plan pflegen (F-67) mit Upload und Position (A-0107); QR-Code, Etiketten, PDF-Druck (A-0108); Mobile (F-74), Notiz, Geprüft (A-0111) |
 |M5 Verleih | teilweise | | 02.11.2026 | Leihe und Verleih durch die IT (F-30, F-36, F-133, F-20) (A-0115 Teil 1); Leihanfragen und Genehmigung (F-31, F-32, F-34, F-37) (A-0118, A-0119); Meine Geräte, Kurzansicht, Datensparsamkeit (F-110 bis F-113) (A-0120 Teil 3); Ausgabe aus der Leihe und Verlängerung (F-33, F-35) (A-0122 Teil 4) |
 | M6 Signatur | teilweise | | 03.11.2026 | Protokoll mit PDF, Fotos und Papierweg (F-130, F-132, F-133, F-134, F-22) (A-0123 Teil 1); Signatur des Bearbeiters, Gegenzeichnung, Prüfprotokoll (F-135 bis F-137, F-141) (A-0125 Teil 2); Versiegeln (F-138), Versand und Ablage (F-139), Neu-Senden (F-140) (A-0126 Teil 3); Erinnerung am 3. Tag in M7 |
-| M7 Abschluss | offen | | | |
+| M7 Abschluss | teilweise | | | Einstellungen (F-122, F-90, F-96, F-130, N-02) (A-0905 Teil 1); Mails und Tageslauf (F-91 bis F-96, F-140, F-53, F-101, F-93, F-32) (A-0906 Teil 2) |
 
 ## Stand je Anforderung
 
@@ -127,14 +129,14 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 | F-87 | M | M2 | Nachvollziehbarkeit | erfüllt | `Importlauf` mit `dateiname`, `blatt`, `erzeugt_von`; Vorgang „Import" mit Herkunft (Datei, Blatt, Zeile) am Gerät (A-0114) |
 | F-88 | M | M2, M7 | Arbeitsliste „Daten unvollständig“ | erfüllt | `gerat.datenluecken()`, Filter `?unvollstaendig=1` in `geraete/views.py:liste`, Test: `test_arbeitsliste_zeigt_unvollstaendige` |
 | F-80 | M | M2 | Datei hochladen | erfüllt | `/import/` Schritt 1, `geraete/import_views.py:import_datei`, `geraete/import_parser.py:lade_datei` (.xlsx mit Blatt/Kopfzeile, .csv UTF-8 Semikolon/Komma) |
-| F-90 | M | M7 | Mailversand einrichten | offen | |
-| F-92 | M | M7 | Leihe überfällig | offen | |
-| F-93 | M | M7 | Leihanfrage eingegangen / entschieden | offen | |
-| F-94 | M | M7 | Garantie endet in den nächsten 30 Tagen | offen | |
-| F-95 | S | M7 | Unterschrift seit mehr als 3 Tagen offen | offen | |
-| F-96 | M | M7 | Allgemein | offen | |
+| F-90 | M | M7 | Mailversand einrichten | erfüllt | `stammdaten/views.py:einstellungen_testmail` (POST /einstellungen/testmail/, F-90), `stammdaten/tests_einstellungen.py` (Testmail in Mailablage), SMTP-Konfiguration in `inventar/settings.py` |
+| F-92 | M | M7 | Leihe überfällig | erfüllt | `konten/management/commands/tageslauf.py:_mail_leihe_ueberfaellig` (Mail an Person und IT, einmal je Stichtag), Test: `TageslaufF92Tests` (2) |
+| F-93 | M | M7 | Leihanfrage eingegangen / entschieden | erfüllt | `geraete/services.py:_mail_anfrage_an_it` (F-93, Leihanfrage → Mail an die IT), `geraete/services.py:_mail_entscheidung_an_person` (F-32, Genehmigung/Ablehnung → Mail an die Person), Tests: `LeihanfrageMailTests` (3) |
+| F-94 | M | M7 | Garantie endet in den nächsten 30 Tagen | erfüllt | `konten/management/commands/tageslauf.py:_mail_sammelmail` (Sammelmail an die IT, nur Montag), Test: `TageslaufF94Tests` (2) |
+| F-95 | S | M7 | Unterschrift seit mehr als 3 Tagen offen | erfüllt | `konten/management/commands/tageslauf.py:_mail_sammelmail` (in derselben Sammelmail wie F-94), Test: `TageslaufF94Tests` (2) |
+| F-96 | M | M7 | Allgemein | erfüllt | `stammdaten/models.py:Einstellungen` (6 Schalter: `mail_leihe_endet_morgen`, `mail_leihe_ueberfaellig`, `mail_leihe_neu`, `mail_garantie_sammelmail`, `mail_unterzeichen_sammelmail`, `mail_gegenzeichnung_erinnerung`), `stammdaten/models.py:Mailversand` (Deduplizierung je Stichtag + Mailtyp) |
 | F-100 | M | M7 | Kennzahlen als IST/Gesamt | offen | |
-| F-101 | S | M7 | Veränderung zum Vortag | offen | |
+| F-101 | S | M7 | Veränderung zum Vortag | erfüllt | `stammdaten/models.py:Zaehlerstand` (ein Eintrag je Stichtag), `konten/management/commands/tageslauf.py:delta_zum_vortag` (Differenz zum Vortag), Test: `ZaehlerstandTests` (2) |
 | F-102 | M | M7 | Arbeitslisten | offen | |
 | F-103 | M | M7 | Export | offen | |
 | F-104 | S | M7 | Inventarwert | offen | |
@@ -145,7 +147,7 @@ Stand ist „erfüllt“, „teilweise“ oder „nicht erfüllt“. Nachweis: T
 | F-113 | S | M5 | QR-Scan als Mitarbeiter | erfüllt | `geraete/views.py:gerat_kurz` (Kurzansicht), `templates/geraete/kurzansicht.html`, Tests: `KurzansichtTests` (5) |
 | F-120 | M | M1 | Kategorien pflegen | erfüllt | `stammdaten/views.py:kategorien_liste`, `kategorien_anlegen`, `kategorien_aendern` |
 | F-121 | M | M1 | Personen pflegen | erfüllt | `stammdaten/views.py:personen_liste`, `personen_anlegen`, `personen_aendern` |
-| F-122 | M | M7 | Einstellungen | offen | |
+| F-122 | M | M7 | Einstellungen | erfüllt | `stammdaten/views.py:einstellungen_sehen` (GET/POST /einstellungen/), `stammdaten/forms.py:EinstellungenForm`, `stammdaten/models.py:Einstellungen` (Singleton, pk=1), Tests: `stammdaten/tests_einstellungen.py` (6) |
 | F-130 | M | M6 | PDF aus Vorlage | erfüllt | `geraete/pdf.py:erzeuge_pdf` (WeasyPrint, FRM-001/FRM-002), `geraete/services.py:_protokoll_erstellen`, Test: `ProtokollAusgabeTests.test_pdf_liefert_application_pdf` |
 | F-131 | M | M3 | Daten vorbelegen | erfüllt | `geraete/services.py:gerat_ausgeben` mit `zustand`, `zubehoer_komplett`, `anmerkung` (F-131, A-0098); Test: `test_ausgabe_zustand_neuwertig`, `test_ausgabe_zustand_gut`, `test_ausgabe_zustand_spuren`, `test_ausgabe_zustand_eingeschraenkt` |
 | F-132 | M | M6 | Checkliste Zugänge (Ausgabe) | erfüllt | `geraete/models.py:Protokoll.CHECKLISTE_PUNKTE` (6 Punkte), `geraete/protokoll.py:checkliste_beantworten`, `geraete/pdf.py:erzeuge_pdf` (Checkliste im PDF), Test: `ProtokollAusgabeTests.test_ausgabe_zeugt_protokoll_scan_offen` |
