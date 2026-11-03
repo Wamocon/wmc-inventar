@@ -40,6 +40,11 @@
 
 <p class="anzahl" data-test="anzahl">{{ anzahl }} {% if anzahl == 1 %}Gerät{% else %}Geräte{% endif %}</p>
 
+<div class="export-aktionen">
+    <a class="btn sm" href="?format=xlsx{% if suche %}&amp;q={{ suche }}{% endif %}{% if status_filter %}&amp;status={{ status_filter }}{% endif %}{% if ort_filter %}&amp;ort={{ ort_filter }}{% endif %}{% if kategorie_filter %}&amp;kategorie={{ kategorie_filter }}{% endif %}{% if person_filter %}&amp;person={{ person_filter }}{% endif %}{% if unvollstaendig %}&amp;unvollstaendig=1{% endif %}" data-test="export-xlsx">Export XLSX</a>
+    <a class="btn sm" href="?format=csv{% if suche %}&amp;q={{ suche }}{% endif %}{% if status_filter %}&amp;status={{ status_filter }}{% endif %}{% if ort_filter %}&amp;ort={{ ort_filter }}{% endif %}{% if kategorie_filter %}&amp;kategorie={{ kategorie_filter }}{% endif %}{% if person_filter %}&amp;person={{ person_filter }}{% endif %}{% if unvollstaendig %}&amp;unvollstaendig=1{% endif %}" data-test="export-csv">Export CSV</a>
+</div>
+
 {% if fortschritt %}
 <div class="abschnitt" data-test="inventur-fortschritt">
   <span data-test="ist">{{ fortschritt.geprueft }}</span>
