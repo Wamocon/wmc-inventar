@@ -37,16 +37,35 @@ PDF_KANTE_PUNKT = 140
 
 # --- F-132: Checkliste Zugänge ------------------------------------------------
 
+def _stand_beantwortbar(protokoll: Protokoll) -> bool:
+    """Checkliste und Prüfpunkte sind beantwortbar, solange das Protokoll
+    noch nicht signiert ist: ``scan-offen`` und ``bearbeiter-offen`` (F-22).
+    Nach der Signatur sind sie gesperrt.
+    """
+    return protokoll.stand in (
+        Protokoll.STAND_SCAN_OFFEN,
+        Protokoll.STAND_BEARBEITER_OFFEN,
+    )
+
+
+def _stand_anhaenge_erlaubt(protokoll: Protokoll) -> bool:
+    """Anhänge (Fotos) sind erlaubt, solange das Protokoll nicht
+    abgeschlossen ist: ``scan-offen`` und ``bearbeiter-offen`` (F-22, F-134).
+    """
+    return _stand_beantwortbar(protokoll)
+
+
 def checkliste_beantworten(
     protokoll: Protokoll, werte: dict, ausgefuehrt_von: Konto | None = None
 ) -> Protokoll:
     """F-132: Checkliste mit Ja (1) / Nein (0) beantworten.
 
-    Erlaubt, solange das Protokoll im Stand „scan-offen" ist (F-22).
+    Erlaubt, solange das Protokoll im Stand „scan-offen" oder
+    „bearbeiter-offen" ist (F-22). Nach der Signatur gesperrt.
     Das PDF entsteht danach; hier wird nur der Stand der Antworten
     nachgezogen, damit das PDF den befragten Stand trägt.
     """
-    if protokoll.stand != Protokoll.STAND_SCAN_OFFEN:
+    if not _stand_beantwortbar(protokoll):
         raise GeratFehler(
             "Die Checkliste ist für ein abgeschlossenes Protokoll gesperrt (F-22)."
         )
@@ -71,9 +90,9 @@ def offboarding_abhaken(
 ) -> Protokoll:
     """F-133: die 13 Prüfpunkte abhaken.
 
-    Nur für Protokolle im Stand „scan-offen" (F-22).
+    Nur für Protokolle im Stand „scan-offen" oder „bearbeiter-offen" (F-22).
     """
-    if protokoll.stand != Protokoll.STAND_SCAN_OFFEN:
+    if not _stand_beantwortbar(protokoll):
         raise GeratFehler(
             "Die Prüfpunkte sind für ein abgeschlossenes Protokoll gesperrt (F-22)."
         )
@@ -145,9 +164,10 @@ def foto_hochladen(
 
     Das Bild wird verkleinert in der DATEIABLAGE abgelegt; im PDF steht
     es als Anlage hinter dem Unterschriftenblock.
-    Erlaubt, solange das Protokoll im Stand „scan-offen" ist (F-22).
+    Erlaubt, solange das Protokoll im Stand „scan-offen" oder
+    „bearbeiter-offen" ist (F-22, F-134). Nach der Signatur gesperrt.
     """
-    if protokoll.stand != Protokoll.STAND_SCAN_OFFEN:
+    if not _stand_anhaenge_erlaubt(protokoll):
         raise GeratFehler(
             "Für ein abgeschlossenes Protokoll sind keine weiteren Anhänge "
             "möglich (F-22)."
