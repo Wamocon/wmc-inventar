@@ -166,33 +166,49 @@ def _leer(wert: str) -> bool:
 
 
 def lade_xlsx(dateiname: str, byte: bytes, blatt: str, kopfzeile: int) -> Vorlage:
-    """.xlsx einlesen (F-80). Kopfzeile ist eine Excel-Zeilennummer ab 1."""
+    """.xlsx einlesen (F-80). Kopfzeile ist eine Excel-Zeilennummer ab 1.
+
+    A-0127: Das Blatt wird einmal mit iter_rows gelesen und auf der Liste
+    gearbeitet, weil ws.cell in read_only-Modus das Blatt jedes Mal von
+    vorn liest.
+    """
     wb = load_workbook(io.BytesIO(byte), read_only=True, data_only=True)
     namen = [ws.title for ws in wb.worksheets]
     if blatt not in namen:
         raise ImportFehler(f"Blatt nicht gefunden: {blatt}. Vorhanden: {', '.join(namen)}")
     ws = wb[blatt]
+
+    # A-0127: Alle Zeilen einmal einlesen (read_only-Modus).
+    alle_zeilen = list(ws.iter_rows(values_only=True))
+    wb.close()
+
     kopfzeile = int(kopfzeile)
-    if kopfzeile < 1 or kopfzeile > ws.max_row:
+    if kopfzeile < 1 or kopfzeile > len(alle_zeilen):
         raise ImportFehler(f"Kopfzeile außerhalb des Blatts: Zeile {kopfzeile}")
+
+    kopf = alle_zeilen[kopfzeile - 1]
     spalten: list[Quellspalte] = []
-    for spalte_nr in range(1, ws.max_column + 1):
-        name = _text_wert(ws.cell(row=kopfzeile, column=spalte_nr).value)
+    max_spalten = max((len(z) for z in alle_zeilen), default=0)
+    for spalte_nr in range(1, max_spalten + 1):
+        name = _text_wert(kopf[spalte_nr - 1] if spalte_nr - 1 < len(kopf) else None)
         if not name:
             continue
         beispiel = ""
-        for zeile_nr in range(kopfzeile + 1, ws.max_row + 1):
-            beispiel = _text_wert(ws.cell(row=zeile_nr, column=spalte_nr).value)
-            if beispiel:
-                break
+        for zeile in alle_zeilen[kopfzeile:]:
+            if spalte_nr - 1 < len(zeile):
+                beispiel = _text_wert(zeile[spalte_nr - 1])
+                if beispiel:
+                    break
         spalten.append(Quellspalte(nr=spalte_nr - 1, name=name, beispiel=beispiel,
                                    ziel=Quellspalte.vorschlag(name)))
     zeilen: list[dict] = []
-    for zeile_nr in range(kopfzeile + 1, ws.max_row + 1):
-        werte = {s.name: _text_wert(ws.cell(row=zeile_nr, column=s.nr + 1).value) for s in spalten}
+    for i, zeile in enumerate(alle_zeilen[kopfzeile:], start=kopfzeile + 1):
+        werte = {
+            s.name: _text_wert(zeile[s.nr] if s.nr < len(zeile) else None)
+            for s in spalten
+        }
         if _datensatz_wertig(werte):
-            zeilen.append({"zeile": zeile_nr, "werte": werte})
-    wb.close()
+            zeilen.append({"zeile": i, "werte": werte})
     return Vorlage(
         dateiname=dateiname,
         format_art="xlsx",

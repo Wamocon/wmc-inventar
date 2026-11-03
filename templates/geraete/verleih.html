@@ -13,6 +13,11 @@
         <form method="post" novalidate>
             {% csrf_token %}
             {{ form.as_p }}
+            <div class="field" data-test="unterschrift">
+                <span>Unterschrift</span>
+                <label class="radio"><input type="radio" name="unterschrift" value="tool" checked> Signatur im Tool</label>
+                <label class="radio"><input type="radio" name="unterschrift" value="papier"> Papier</label>
+            </div>
             <button type="submit" data-test="speichern" class="btn primary">Verleih abschließen</button>
         </form>
     </div>

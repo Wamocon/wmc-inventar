@@ -585,7 +585,7 @@ def platz_popup(request, kennung: str):
     personen_gerate = services.gerate_der_person(ort.feste_person) if ort.feste_person else []
     return render(
         request,
-        "geraete/fragmente/platz_popup.html",
+        "geraete/platz_popup.html",
         {
             "ort": ort,
             "abgleich": abgleich,
@@ -689,6 +689,7 @@ def ausgeben(request, inventarnummer: str):
                     zubehoer_komplett=form.cleaned_data.get("zubehoer_komplett") == "ja",
                     anmerkung=form.cleaned_data.get("anmerkung", ""),
                     ausgefuehrt_von=request.user,
+                    unterschrift=form.cleaned_data.get("unterschrift", "papier"),
                 )
             except services.GeratFehler as fehler:
                 meldung_error(request, str(fehler))
@@ -1051,12 +1052,14 @@ def verleih_zeige(request, inventarnummer):
             person = form.cleaned_data["person"]
             rueckgabe_bis = form.cleaned_data["rueckgabe_bis"]
             zweck = form.cleaned_data["zweck"]
+            unterschrift = form.cleaned_data.get("unterschrift", "papier")
             leih_gerat_ausgeben(
                 gerat=gerat,
                 person=person,
                 rueckgabe_bis=rueckgabe_bis,
                 zweck=zweck,
                 ausgefuehrt_von=request.user,
+                unterschrift=unterschrift,
             )
             meldung = "Gerät wurde verliehen."
             return redirect("geraete:detail", inventarnummer=inventarnummer)
@@ -1621,6 +1624,28 @@ def protokoll_scan_hochladen(request, protokoll_nr):
 # F-136: Person signiert per Token-Link mit Einmalcode.
 # F-137: Prüfprotokoll als letzte Seite im PDF.
 # F-141: Rücknahme erst mit Signatur abgeschlossen.
+
+
+@require_POST
+@login_required
+def protokoll_abbrechen(request, protokoll_nr: str):
+    """A-0127: POST /protokolle/<Nummer>/abbrechen/
+
+    Verwirft das Protokoll, ohne etwas am Gerät zu ändern.
+    Nur für Protokolle auf "bearbeiter-offen".
+    """
+    protokoll = get_object_or_404(Protokoll, nr=protokoll_nr)
+    _protokoll_berechtigt(protokoll, request)
+
+    if protokoll.stand != Protokoll.STAND_BEARBEITER_OFFEN:
+        meldung_error(request, "Nur Protokolle auf 'bearbeiter-offen' können abgebrochen werden.")
+        return redirect(f"/protokolle/{protokoll_nr}/")
+
+    # A-0127: Gerät bleibt unverändert, weil bei "tool" der Status
+    # noch nicht gesetzt wurde. Protokoll wird verworfen.
+    protokoll.delete()
+    meldung_success(request, "Protokoll abgebrochen. Das Gerät bleibt unverändert.")
+    return redirect("/meine-geraete/")
 
 
 @require_POST

@@ -19,6 +19,13 @@
       <div class="field"><label for="id_zustand">Zustand</label>{{ form.zustand }}{% if form.zustand.errors %}<div class="meldung error">{% for e in form.zustand.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
       <div class="field"><label for="id_zubehoer_komplett">Zubehör komplett</label>{{ form.zubehoer_komplett }}{% if form.zubehoer_komplett.errors %}<div class="meldung error">{% for e in form.zubehoer_komplett.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
       <div class="field full"><label for="id_anmerkung">Bemerkung</label>{{ form.anmerkung }}{% if form.anmerkung.errors %}<div class="meldung error">{% for e in form.anmerkung.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+      <div class="field full" data-test="unterschrift">
+        <label>Unterschrift</label>
+        {% for radio in form.unterschrift %}
+          <label class="radio">{{ radio }}</label>
+        {% endfor %}
+        {% if form.unterschrift.errors %}<div class="meldung error">{% for e in form.unterschrift.errors %}{{ e }}{% endfor %}</div>{% endif %}
+      </div>
     </div>
     <div class="actions">
       <button type="submit" class="btn primary" data-test="speichern">Ausgabe abschließen</button>

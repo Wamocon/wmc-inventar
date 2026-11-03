@@ -507,6 +507,10 @@ class Protokoll(models.Model):
     link_neu_gesendet_am = models.DateTimeField(
         "Link neu gesendet am (F-140)", null=True, blank=True
     )
+    # A-0127: Art der Unterschrift (tool/papier) beim Speichern.
+    unterschrift_art = models.CharField(
+        "Art der Unterschrift", max_length=16, default="tool"
+    )
 
     class Meta:
         verbose_name = "Protokoll"

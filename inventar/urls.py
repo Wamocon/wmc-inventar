@@ -51,6 +51,7 @@ urlpatterns = [
     path("protokolle/<str:protokoll_nr>/checkliste/", geraete_views.protokoll_checkliste_beantworten, name="protokoll-checkliste"),
     # M6 Teil 2: Signatur, Gegenzeichnung (F-135, F-136, F-137, F-141)
     path("protokolle/<str:protokoll_nr>/signieren/", geraete_views.protokoll_signieren, name="protokoll-signieren"),
+    path("protokolle/<str:protokoll_nr>/abbrechen/", geraete_views.protokoll_abbrechen, name="protokoll-abbrechen"),
     path("protokolle/<str:protokoll_nr>/code-senden/", geraete_views.protokoll_code_senden, name="protokoll-code-senden"),
     path("protokolle/<str:protokoll_nr>/korrigieren/", geraete_views.protokoll_korrigieren, name="protokoll-korrigieren"),
     # F-140 (M6 Teil 3): Abgelaufener Link neu senden.

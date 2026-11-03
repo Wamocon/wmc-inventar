@@ -8,6 +8,7 @@ Serverseitige Prüfung (AGENTS.md).
 """
 from __future__ import annotations
 
+from django.contrib import messages
 from django.core.files import File
 from django.http import Http404, HttpResponse
 from django.shortcuts import redirect, render
@@ -251,7 +252,8 @@ def orte_anlegen(request):
         return _keine_berechtigung(request)
     form = OrtForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
-        form.save()
+        ort = form.save()
+        messages.success(request, f"Ort {ort.kennung} angelegt.")
         return redirect(reverse("stammdaten:orte-liste"))
     return render(request, "stammdaten/orr_anlegen.html", {"form": form})
 
@@ -267,7 +269,8 @@ def orte_aendern(request, pk):
         raise Http404
     form = OrtForm(request.POST or None, instance=ort)
     if request.method == "POST" and form.is_valid():
-        form.save()
+        ort = form.save()
+        messages.success(request, f"Ort {ort.kennung} geändert.")
         return redirect(reverse("stammdaten:orte-liste"))
     return render(request, "stammdaten/orr_aendern.html", {"form": form, "ort": ort})
 

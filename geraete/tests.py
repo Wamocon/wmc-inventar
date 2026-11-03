@@ -931,6 +931,7 @@ class DetailAktionenTests(TestCase):
                 "zustand": zustand,
                 "zubehoer_komplett": "ja",
                 "anmerkung": "ausgabe-test",
+                "unterschrift": "papier",
             },
         )
         self.assertEqual(antwort.status_code, 302)
@@ -1033,6 +1034,7 @@ class DetailAktionenTests(TestCase):
                 "ziel_person": self.person.pk,
                 "zustand": Gerat.ZUSTAND_GUT,
                 "zubehoer_komplett": "ja",
+                "unterschrift": "papier",
             },
         )
         self.assertEqual(antwort.status_code, 302)
@@ -2580,6 +2582,7 @@ class VerleihViewTests(TestCase):
                 "person": self.person.pk,
                 "rueckgabe_bis": "2026-11-15",
                 "zweck": "Präsentation",
+                "unterschrift": "papier",
             },
         )
         self.assertEqual(antwort.status_code, 302)

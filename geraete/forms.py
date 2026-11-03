@@ -143,9 +143,15 @@ class GeratAusgabeForm(forms.Form):
     von ``Gerat.ZUSTAENDE``, voreingestellt mit dem Zustand des Geräts),
     „Zubehör komplett“ (Ja, Nein) und „Bemerkung“. Protokoll und Signatur
     bleiben M6, das Protokoll-PDF folgt mit F-130.
+
+    A-0127: Unterschrift (Signatur im Tool, Papier).
     """
 
     ZUBEOER = [("ja", "Ja"), ("nein", "Nein")]
+    UNTERSCHRIFT = [
+        ("tool", "Signatur im Tool"),
+        ("papier", "Papier"),
+    ]
 
     ziel_person = forms.ModelChoiceField(
         queryset=Person.objects.all(),
@@ -176,6 +182,13 @@ class GeratAusgabeForm(forms.Form):
         required=False,
         label="Bemerkung",
         widget=forms.Textarea(attrs={"rows": 2, "data-test": "anmerkung"}),
+    )
+    unterschrift = forms.ChoiceField(
+        choices=UNTERSCHRIFT,
+        required=True,
+        initial="tool",
+        label="Unterschrift",
+        widget=forms.RadioSelect,
     )
 
     def __init__(self, *args, gerat: Gerat | None = None, **kwargs):
@@ -435,7 +448,13 @@ class VerleihForm(forms.Form):
     """Formular für den Verleih (F-30, TESTSCHNITTSTELLE 4).
 
     Person, Rückgabe bis (Pflicht), Zweck (Pflicht).
+    A-0127: Unterschrift (Signatur im Tool, Papier).
     """
+
+    UNTERSCHRIFT = [
+        ("tool", "Signatur im Tool"),
+        ("papier", "Papier"),
+    ]
 
     person = forms.ModelChoiceField(
         label="Person",
@@ -452,6 +471,13 @@ class VerleihForm(forms.Form):
         label="Zweck",
         required=True,
         widget=forms.TextInput(attrs={"data-test": "zweck", "class": "req"}),
+    )
+    unterschrift = forms.ChoiceField(
+        choices=UNTERSCHRIFT,
+        required=True,
+        initial="tool",
+        label="Unterschrift",
+        widget=forms.RadioSelect,
     )
 
 

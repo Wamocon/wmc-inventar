@@ -51,7 +51,10 @@ class PersonForm(forms.ModelForm):
 
 
 class OrtForm(forms.ModelForm):
-    """F-60: Ort pflegen (Kennung, Standort, Raum, Notiz)."""
+    """F-60: Ort pflegen (Kennung, Standort, Raum, Notiz).
+
+    A-0127: Raumplan (plan_id), leer erlaubt.
+    """
 
     class Meta:
         model = Ort
@@ -64,6 +67,7 @@ class OrtForm(forms.ModelForm):
             "notiz",
             "feste_person",
             "profil",
+            "plan_id",
         ]
         labels = {
             "typ": "Typ",
@@ -74,12 +78,14 @@ class OrtForm(forms.ModelForm):
             "notiz": "Notiz",
             "feste_person": "Feste Person",
             "profil": "Ausstattungsprofil",
+            "plan_id": "Raumplan",
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["feste_person"].required = False
         self.fields["profil"].required = False
+        self.fields["plan_id"].required = False
 
 
 class ProfilForm(forms.ModelForm):

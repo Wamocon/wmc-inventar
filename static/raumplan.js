@@ -11,10 +11,16 @@
     if (!grund) return;
     fetch(grund, { headers: { 'HX-Request': 'true' } })
       .then(function (antwort) {
-        if (!antwort.ok) { bereich.hidden = true; return; }
+        if (!antwort.ok) {
+          bereich.hidden = true;
+          return null;
+        }
         return antwort.text();
       })
       .then(function (html) {
+        if (html === null) {
+          return;
+        }
         bereich.innerHTML = html;
         bereich.hidden = false;
         plan.querySelectorAll('.orte')

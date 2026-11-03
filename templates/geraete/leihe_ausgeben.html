@@ -31,6 +31,11 @@
                 <span>Ausgabe bestätigen <span class="erforderlich">*</span></span>
                 <input type="checkbox" name="bestätigung" required data-test="bestaetigung">
             </label>
+            <div class="field" data-test="unterschrift">
+                <span>Unterschrift</span>
+                <label class="radio"><input type="radio" name="unterschrift" value="tool" checked> Signatur im Tool</label>
+                <label class="radio"><input type="radio" name="unterschrift" value="papier"> Papier</label>
+            </div>
             <div class="form-actions">
                 <a href="{% url 'geraete:verleih-liste' %}" class="btn">Abbrechen</a>
                 <button type="submit" class="btn primary" data-test="ausgeben">Ausgeben</button>

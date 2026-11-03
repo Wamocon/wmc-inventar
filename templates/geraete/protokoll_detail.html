@@ -143,6 +143,13 @@
         Prüfen Sie das PDF und signieren Sie mit Ihrem Passwort.
         Danach ist der Inhalt gesperrt (F-135).
     </p>
+    <form method="post" action="/protokolle/{{ protokoll.nr }}/abbrechen/" data-test="abbrechen-formular">
+        {% csrf_token %}
+        <p class="muted">
+            Abbrechen verwirft das Protokoll, ohne etwas am Gerät zu ändern.
+        </p>
+        <button class="btn" type="submit" data-test="abbrechen-absenden">Abbrechen</button>
+    </form>
     <form method="post" action="/protokolle/{{ protokoll.nr }}/signieren/" data-test="signieren-formular">
         {% csrf_token %}
         <p>
