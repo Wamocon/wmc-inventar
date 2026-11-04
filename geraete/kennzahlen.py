@@ -37,15 +37,15 @@ _KENNZAHLEN_DEF = (
      lambda heute: _aktive_geraete().count()),
     ("ueberfaellig", "Überfällige Leihen",
      lambda heute: Leihe.objects.filter(rueckgabe_bis__lt=heute, status=Leihe.STATUS_AUSGEGEBEN).count(),
-     lambda heute: Leihe.objects.filter(status=Leihe.STATUS_AUSGEGEBEN).count()),
+     None),
     ("anfragen-offen", "Offene Leihanfragen",
      lambda heute: Leihe.objects.filter(status=Leihe.STATUS_ANGEFRAGT).count(),
-     lambda heute: Leihe.objects.count()),
+     None),
     ("garantie-30-tage", "Garantie läuft ab",
      lambda heute: _aktive_geraete().filter(
          garantie_bis__gte=heute, garantie_bis__lte=heute + timedelta(days=30)
      ).count(),
-     lambda heute: _aktive_geraete().filter(garantie_bis__isnull=False).count()),
+     None),
     ("unterschriften-offen", "Unterschriften offen",
      lambda heute: Protokoll.objects.filter(
          stand__in=[
@@ -54,7 +54,7 @@ _KENNZAHLEN_DEF = (
              Protokoll.STAND_GEGENZEICHNUNG_OFFEN,
          ]
      ).count(),
-     lambda heute: Protokoll.objects.count()),
+     None),
     ("arbeitsplaetze-vollstaendig", "Arbeitsplätze vollständig",
      lambda heute: Ort.objects.filter(typ=Ort.TYP_ARBEITSPLATZ, feste_person__isnull=False).count(),
      lambda heute: Ort.objects.filter(typ=Ort.TYP_ARBEITSPLATZ).count()),

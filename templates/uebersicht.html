@@ -20,7 +20,9 @@
       <tr data-test="kennzahl" data-id="{{ kz.data_id }}">
         <td>{{ kz.titel }}</td>
         <td class="num" data-test="ist">{% if kz.ist is not None %}{{ kz.ist }}{% else %}–{% endif %}</td>
-        <td class="num" data-test="gesamt">{% if kz.gesamt is not None %}{{ kz.gesamt }}{% else %}–{% endif %}</td>
+        {% if kz.gesamt is not None %}
+        <td class="num" data-test="gesamt">{{ kz.gesamt }}</td>
+        {% endif %}
         <td class="num" data-test="delta">{% if kz.delta is None %}–{% elif kz.delta == 0 %}±0{% elif kz.delta > 0 %}+{{ kz.delta }}{% else %}−{{ kz.delta_abs }}{% endif %}</td>
       </tr>
       {% endfor %}

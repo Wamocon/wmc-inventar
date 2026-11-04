@@ -382,3 +382,37 @@ class DeltaFormatTests(TestCase):
         html = antwort.content.decode()
         self.assertIn("€", html, msg="Inventarwert hat kein Euro-Zeichen")
         self.assertIn("123.456,78", html, msg="Inventarwert hat falsche Beträge")
+
+
+class GesamtschrankTests(TestCase):
+    """F-100 (A-0910): gesamt steht genau viermal, nur bei den vier Kennzahlen mit gesamt."""
+
+    def setUp(self):
+        Einstellungen.aktuelles()
+        self.admin, self.leszer, self.mit = _konten_anlegen()
+        self.client.force_login(self.admin)
+        self.person = Person.objects.create(
+            anrede=Person.ANREDE_FRAU,
+            vorname="Test",
+            nachname="Person",
+            email="test.person@beispiel.test",
+        )
+        self.kategorie = Kategorie.objects.create(name="Laptop")
+
+    def test_gesamt_genau_viermal(self):
+        """gesamt steht genau viermal: in-benutzung, arbeitsplaetze-vollstaendig, verliehen, geprueft."""
+        antwort = self.client.get("/")
+        html = antwort.content.decode()
+        anzahl = html.count('data-test="gesamt"')
+        self.assertEqual(
+            anzahl, 4,
+            msg=f"gesamt steht {anzahl}x, erwartet 4",
+        )
+        # Die vier Kennzahlen mit gesamt
+        for data_id in ["in-benutzung", "arbeitsplaetze-vollstaendig", "verliehen", "geprueft"]:
+            block = html.split(f'data-id="{data_id}"')[1].split("</tr>")[0] if f'data-id="{data_id}"' in html else ""
+            self.assertIn('data-test="gesamt"', block, msg=f"{data_id} hat kein gesamt")
+        # Die vier ohne gesamt
+        for data_id in ["ueberfaellig", "anfragen-offen", "garantie-30-tage", "unterschriften-offen"]:
+            block = html.split(f'data-id="{data_id}"')[1].split("</tr>")[0] if f'data-id="{data_id}"' in html else ""
+            self.assertNotIn('data-test="gesamt"', block, msg=f"{data_id} hat unerwartet gesamt")
