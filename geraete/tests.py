@@ -2607,6 +2607,14 @@ class VerleihViewTests(TestCase):
         self.assertIsNotNone(protokoll)
         self.assertEqual(protokoll.stand, Protokoll.STAND_SCAN_OFFEN)
 
+    def test_verleih_dialog_unterschrift_genau_einmal(self):
+        """F: Der Dialog verleih trägt name=unterschrift genau einmal."""
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get(f"/geraete/{self.gerat.inventarnummer}/verleih/")
+        html = antwort.content.decode()
+        count = html.count('name="unterschrift"')
+        self.assertEqual(count, 2, f"Erwartet 2 Radiobuttons (tool, papier), gefunden: {count}")
+
 
 # ---------------------------------------------------------------------------
 # M5 Teil 2: Anfrage und Entscheidung
