@@ -2546,6 +2546,10 @@ def protokoll_gegenzeichnen(
     now = jetzt_wie_im_entwicklungsmodus()
     ip = _client_ip(request) if request else "127.0.0.1"
 
+    # F-138: Siegel erst nach der letzten Signatur – Zeitpunkt vor
+    # pdf_fertig_bauen setzen, damit die Bedingung greift.
+    protokoll.gegenzeichnung_signiert_am = now
+
     from . import pdf as pdf_modul
     try:
         # F-137, F-138: Fertiges PDF mit Prüfprotokoll und Siegel.
@@ -2558,7 +2562,6 @@ def protokoll_gegenzeichnen(
     code_objekt.verifiziert_von_ip = ip
     code_objekt.save()
 
-    protokoll.gegenzeichnung_signiert_am = now
     protokoll.gegenzeichnung_ip = ip
     protokoll.pdf_hash_gegenzeichnung = pdf_hash
     protokoll.stand = Protokoll.STAND_ABGESCHLOSSEN
