@@ -152,3 +152,51 @@ form .actions{margin-top:8px}
 .chip-status.verliehen{background:var(--warn-bg);color:var(--warn);border-color:var(--warn)}
 .chip-status.in-reparatur{background:var(--neutral-bg);color:var(--neutral);border-color:var(--neutral)}
 .chip-status.ausgemustert{background:var(--err-bg);color:var(--err);border-color:var(--err)}
+
+/* Raumplan (F-65 bis F-68, A-0913 Teil 2) */
+.plan-grid{display:grid;grid-template-columns:1fr 280px;gap:16px;align-items:start}
+@media (max-width:700px){.plan-grid{grid-template-columns:1fr}}
+.plan-fig{margin:0;position:relative;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--surface-2);min-height:200px}
+.plan-bild{display:block;width:100%;height:auto;max-height:600px;object-fit:contain;background:var(--paper)}
+.plan-leer{padding:32px 20px;text-align:center;color:var(--fg-2);font-weight:500;min-height:200px;display:flex;align-items:center;justify-content:center}
+.plan-orte{position:absolute;inset:0;pointer-events:none}
+.plan-orte .orte{position:absolute;transform:translate(-50%,-50%);pointer-events:auto;z-index:2;display:flex;align-items:center;gap:4px;padding:4px 10px 4px 6px;border-radius:999px;border:1.5px solid var(--line);background:var(--paper);color:var(--ink);font-family:var(--font-cond);font-stretch:var(--narrow);font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap;box-shadow:0 2px 8px rgba(20,11,11,.12);min-height:28px}
+.plan-orte .orte:hover{box-shadow:0 4px 14px rgba(20,11,11,.22);border-color:var(--fg)}
+.plan-orte .orte:focus-visible{outline:2px solid var(--red);outline-offset:2px}
+.plan-orte .orte .platz-kendung{font-size:13px}
+.plan-orte .orte .platz-zeichen{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;font-size:12px;font-weight:800;flex:none}
+.plan-orte .orte .platz-text{font-size:11px;font-weight:500;color:var(--fg-2);max-width:80px;overflow:hidden;text-overflow:ellipsis}
+.plan-orte .orte.vollstaendig{border-color:var(--ok);background:var(--ok-bg)}
+.plan-orte .orte.vollstaendig .platz-zeichen{background:var(--ok);color:var(--on-btn)}
+.plan-orte .orte.fehlt{border-color:var(--err);background:var(--err-bg)}
+.plan-orte .orte.fehlt .platz-zeichen{background:var(--err);color:var(--on-btn)}
+.plan-orte .orte.zuviel{border-color:var(--info);background:var(--info-bg)}
+.plan-orte .orte.zuviel .platz-zeichen{background:var(--info);color:var(--on-btn)}
+.plan-orte .orte.hervorgehoben{outline:3px solid var(--signal);outline-offset:3px}
+.plan-seite{display:flex;flex-direction:column;gap:16px}
+.plan-seite h3{font-size:13px;font-weight:700;margin-bottom:6px}
+.plan-seite ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.plan-seite a{color:var(--fg);text-decoration:none;font-weight:600}
+.plan-seite a:hover{color:var(--red)}
+.legende-eintrag{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500}
+.legende-eintrag .platz-zeichen{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;font-size:12px;font-weight:800;flex:none}
+.legende-eintrag.vollstaendig .platz-zeichen{background:var(--ok);color:var(--on-btn)}
+.legende-eintrag.fehlt .platz-zeichen{background:var(--err);color:var(--on-btn)}
+.legende-eintrag.zuviel .platz-zeichen{background:var(--info);color:var(--on-btn)}
+.popup{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:100;background:var(--surface);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow);max-width:480px;width:90%;max-height:80vh;overflow-y:auto;padding:0}
+.popup .popup-in{padding:20px}
+.popup .popup-kopf{display:flex;align-items:center;justify-content:space-between;padding:14px 20px 0;margin-bottom:4px}
+.popup .popup-titel{font-size:16px;font-weight:700;margin:0}
+.popup .popup-schliessen{background:none;border:1px solid var(--line);border-radius:4px;padding:4px 10px;cursor:pointer;font-size:13px;font-weight:600;color:var(--fg)}
+.popup .popup-schliessen:hover{border-color:var(--fg);color:var(--red)}
+.platz-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;font-weight:600;font-size:12px;border:1px solid var(--line);white-space:nowrap}
+.platz-chip.vollstaendig{background:var(--ok-bg);color:var(--ok);border-color:var(--ok)}
+.platz-chip.fehlt{background:var(--err-bg);color:var(--err);border-color:var(--err)}
+.platz-chip.zuviel{background:var(--info-bg);color:var(--info);border-color:var(--info)}
+.seg{display:inline-flex;border:1px solid var(--control);border-radius:4px;overflow:hidden}
+.seg-btn{display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:0 14px;font-size:13px;font-weight:600;text-decoration:none;color:var(--fg);background:var(--surface);border:0;border-right:1px solid var(--control)}
+.seg-btn:last-child{border-right:0}
+.seg-btn:hover{background:var(--surface-2)}
+.seg-btn.aktiv{background:var(--btn);color:var(--on-btn);border-color:var(--btn)}
+.plan-orte .orte.raum{border-style:dashed;background:var(--surface-2);padding:3px 8px;min-height:24px;font-size:11px}
+.plan-orte .orte.raum .raum-name{font-size:11px;font-weight:600;max-width:100px;overflow:hidden;text-overflow:ellipsis}

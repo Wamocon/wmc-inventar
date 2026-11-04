@@ -27,6 +27,7 @@ urlpatterns = [
     # direkt unter /arbeitsplaetze/, unter /geraete/arbeitsplaetze/ bleibt nichts.
     path("arbeitsplaetze/", geraete_views.arbeitsplaetze, name="arbeitsplaetze-raumplan"),
     path("arbeitsplaetze/plan/<int:plan_id>/bearbeiten/", stammdaten_views.plan_bearbeiten, name="plan-bearbeiten"),
+    path("arbeitsplaetze/plan/<int:plan_id>/grundriss/", geraete_views.grundriss_zeige, name="plan-grundriss"),
     path("arbeitsplaetze/liste/", geraete_views.arbeitsplaetze_liste, name="arbeitsplaetze-liste"),
     path("arbeitsplaetze/bedarf/", geraete_views.bedarf, name="bedarf"),
     path("arbeitsplaetze/pruefen/", geraete_views.erstinventur, name="erstinventur"),

@@ -1,56 +1,80 @@
 /* WMC Inventar · Raumplan (raumplan.html)
-   Pop-up, Hervorhebung, Ziehen im Plan (F-65 bis F-69).
-   Ändert nichts an htmx; verwendet fetch für die Pop-up-Inhalte. */
+   Positionen aus data-x/data-y setzen, Pop-up, Hervorhebung.
+   Ändert nichts an htmx; verwendet fetch für die Pop-up-Inhalte.
+   (F-65 bis F-68, A-0913 Teil 2) */
 (function () {
   var plan = document.querySelector('[data-test="raumplan"]');
   if (!plan) return;
+
+  // Positionen aus data-x/data-y setzen (statt Inline-Style im HTML, CSP style-src 'self')
+  plan.querySelectorAll('[data-test="plan-orte"] .orte').forEach(function (knopf) {
+    var x = knopf.getAttribute('data-x');
+    var y = knopf.getAttribute('data-y');
+    if (x !== null && y !== null) {
+      knopf.style.left = x + '%';
+      knopf.style.top = y + '%';
+    }
+  });
+
+  function schliessenPopu() {
+    var bereich = document.getElementById('platz-popup');
+    if (bereich) {
+      bereich.hidden = true;
+      bereich.innerHTML = '';
+    }
+    plan.querySelectorAll('[data-test="platz"]')
+      .forEach(function (knopf) { knopf.removeAttribute('aria-expanded'); });
+  }
 
   function popu(ziel) {
     var bereich = document.getElementById('platz-popup');
     var grund = ziel.getAttribute('data-pfad');
     if (!grund) return;
+    schliessenPopu();
     fetch(grund, { headers: { 'HX-Request': 'true' } })
       .then(function (antwort) {
         if (!antwort.ok) {
-          bereich.hidden = true;
+          schliessenPopu();
           return null;
         }
         return antwort.text();
       })
       .then(function (html) {
-        if (html === null) {
-          return;
-        }
+        if (html === null) return;
         bereich.innerHTML = html;
         bereich.hidden = false;
-        plan.querySelectorAll('.orte')
-          .forEach(function (knopf) { knopf.removeAttribute('aria-expanded'); });
+        // Schließen-Knopf verbinden
+        var schliessen = bereich.querySelector('[data-test="popup-schliessen"]');
+        if (schliessen) {
+          schliessen.addEventListener('click', function (ereignis) {
+            ereignis.stopPropagation();
+            schliessenPopu();
+          });
+        }
         ziel.setAttribute('aria-expanded', 'true');
       })
-      .catch(function () { bereich.hidden = true; });
+      .catch(function () { schliessenPopu(); });
   }
 
-  plan.querySelectorAll('.orte')
-    .forEach(function (knopf) {
-      knopf.addEventListener('click', function () { popu(knopf); });
+  // Klick auf Platz öffnet Pop-up
+  plan.querySelectorAll('[data-test="platz"]').forEach(function (knopf) {
+    knopf.addEventListener('click', function () { popu(knopf); });
+    knopf.addEventListener('keydown', function (ereignis) {
+      if (ereignis.key === 'Enter') { popu(knopf); }
     });
-
-  document.addEventListener('click', function (ereignis) {
-    var schliessen = ereignis.target.closest('[data-test="popup-schliessen"]');
-    if (schliessen) {
-      var bereich = document.getElementById('platz-popup');
-      if (bereich) bereich.hidden = true;
-      return;
-    }
-    if (ereignis.target.closest('.popup-bereich') || ereignis.target.closest('.orte')) return;
-    var bereich2 = document.getElementById('platz-popup');
-    if (bereich2) bereich2.hidden = true;
   });
 
+  // Klick außerhalb schließt Pop-up
+  document.addEventListener('click', function (ereignis) {
+    if (ereignis.target.closest('#platz-popup')) return;
+    if (ereignis.target.closest('[data-test="platz"]')) return;
+    schliessenPopu();
+  });
+
+  // Escape schließt Pop-up
   document.addEventListener('keydown', function (ereignis) {
     if (ereignis.key === 'Escape') {
-      var bereich = document.getElementById('platz-popup');
-      if (bereich) bereich.hidden = true;
+      schliessenPopu();
     }
   });
 

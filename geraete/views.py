@@ -61,9 +61,52 @@ def _keine_berechtigung(request, pfad: str):
     """403 für Mitarbeiter auf /arbeitsplaetze/… (Kapitel 3 der Testschnittstelle).
 
     ``pfad`` ist die absolute Adresse, die im Satz vorkommt.
+
     """
     meldung_error(request, "Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
     raise PermissionDenied(f"Zugriff verweigert: {pfad}")
+
+
+# --- Grundriss (F-65, A-0913 Teil 2) -------------------------------------------
+
+def _inhalt_typ_datei(pfad) -> str:
+    """Inhaltstyp nach Dateiendung, sonst oktalstrom (A-0913)."""
+    klein = str(pfad).lower()
+    if klein.endswith(".svg"):
+        return "image/svg+xml"
+    if klein.endswith(".png"):
+        return "image/png"
+    if klein.endswith((".jpg", ".jpeg")):
+        return "image/jpeg"
+    if klein.endswith(".pdf"):
+        return "application/pdf"
+    return "application/octet-stream"
+
+
+@login_required
+def grundriss_zeige(request, plan_id: int):
+    """Grundriss-Datei eines Plans aus der DATEIABLAGE liefern (F-65, A-0913).
+
+    Adresse /arbeitsplaetze/plan/<id>/grundriss/ (TESTSCHNITTSTELLE Kapitel 4).
+    Angemeldet: Admin und Mitarbeiter 200, sonst 403; ohne Anmeldung
+    leitet die Anmeldung ein. Die Datei kommt aus der DATEIABLAGE, die
+    Adresse bleibt stabil, wenn sich der Ablagepfad ändert.
+    """
+    from stammdaten.models import Plan
+
+    if not _darf_sehen_raumplan(request.user):
+        _keine_berechtigung(request, f"/arbeitsplaetze/plan/{plan_id}/grundriss/")
+    plan = get_object_or_404(Plan, id=plan_id)
+    if not plan.grundriss:
+        meldung_error(request, "Kein Grundriss hinterlegt.")
+        raise PermissionDenied(f"Kein Grundriss: /arbeitsplaetze/plan/{plan_id}/grundriss/")
+    datei = plan.grundriss
+    pfad = datei.name
+    inhalt = datei.open("rb")
+    antwort = HttpResponse(inhalt, content_type=_inhalt_typ_datei(pfad))
+    antwort["Content-Disposition"] = f'inline; filename="{datei.name.split("/")[-1]}"'
+    return antwort
+
 
 
 # --- Liste (F-41) -------------------------------------------------------------
@@ -428,17 +471,50 @@ def arbeitsplaetze(request):
         plaetze = services.plaetze_des_plans(plan)
         raumorte = services.raumorte_des_plans(plan)
         ohne_pos = services.ohne_position(plan)
+    anzeige = request.GET.get("ansicht", "raumplan")
+    if anzeige not in ("raumplan", "liste"):
+        anzeige = "raumplan"
+    nur_unvollstaendig = bool(request.GET.get("unvollstaendig"))
+
+    def _platz_zusatz(p):
+        ergebnis = p["abgleich"]["ergebnis"]
+        if ergebnis == "vollstaendig":
+            return "vollstaendig", "✓", "vollständig"
+        elif ergebnis == "mehr-als-soll":
+            return "zuviel", "+", "mehr als Soll"
+        else:
+            return "fehlt", "−", "fehlt etwas"
+
+    plaetze_reich = []
+    for p in plaetze:
+        klasse, zeichen, text = _platz_zusatz(p)
+        plaetze_reich.append({**p, "klasse": klasse, "zeichen": zeichen, "text": text})
+
+    if anzeige == "liste" and nur_unvollstaendig:
+        plaetze_anzeige = [p for p in plaetze_reich if p["abgleich"]["ergebnis"] != "vollstaendig"]
+    else:
+        plaetze_anzeige = plaetze_reich
+    ok_anzahl = sum(1 for p in plaetze_reich if p["abgleich"]["ergebnis"] == "vollstaendig")
+    unvollstaendig = [p for p in plaetze_reich if p["abgleich"]["ergebnis"] != "vollstaendig"]
     return render(
         request,
         "geraete/raumplan.html",
         {
             "plane": plane,
-            "plan": plan,
-            "plaetze": plaetze,
+            "plan_auswahl": plan,
+            "plaetze": plaetze_anzeige,
             "raumorte": raumorte,
             "ohne_pos": ohne_pos,
+            "ohne_position": ohne_pos,
+            "unvollstaendig": unvollstaendig,
             "hervorheben": hervorheben,
             "koennen_aendern": _darf_ändern(request.user),
+            "bearbeiten_kann": _darf_ändern(request.user),
+            "anzeige": anzeige,
+            "anzeige_raumplan": anzeige == "raumplan",
+            "anzeige_liste": anzeige == "liste",
+            "nur_unvollstaendig": nur_unvollstaendig,
+            "ok_anzahl": ok_anzahl,
         },
     )
 

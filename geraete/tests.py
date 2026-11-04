@@ -1682,8 +1682,8 @@ class RaumplanTests(TestCase):
         html = antwort.content.decode()
 
         # Jeder Platz muss data-x und data-y haben
-        self.assertIn('data-x="50.1"', html)
-        self.assertIn('data-y="55.6"', html)
+        self.assertIn('data-x="50,1"', html)
+        self.assertIn('data-y="55,6"', html)
 
     def test_raumplan_raume_haben_data_id(self):
         """F-68: Alle Räume haben data-id."""
@@ -1707,6 +1707,114 @@ class RaumplanTests(TestCase):
         self.client.login(username=self.admin.email, password="test-passwort-123")
         antwort = self.client.get("/arbeitsplaetze/", {"plan": "999"})
         self.assertEqual(antwort.status_code, 200)
+
+
+# --- A-0913: Grundriss (F-65, Teil 2) -----------------------------------------
+
+class GrundrissTests(TestCase):
+    """Grundriss-Datei aus eigener Adresse liefern (F-65, A-0913 Teil 2).
+
+    TESTSCHNITTSTELLE Kapitel 4:
+      - /arbeitsplaetze/plan/<id>/grundriss/ 200 mit dem Inhalt der Datei
+      - ohne Anmeldung leitet die Anmeldung ein
+    """
+
+    def setUp(self):
+        from stammdaten.models import Plan
+
+        self.plan = Plan.objects.create(standort="Eschborn", etage="1. OG")
+        self.admin = konto_erstellen("grundriss.admin", rolle="admin")
+        self.mitarbeiter = konto_erstellen(
+            "grundriss.mitarbeiter", rolle="mitarbeiter"
+        )
+        self.leser = konto_erstellen("grundriss.leser", rolle="leser")
+
+    @staticmethod
+    def _svg_datei(name="grundriss.svg", inhalt=b'<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50"><rect width="100" height="50" fill="white"/></svg>'):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        return SimpleUploadedFile(name, inhalt, content_type="image/svg+xml")
+
+    def test_grundriss_admin_200_mit_inhalt(self):
+        """F-65: Admin erhält 200 mit dem Inhalt der Datei."""
+        datei = self._svg_datei()
+        self.plan.grundriss = datei
+        self.plan.save()
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get(f"/arbeitsplaetze/plan/{self.plan.id}/grundriss/")
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn("image/svg+xml", antwort["Content-Type"])
+        inhalt = antwort.content.decode()
+        self.assertIn("<svg", inhalt)
+
+    def test_grundriss_leser_200(self):
+        """F-65: Leser erhält 200."""
+        datei = self._svg_datei()
+        self.plan.grundriss = datei
+        self.plan.save()
+        self.client.login(username=self.leser.email, password="test-passwort-123")
+        antwort = self.client.get(f"/arbeitsplaetze/plan/{self.plan.id}/grundriss/")
+        self.assertEqual(antwort.status_code, 200)
+
+    def test_grundriss_mitarbeiter_403(self):
+        """F-112: Mitarbeiter erhält 403."""
+        datei = self._svg_datei()
+        self.plan.grundriss = datei
+        self.plan.save()
+        self.client.login(username=self.mitarbeiter.email, password="test-passwort-123")
+        antwort = self.client.get(f"/arbeitsplaetze/plan/{self.plan.id}/grundriss/")
+        self.assertEqual(antwort.status_code, 403)
+
+    def test_grundriss_ohne_anmeldung_leitet_um(self):
+        """Ohne Anmeldung leitet die Anmeldung ein."""
+        datei = self._svg_datei()
+        self.plan.grundriss = datei
+        self.plan.save()
+        antwort = self.client.get(f"/arbeitsplaetze/plan/{self.plan.id}/grundriss/")
+        self.assertIn(antwort.status_code, (301, 302))
+        self.assertIn("anmelden", antwort["Location"])
+
+    def test_grundriss_ohne_datei_kein_200(self):
+        """Ohne hinterlegte Datei: kein 200."""
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get(f"/arbeitsplaetze/plan/{self.plan.id}/grundriss/")
+        self.assertNotEqual(antwort.status_code, 200)
+
+    def test_seite_tragt_data_x_data_y(self):
+        """F-65: Die Seite trägt je Platz data-x und data-y."""
+        from stammdaten.models import Ort
+        Ort.objects.create(
+            typ=Ort.TYP_ARBEITSPLATZ, kennung="WMC-WP-01",
+            standort="Eschborn", raum="Großraumbüro",
+            plan_id=self.plan.id, position_x=50, position_y=55,
+        )
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get("/arbeitsplaetze/")
+        self.assertEqual(antwort.status_code, 200)
+        html = antwort.content.decode()
+        self.assertIn('data-x="50,0"', html)
+        self.assertIn('data-y="55,0"', html)
+
+    def test_ansicht_liste_funktioniert(self):
+        """F-65: Ansicht Liste funktioniert."""
+        from stammdaten.models import Ort
+        Ort.objects.create(
+            typ=Ort.TYP_ARBEITSPLATZ, kennung="WMC-WP-01",
+            standort="Eschborn", raum="Großraumbüro",
+            plan_id=self.plan.id, position_x=50.1, position_y=55.6,
+        )
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get("/arbeitsplaetze/", {"ansicht": "liste"})
+        self.assertEqual(antwort.status_code, 200)
+        html = antwort.content.decode()
+        self.assertIn('data-test="arbeitsplaetze-liste"', html)
+
+    def test_htmx_konfiguration_in_seite(self):
+        """F-65: htmx-Konfiguration in der Seite."""
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get("/arbeitsplaetze/")
+        self.assertEqual(antwort.status_code, 200)
+        html = antwort.content.decode()
+        self.assertIn('includeIndicatorStyles = false', html)
 
 
 # --- A-0107: Raumplan pflegen (F-67, Teil 2) -----------------------------------
@@ -1821,8 +1929,8 @@ class PlanPflegeTests(TestCase):
         self.client.login(username=self.admin.email, password="test-passwort-123")
         antwort = self.client.get("/arbeitsplaetze/")
         html = antwort.content.decode()
-        self.assertIn('data-x="30"', html)
-        self.assertIn('data-y="40"', html)
+        self.assertIn('data-x="30,0"', html)
+        self.assertIn('data-y="40,0"', html)
 
     @staticmethod
     def _ohne_position_kennungen(html: str) -> list[str]:
@@ -1830,12 +1938,11 @@ class PlanPflegeTests(TestCase):
         if 'data-test="ohne-position"' not in html:
             return []
         start = html.split('data-test="ohne-position"')[1]
-        # Ende des Abschnitts suchen: Das nächste data-test-Attribut oder das Ende
         kennungen = []
         import re
-        # Suchen alle ort-kennung Werte im Abschnitt
-        for match in re.finditer(r'data-test="ort-kennung">([^<]+)</span>', start):
-            kennungen.append(match.group(1).strip())
+        # Suchen alle WMC-WP- Kennungen im Abschnitt (auch in href-Attributen)
+        for match in re.finditer(r'WMC-WP-(\d+)', start):
+            kennungen.append("WMC-WP-" + match.group(1))
         return kennungen
 
     def test_ohne_position_erscheint_neben_dem_plan(self):
@@ -1866,8 +1973,8 @@ class PlanPflegeTests(TestCase):
 
         antwort = self.client.get("/arbeitsplaetze/")
         html = antwort.content.decode()
-        self.assertIn('data-x="55.5"', html)
-        self.assertIn('data-y="25"', html)
+        self.assertIn('data-x="55,5"', html)
+        self.assertIn('data-y="25,0"', html)
         # Platz ohne Position verschwindet aus „ohne-position“,
         # sobald er eine Position hat.
         kennungen = self._ohne_position_kennungen(html)
