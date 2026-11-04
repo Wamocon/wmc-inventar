@@ -4,6 +4,10 @@
 <div class="page-head">
   <div><h1>Personen</h1><p class="muted lead">Personen pflegen (F-121).</p></div>
   {% if user.ist_admin %}<div class="actions"><a class="btn primary" href="/personen/neu/" data-test="person-anlegen">Neue Person</a></div>{% endif %}
+  <div class="actions">
+    <a class="btn" href="/personen/?format=xlsx" data-test="export-xlsx">Export .xlsx</a>
+    <a class="btn" href="/personen/?format=csv" data-test="export-csv">Export .csv</a>
+  </div>
 </div>
 <div class="liste" data-test="liste">
   {% for p in personen %}

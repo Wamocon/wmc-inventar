@@ -1123,6 +1123,7 @@ def verleih_liste(request):
 
     Zeigt aktive und überfällige Leihen.
     Nur für Admin (403 für Mitarbeiter, F-112).
+    F-103: format=csv oder format=xlsx liefert die Liste als Datei.
     """
     from .models import Leihe
     from .services import leihen_ueberfaellig
@@ -1136,6 +1137,28 @@ def verleih_liste(request):
         .order_by("-zeitpunkt")
     )
     ueberfaellige = {l.id for l in services.leihen_ueberfaellig()}
+
+    format_export = request.GET.get("format", "")
+    if format_export in ("csv", "xlsx"):
+        from . import export as _export
+        kopfzeile = ["Leihnummer", "Gerät", "Person", "Kategorie", "Beginn", "Ende", "Rückgabe bis", "Zweck", "Status"]
+        daten = []
+        for leihe in leihen:
+            daten.append({
+                "Leihnummer": leihe.nr,
+                "Gerät": leihe.gerat.inventarnummer if leihe.gerat else "",
+                "Person": leihe.person.voller_name() if leihe.person else "",
+                "Kategorie": leihe.kat.name if leihe.kat else "",
+                "Beginn": leihe.beginn or "",
+                "Ende": leihe.ende or "",
+                "Rückgabe bis": leihe.rueckgabe_bis or "",
+                "Zweck": leihe.zweck,
+                "Status": leihe.stand_anzeige,
+            })
+        dateiname = "verleih"
+        if format_export == "csv":
+            return _export.antwort_csv(kopfzeile, daten, dateiname)
+        return _export.antwort_xlsx(kopfzeile, daten, dateiname)
 
     return render(
         request,

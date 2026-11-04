@@ -45,9 +45,27 @@ def _darf_lesen(request):
 # ---------------------------------------------------------------------------
 
 def kategorien_liste(request):
-    """Liste der Kategorien (F-120). Admin und Leser dürfen lesen."""
+    """Liste der Kategorien (F-120). Admin und Leser dürfen lesen.
+
+    F-103: format=csv oder format=xlsx liefert die Liste als Datei.
+    """
     if not _darf_lesen(request):
         return _keine_berechtigung(request)
+    format_export = request.GET.get("format", "")
+    if format_export in ("csv", "xlsx"):
+        from geraete import export as _export
+        kopfzeile = ["Name", "hat Datenträger", "Seriennummer Pflicht"]
+        daten = []
+        for k in Kategorie.objects.all().order_by("name"):
+            daten.append({
+                "Name": k.name,
+                "hat Datenträger": "ja" if k.hat_datentraeger else "nein",
+                "Seriennummer Pflicht": "ja" if k.seriennummer_pflicht else "nein",
+            })
+        dateiname = "kategorien"
+        if format_export == "csv":
+            return _export.antwort_csv(kopfzeile, daten, dateiname)
+        return _export.antwort_xlsx(kopfzeile, daten, dateiname)
     return render(
         request,
         "stammdaten/kategorien_liste.html",
@@ -90,9 +108,30 @@ def kategorien_aendern(request, pk):
 # ---------------------------------------------------------------------------
 
 def personen_liste(request):
-    """Liste der Personen (F-121). Admin und Leser dürfen lesen."""
+    """Liste der Personen (F-121). Admin und Leser dürfen lesen.
+
+    F-103: format=csv oder format=xlsx liefert die Liste als Datei.
+    """
     if not _darf_lesen(request):
         return _keine_berechtigung(request)
+    format_export = request.GET.get("format", "")
+    if format_export in ("csv", "xlsx"):
+        from geraete import export as _export
+        kopfzeile = ["Name", "E-Mail", "Abteilung", "Eintritt", "Austritt", "aktiv"]
+        daten = []
+        for p in Person.objects.all().order_by("nachname", "vorname"):
+            daten.append({
+                "Name": p.voller_name(),
+                "E-Mail": p.email,
+                "Abteilung": p.abteilung,
+                "Eintritt": p.eintritt or "",
+                "Austritt": p.austritt or "",
+                "aktiv": "ja" if p.aktiv else "nein",
+            })
+        dateiname = "personen"
+        if format_export == "csv":
+            return _export.antwort_csv(kopfzeile, daten, dateiname)
+        return _export.antwort_xlsx(kopfzeile, daten, dateiname)
     return render(
         request,
         "stammdaten/personen_liste.html",
@@ -237,9 +276,31 @@ def personen_aendern(request, pk):
 # ---------------------------------------------------------------------------
 
 def orte_liste(request):
-    """Liste der Orte (F-60). Admin und Leser dürfen lesen."""
+    """Liste der Orte (F-60). Admin und Leser dürfen lesen.
+
+    F-103: format=csv oder format=xlsx liefert die Liste als Datei.
+    """
     if not _darf_lesen(request):
         return _keine_berechtigung(request)
+    format_export = request.GET.get("format", "")
+    if format_export in ("csv", "xlsx"):
+        from geraete import export as _export
+        kopfzeile = ["Kennung", "Name", "Typ", "Standort", "Raum", "Feste Person", "Notiz"]
+        daten = []
+        for o in Ort.objects.all().order_by("kennung"):
+            daten.append({
+                "Kennung": o.kennung,
+                "Name": o.name,
+                "Typ": o.get_typ_display(),
+                "Standort": o.standort,
+                "Raum": o.raum,
+                "Feste Person": o.feste_person.voller_name() if o.feste_person else "",
+                "Notiz": o.notiz,
+            })
+        dateiname = "orte"
+        if format_export == "csv":
+            return _export.antwort_csv(kopfzeile, daten, dateiname)
+        return _export.antwort_xlsx(kopfzeile, daten, dateiname)
     return render(
         request,
         "stammdaten/orte_liste.html",

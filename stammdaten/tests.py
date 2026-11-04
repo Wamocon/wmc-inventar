@@ -203,3 +203,63 @@ class AustrittTests(TestCase):
         self.person.refresh_from_db()
         self.assertIsNone(self.person.austritt)
         self.assertTrue(self.person.aktiv)
+
+
+class ExportTests(TestCase):
+    """F-103 (A-0910): Export für Personen, Orte, Kategorien, Verleih."""
+
+    def setUp(self):
+        self.admin = konto_erstellen("admin@example.com", admin=True)
+        self.person = Person.objects.create(
+            anrede=Person.ANREDE_FRAU,
+            vorname="Test",
+            nachname="Person",
+            email="test.person@example.com",
+        )
+        self.kategorie = Kategorie.objects.create(name="Laptop")
+        self.ort = Ort.objects.create(
+            name="Raum 1",
+            typ=Ort.TYP_ARBEITSPLATZ,
+        )
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+
+    def test_personen_export_csv(self):
+        antwort = self.client.get("/personen/?format=csv")
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn("text/csv", antwort["Content-Type"])
+        self.assertIn("Person", antwort.content.decode())
+
+    def test_personen_export_xlsx(self):
+        antwort = self.client.get("/personen/?format=xlsx")
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn("spreadsheet", antwort["Content-Type"])
+
+    def test_orte_export_csv(self):
+        antwort = self.client.get("/orte/?format=csv")
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn("text/csv", antwort["Content-Type"])
+        self.assertIn("Raum 1", antwort.content.decode())
+
+    def test_kategorien_export_csv(self):
+        antwort = self.client.get("/kategorien/?format=csv")
+        self.assertEqual(antwort.status_code, 200)
+        self.assertIn("text/csv", antwort["Content-Type"])
+        self.assertIn("Laptop", antwort.content.decode())
+
+    def test_personen_seite_hat_export_buttons(self):
+        antwort = self.client.get("/personen/")
+        html = antwort.content.decode()
+        self.assertIn('data-test="export-xlsx"', html)
+        self.assertIn('data-test="export-csv"', html)
+
+    def test_orte_seite_hat_export_buttons(self):
+        antwort = self.client.get("/orte/")
+        html = antwort.content.decode()
+        self.assertIn('data-test="export-xlsx"', html)
+        self.assertIn('data-test="export-csv"', html)
+
+    def test_kategorien_seite_hat_export_buttons(self):
+        antwort = self.client.get("/kategorien/")
+        html = antwort.content.decode()
+        self.assertIn('data-test="export-xlsx"', html)
+        self.assertIn('data-test="export-csv"', html)

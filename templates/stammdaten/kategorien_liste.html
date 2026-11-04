@@ -4,6 +4,10 @@
 <div class="page-head">
   <div><h1>Kategorien</h1><p class="muted lead">Kategorien pflegen (F-120).</p></div>
   {% if ist_admin %}<div class="actions"><a class="btn primary" href="/kategorien/neu/" data-test="kategorie-anlegen">Neue Kategorie</a></div>{% endif %}
+  <div class="actions">
+    <a class="btn" href="/kategorien/?format=xlsx" data-test="export-xlsx">Export .xlsx</a>
+    <a class="btn" href="/kategorien/?format=csv" data-test="export-csv">Export .csv</a>
+  </div>
 </div>
 <div class="liste" data-test="liste">
   {% for k in kategorien %}

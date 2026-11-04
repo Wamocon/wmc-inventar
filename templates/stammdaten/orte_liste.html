@@ -4,6 +4,10 @@
 <div class="page-head">
   <div><h1>Orte</h1><p class="muted lead">Orte pflegen (F-60).</p></div>
   {% if user.ist_admin %}<div class="actions"><a class="btn primary" href="/orte/neu/" data-test="ort-anlegen">Neuer Ort</a></div>{% endif %}
+  <div class="actions">
+    <a class="btn" href="/orte/?format=xlsx" data-test="export-xlsx">Export .xlsx</a>
+    <a class="btn" href="/orte/?format=csv" data-test="export-csv">Export .csv</a>
+  </div>
 </div>
 <div class="liste" data-test="liste">
   {% for o in orte %}
