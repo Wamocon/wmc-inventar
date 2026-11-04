@@ -648,13 +648,19 @@ class Protokoll(models.Model):
     )
 
     def offboarding_unbeantwortet(self) -> list[str]:
-        """F-133: Prüfpunkte, die noch nicht abgehackt sind."""
+        """F-133: Prüfpunkte, die noch nicht beantwortet sind.
+
+        Liefert die Textbezeichnung der offenen Punkte (F-133, F-130).
+        A-0911: Ein Punkt ist beantwortet, wenn ein Wert (dict oder bool)
+        gesetzt ist.
+        """
         werte = self.offboarding or {}
-        return [
-            schluessel
-            for schluessel, _text in self.OFFBOARDING_PUNKTE
-            if not werte.get(schluessel)
-        ]
+        offene = []
+        for schluessel, text in self.OFFBOARDING_PUNKTE:
+            wert = werte.get(schluessel)
+            if wert is None:
+                offene.append(text)
+        return offene
 
     def anhaenge_liste(self) -> list[dict]:
         return list(self.anhaenge or [])

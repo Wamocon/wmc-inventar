@@ -109,6 +109,81 @@ def offboarding_abhaken(
     return protokoll
 
 
+# A-0911: offboarding_beantworten ersetzt offboarding_abhaken.
+# Je Punkt: erledigt, in_klaerung oder nicht_zutreffend, dazu
+# Datum, Kürzel und Bemerkung. Punkt 13 „Rückgabe im
+# Hardware-Inventar dokumentiert" setzt das Tool selbst (F-133).
+
+_OFFBOARDING_WERTE = ("erledigt", "in_klaerung", "nicht_zutreffend")
+
+
+def offboarding_beantworten(
+    protokoll: Protokoll, werte: dict, ausgefuehrt_von: Konto | None = None
+) -> Protokoll:
+    """F-133: die 13 Prüfpunkte IT-Offboarding beantworten (A-0911).
+
+    Je Punkt: erledigt, in Klärung oder nicht zutreffend, dazu Datum,
+    Kürzel und Bemerkung. Punkt 13 „Rückgabe im Hardware-Inventar
+    dokumentiert" setzt das Tool selbst (F-133).
+
+    Nur für Protokolle im Stand „scan-offen" oder „bearbeiter-offen" (F-22).
+    """
+    if not _stand_beantwortbar(protokoll):
+        raise GeratFehler(
+            "Die Prüfpunkte sind für ein abgeschlossenes Protokoll gesperrt (F-22)."
+        )
+    if protokoll.art != Protokoll.ART_RUECKNAHME:
+        raise GeratFehler(
+            "Die Prüfpunkte IT-Offboarding gehören nur zu einem Rücknahmeprotokoll (F-133)."
+        )
+
+    erlaubt = {schluessel for schluessel, _text in Protokoll.OFFBOARDING_PUNKTE}
+    heute = timezone.now().date()
+    bearbeiter_kuerzel = ""
+    if ausgefuehrt_von is not None and getattr(ausgefuehrt_von, "person", None) is not None:
+        bearbeiter_kuerzel = ausgefuehrt_von.person.kuerzel
+
+    bereinigt: dict = {}
+    for schluessel in erlaubt:
+        status = (werte or {}).get(schluessel)
+        if status not in _OFFBOARDING_WERTE:
+            continue  # un beantwortete Punkte bleiben un beantwortet
+        datum = (werte or {}).get(f"{schluessel}.datum") or (
+            heute.strftime("%d.%m.%Y")
+            if status == "erledigt"
+            else ""
+        )
+        kuerzel = (werte or {}).get(f"{schluessel}.kuerzel") or (
+            bearbeiter_kuerzel if status == "erledigt" else ""
+        )
+        bemerkung = (werte or {}).get(f"{schluessel}.bemerkung") or (
+            "in Klärung" if status == "in_klaerung" else ""
+        )
+        bereinigt[schluessel] = {
+            "status": status,
+            "datum": datum,
+            "kuerzel": kuerzel,
+            "bemerkung": bemerkung,
+        }
+    if not bereinigt:
+        raise GeratFehler("Kein Prüfpunkt übergeben (F-133).")
+
+    # Punkt 13 „Rückgabe im Hardware-Inventar dokumentiert" setzt das Tool
+    # selbst (F-133): immer erledigt, unabhängig von der Eingabe.
+    from .models import Protokoll as _Protokoll
+    p13_schluessel = _Protokoll.OFFBOARDING_PUNKTE[-1][0]
+    bereinigt[p13_schluessel] = {
+        "status": "erledigt",
+        "datum": heute.strftime("%d.%m.%Y"),
+        "kuerzel": "",
+        "bemerkung": "",
+    }
+
+    protokoll.offboarding = {**(protokoll.offboarding or {}), **bereinigt}
+    protokoll.save(update_fields=["offboarding"])
+    return protokoll
+
+
 # --- F-134: Fotos als Anlage ---------------------------------------------------
 
 def _foto_erweitern(dateiname: str, content_type: str) -> str | None:

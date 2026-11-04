@@ -55,6 +55,7 @@ urlpatterns = [
     path("protokolle/<str:protokoll_nr>/foto/", geraete_views.protokoll_foto_hochladen, name="protokoll-foto"),
     path("protokolle/<str:protokoll_nr>/scan/", geraete_views.protokoll_scan_hochladen, name="protokoll-scan"),
     path("protokolle/<str:protokoll_nr>/checkliste/", geraete_views.protokoll_checkliste_beantworten, name="protokoll-checkliste"),
+    path("protokolle/<str:protokoll_nr>/offboarding/", geraete_views.protokoll_offboarding_beantworten, name="protokoll-offboarding"),
     # M6 Teil 2: Signatur, Gegenzeichnung (F-135, F-136, F-137, F-141)
     path("protokolle/<str:protokoll_nr>/signieren/", geraete_views.protokoll_signieren, name="protokoll-signieren"),
     path("protokolle/<str:protokoll_nr>/abbrechen/", geraete_views.protokoll_abbrechen, name="protokoll-abbrechen"),

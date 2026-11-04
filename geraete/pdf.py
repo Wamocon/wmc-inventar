@@ -184,9 +184,9 @@ _HTML_RUECKNAHME = """
   {% for punkt in offboarding %}
   <tr>
     <td>{{ punkt.text }}</td>
-    <td>{% if punkt.wert %}&#9746;{% else %}&#9744;{% endif %}</td>
-    <td>{% if punkt.wert %}&#9744;{% else %}&#9746;{% endif %}</td>
-    <td>{% if punkt.wert %}erledigt{% else %}&ndash;{% endif %}</td>
+    <td>{% if punkt.status == "erledigt" %}&#9746;{% else %}&#9744;{% endif %}</td>
+    <td>{% if punkt.status == "nicht_zutreffend" %}&#9746;{% else %}&#9744;{% endif %}</td>
+    <td>{% if punkt.status == "erledigt" %}{{ punkt.datum }} {{ punkt.kuerzel }}: erledigt{% elif punkt.status == "in_klaerung" %}{{ punkt.datum }} {{ punkt.kuerzel }}: in Klärung{% elif punkt.status == "nicht_zutreffend" %}&ndash;{% else %}&ndash;{% endif %}</td>
   </tr>
   {% endfor %}
 </table>
@@ -290,10 +290,27 @@ def _checkliste_eintraege(protokoll: Protokoll) -> list[dict]:
 
 def _offboarding_eintraege(protokoll: Protokoll) -> list[dict]:
     werte = protokoll.offboarding or {}
-    return [
-        {"text": text, "wert": bool(werte.get(schluessel))}
-        for schluessel, text in Protokoll.OFFBOARDING_PUNKTE
-    ]
+    eintraege = []
+    for schluessel, text in Protokoll.OFFBOARDING_PUNKTE:
+        wert = werte.get(schluessel)
+        if isinstance(wert, dict):
+            eintraege.append({
+                "text": text,
+                "status": wert.get("status", ""),
+                "datum": wert.get("datum", ""),
+                "kuerzel": wert.get("kuerzel", ""),
+                "bemerkung": wert.get("bemerkung", ""),
+            })
+        elif wert is True:
+            eintraege.append({"text": text, "status": "erledigt",
+                              "datum": "", "kuerzel": "", "bemerkung": ""})
+        elif wert is False:
+            eintraege.append({"text": text, "status": "nicht_zutreffend",
+                              "datum": "", "kuerzel": "", "bemerkung": ""})
+        else:
+            eintraege.append({"text": text, "status": "",
+                              "datum": "", "kuerzel": "", "bemerkung": ""})
+    return eintraege
 
 
 def _anhaenge(protokoll: Protokoll) -> list[dict]:
@@ -499,13 +516,15 @@ def pdf_fertig_bauen(protokoll: Protokoll) -> bytes:
 
     Liefert die PDF-Bytes (versiegelt, wenn die Gegenzeichnung erfolgt ist).
     """
-    # 1. Checkliste prüfen (F-132).
+    # 1. Checkliste prüfen (F-132, F-133).
     offene = protokoll.checkliste_unbeantwortet()
+    if protokoll.art == Protokoll.ART_RUECKNAHME:
+        offene += protokoll.offboarding_unbeantwortet()
     if offene:
         from .services import GeratFehler
         raise GeratFehler(
-            "Die Checkliste ist noch nicht vollständig beantwortet "
-            f"({len(offene)} Punkte offen, F-132); das PDF entsteht erst danach."
+            "Die Prüfpunkte sind noch nicht vollständig beantwortet "
+            f"({len(offene)} Punkte offen); das PDF entsteht erst danach."
         )
 
     # 2. PDF bauen.

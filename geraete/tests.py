@@ -4782,3 +4782,155 @@ class MengengeruestTests(TestCase):
             k.set_password("test-passwort-123")
             k.save()
         self.assertEqual(Konto.objects.count() >= 100, True)
+
+
+# --- A-0911: Rücknahme (F-132, F-133) -----------------------------------------
+
+class OffboardingFormularTests(TestCase):
+    """F-132, F-133 (A-0911): Rücknahme zeigt die 13 Prüfpunkte, bedienbar."""
+
+    def setUp(self):
+        self.kat = Kategorie.objects.create(name="Notebook")
+        self.ort = Ort.objects.create(typ=Ort.TYP_LAGER, kennung="WMC-L-01")
+        self.anna = Person.objects.create(
+            anrede=Person.ANREDE_FRAU, vorname="Anna", nachname="Becker",
+            email="anna.becker@beispiel.test",
+            anschrift="Beispielweg 3, 65760 Eschborn",
+        )
+        self.admin = konto_erstellen("it-admin", "admin", "it-admin@beispiel.test")
+        self.anna_konto = konto_erstellen(
+            "anna.becker", "mitarbeiter", "anna.becker@beispiel.test"
+        )
+        self.anna_konto.person = self.anna
+        self.anna_konto.save()
+        self.gerat = services.gerat_anlegen(
+            kategorie=self.kat, hersteller="Lenovo", modell="ThinkPad T14",
+            seriennummer="SN12345", ort=self.ort,
+        )
+
+    def _ruecknahme(self):
+        """Erzeugt ein Rücknahmeprotokoll und setzt es auf bearbeiter-offen."""
+        services.gerat_ausgeben(
+            self.gerat, ziel=self.anna, ausgefuehrt_von=self.admin,
+        )
+        protokoll = Protokoll.objects.filter(
+            person=self.anna, geraet=self.gerat
+        ).first()
+        protokoll.stand = Protokoll.STAND_BEARBEITER_OFFEN
+        protokoll.save(update_fields=["stand"])
+        return protokoll
+
+    def test_detail_zeigt_offboarding_formular_fuer_ruecknahme(self):
+        """F-132: Rücknahme zeigt die 13 Prüfpunkte mit Formular (A-0911)."""
+        self._ruecknahme()
+        protokoll = Protokoll.objects.first()
+        protokoll.art = Protokoll.ART_RUECKNAHME
+        protokoll.save(update_fields=["art"])
+        self.client.force_login(self.admin)
+        antwort = self.client.get(f"/protokolle/{protokoll.nr}/")
+        self.assertEqual(antwort.status_code, 200)
+        inhalt = antwort.content.decode("utf-8")
+        self.assertIn("Prüfpunkte IT-Offboarding", inhalt)
+        self.assertIn('action="/protokolle/{0}/offboarding/"'.format(protokoll.nr), inhalt)
+        self.assertIn('name="offboarding.werkseinstellung"', inhalt)
+        self.assertIn('name="offboarding.werkseinstellung.datum"', inhalt)
+        self.assertIn('name="offboarding.werkseinstellung.kuerzel"', inhalt)
+        self.assertIn('name="offboarding.werkseinstellung.bemerkung"', inhalt)
+
+    def test_detail_zeigt_checkliste_fuer_ausgabe(self):
+        """F-132: Ausgabe zeigt die Checkliste Zugänge, keine Prüfpunkte (A-0911)."""
+        services.gerat_ausgeben(
+            self.gerat, ziel=self.anna, ausgefuehrt_von=self.admin,
+        )
+        protokoll = Protokoll.objects.first()
+        protokoll.stand = Protokoll.STAND_BEARBEITER_OFFEN
+        protokoll.save(update_fields=["stand"])
+        self.client.force_login(self.admin)
+        antwort = self.client.get(f"/protokolle/{protokoll.nr}/")
+        self.assertEqual(antwort.status_code, 200)
+        inhalt = antwort.content.decode("utf-8")
+        self.assertIn("Checkliste Zugänge", inhalt)
+        self.assertNotIn("Prüfpunkte IT-Offboarding", inhalt)
+
+    def test_offboarding_post_speichert_werte(self):
+        """F-133: POST speichert die Werte der Prüfpunkte (A-0911)."""
+        self._ruecknahme()
+        protokoll = Protokoll.objects.first()
+        protokoll.art = Protokoll.ART_RUECKNAHME
+        protokoll.save(update_fields=["art"])
+        self.client.force_login(self.admin)
+        antwort = self.client.post(
+            f"/protokolle/{protokoll.nr}/offboarding/",
+            {
+                "offboarding.werkseinstellung": "erledigt",
+                "offboarding.werkseinstellung.datum": "04.11.2026",
+                "offboarding.werkseinstellung.kuerzel": "IT",
+                "offboarding.werkseinstellung.bemerkung": "",
+                "offboarding.zugangskarte": "nicht_zutreffend",
+                "offboarding.zugangskarte.datum": "",
+                "offboarding.zugangskarte.kuerzel": "",
+                "offboarding.zugangskarte.bemerkung": "",
+            },
+        )
+        self.assertEqual(antwort.status_code, 302)
+        protokoll.refresh_from_db()
+        self.assertEqual(
+            protokoll.offboarding["werkseinstellung"]["status"], "erledigt"
+        )
+        self.assertEqual(
+            protokoll.offboarding["werkseinstellung"]["datum"], "04.11.2026"
+        )
+        self.assertEqual(
+            protokoll.offboarding["werkseinstellung"]["kuerzel"], "IT"
+        )
+        self.assertEqual(
+            protokoll.offboarding["zugangskarte"]["status"], "nicht_zutreffend"
+        )
+
+    def test_offboarding_punkt_13_wird_vom_tool_gesetzt(self):
+        """F-133: Punkt 13 setzt das Tool selbst (A-0911)."""
+        self._ruecknahme()
+        protokoll = Protokoll.objects.first()
+        protokoll.art = Protokoll.ART_RUECKNAHME
+        protokoll.save(update_fields=["art"])
+        self.client.force_login(self.admin)
+        self.client.post(
+            f"/protokolle/{protokoll.nr}/offboarding/",
+            {
+                "offboarding.werkseinstellung": "erledigt",
+                "offboarding.werkseinstellung.datum": "04.11.2026",
+                "offboarding.werkseinstellung.kuerzel": "IT",
+                "offboarding.werkseinstellung.bemerkung": "",
+            },
+        )
+        protokoll.refresh_from_db()
+        p13 = Protokoll.OFFBOARDING_PUNKTE[-1][0]
+        self.assertIn(p13, protokoll.offboarding)
+        self.assertEqual(
+            protokoll.offboarding[p13]["status"], "erledigt"
+        )
+
+    def test_offboarding_pdf_blockiert_bei_offenen_punkten(self):
+        """F-132: PDF entsteht erst, wenn jeder Punkt beantwortet ist (A-0911)."""
+        self._ruecknahme()
+        protokoll = Protokoll.objects.first()
+        protokoll.art = Protokoll.ART_RUECKNAHME
+        protokoll.save(update_fields=["art"])
+        # Einen Punkt beantworten, die anderen bleiben offen.
+        protokoll.offboarding = {
+            Protokoll.OFFBOARDING_PUNKTE[0][0]: {
+                "status": "erledigt",
+                "datum": "04.11.2026",
+                "kuerzel": "IT",
+                "bemerkung": "",
+            }
+        }
+        protokoll.save(update_fields=["offboarding"])
+        self.client.force_login(self.admin)
+        antwort = self.client.get(f"/protokolle/{protokoll.nr}/pdf/")
+        # Die Prüfung leitet zurück mit Fehlermeldung.
+        self.assertEqual(antwort.status_code, 302)
+        ziel = antwort["Location"]
+        sich = self.client.get(ziel)
+        inhalt = sich.content.decode("utf-8", errors="replace")
+        self.assertIn("noch nicht vollständig beantwortet", inhalt)

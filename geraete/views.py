@@ -1572,10 +1572,33 @@ def protokoll_detail(request, protokoll_nr):
         {"schluessel": schluessel, "text": text, "wert": (protokoll.checkliste or {}).get(schluessel)}
         for schluessel, text in Protokoll.CHECKLISTE_PUNKTE
     ]
-    offboarding = [
-        {"text": text, "wert": bool((protokoll.offboarding or {}).get(schluessel))}
-        for schluessel, text in Protokoll.OFFBOARDING_PUNKTE
-    ]
+    offboarding = []
+    for schluessel, text in Protokoll.OFFBOARDING_PUNKTE:
+        wert = (protokoll.offboarding or {}).get(schluessel)
+        if isinstance(wert, dict):
+            offboarding.append({
+                "schluessel": schluessel,
+                "text": text,
+                "wert": wert.get("status"),
+                "datum": wert.get("datum", ""),
+                "kuerzel": wert.get("kuerzel", ""),
+                "bemerkung": wert.get("bemerkung", ""),
+            })
+        elif wert is True:
+            offboarding.append({
+                "schluessel": schluessel, "text": text, "wert": "erledigt",
+                "datum": "", "kuerzel": "", "bemerkung": "",
+            })
+        elif wert is False:
+            offboarding.append({
+                "schluessel": schluessel, "text": text, "wert": "nicht_zutreffend",
+                "datum": "", "kuerzel": "", "bemerkung": "",
+            })
+        else:
+            offboarding.append({
+                "schluessel": schluessel, "text": text, "wert": None,
+                "datum": "", "kuerzel": "", "bemerkung": "",
+            })
     return render(
         request,
         "geraete/protokoll_detail.html",
@@ -1638,6 +1661,45 @@ def protokoll_checkliste_beantworten(request, protokoll_nr):
         meldung_error(request, str(fehler))
     else:
         meldung_success(request, "Checkliste gespeichert (F-132).")
+    return redirect(f"/protokolle/{protokoll_nr}/")
+
+
+@login_required
+@require_POST
+def protokoll_offboarding_beantworten(request, protokoll_nr):
+    """POST /protokolle/<Nummer>/offboarding/ – Prüfpunkte IT-Offboarding (F-133).
+
+    Die 13 Punkte: je Punkt erledigt, in Klärung oder nicht zutreffend,
+    dazu Datum, Kürzel und Bemerkung. Punkt 13 „Rückgabe im
+    Hardware-Inventar dokumentiert" setzt das Tool selbst (F-133).
+    """
+    protokoll = get_object_or_404(Protokoll, nr=protokoll_nr)
+    _protokoll_berechtigt(protokoll, request)
+
+    from . import protokoll as protokoll_services
+
+    werte = {}
+    for schluessel, _text in Protokoll.OFFBOARDING_PUNKTE:
+        roh = request.POST.get(f"offboarding.{schluessel}")
+        if roh in ("erledigt", "in_klaerung", "nicht_zutreffend"):
+            werte[schluessel] = roh
+            werte[f"{schluessel}.datum"] = request.POST.get(
+                f"offboarding.{schluessel}.datum", ""
+            )
+            werte[f"{schluessel}.kuerzel"] = request.POST.get(
+                f"offboarding.{schluessel}.kuerzel", ""
+            )
+            werte[f"{schluessel}.bemerkung"] = request.POST.get(
+                f"offboarding.{schluessel}.bemerkung", ""
+            )
+    try:
+        protokoll_services.offboarding_beantworten(
+            protokoll, werte, request.user
+        )
+    except services.GeratFehler as fehler:
+        meldung_error(request, str(fehler))
+    else:
+        meldung_success(request, "Prüfpunkte gespeichert (F-133).")
     return redirect(f"/protokolle/{protokoll_nr}/")
 
 

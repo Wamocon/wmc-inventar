@@ -36,6 +36,50 @@
     </table>
 </section>
 
+{% if protokoll.art == "ruecknahme" %}
+<section class="abschnitt" data-test="protokoll-offboarding">
+    <h2>Prüfpunkte IT-Offboarding (F-133)</h2>
+    <form method="post" action="/protokolle/{{ protokoll.nr }}/offboarding/" data-test="offboarding-formular">
+        {% csrf_token %}
+        <table class="tabelle checklist">
+            <thead>
+                <tr>
+                    <th>Prüfpunkt</th>
+                    <th>Status</th>
+                    <th>Datum</th>
+                    <th>Kürzel</th>
+                    <th>Bemerkung</th>
+                </tr>
+            </thead>
+            {% for punkt in offboarding %}
+            <tr>
+                <td data-test="offboarding-punkt" data-id="{{ punkt.schluessel }}">{{ punkt.text }}</td>
+                <td>
+                    <label><input type="radio" name="offboarding.{{ punkt.schluessel }}" value="erledigt" {% if punkt.wert == "erledigt" %}checked{% endif %}> erledigt</label>
+                    <label><input type="radio" name="offboarding.{{ punkt.schluessel }}" value="in_klaerung" {% if punkt.wert == "in_klaerung" %}checked{% endif %}> in Klärung</label>
+                    <label><input type="radio" name="offboarding.{{ punkt.schluessel }}" value="nicht_zutreffend" {% if punkt.wert == "nicht_zutreffend" %}checked{% endif %}> nicht zutreffend</label>
+                </td>
+                <td><input type="text" name="offboarding.{{ punkt.schluessel }}.datum" value="{{ punkt.datum|default:'' }}" data-test="offboarding-datum" data-id="{{ punkt.schluessel }}"></td>
+                <td><input type="text" name="offboarding.{{ punkt.schluessel }}.kuerzel" value="{{ punkt.kuerzel|default:'' }}" data-test="offboarding-kuerzel" data-id="{{ punkt.schluessel }}"></td>
+                <td><input type="text" name="offboarding.{{ punkt.schluessel }}.bemerkung" value="{{ punkt.bemerkung|default:'' }}" data-test="offboarding-bemerkung" data-id="{{ punkt.schluessel }}"></td>
+            </tr>
+            {% endfor %}
+        </table>
+        <p class="muted">
+            {% if protokoll.stand == "abgeschlossen" %}
+            Abgeschlossen – keine Änderungen möglich (F-22).
+            {% else %}
+            {% if protokoll.offboarding_unbeantwortet %}
+            {% for offen in protokoll.offboarding_unbeantwortet %}
+            <span class="muted">{{ offen }} noch offen</span> ·
+            {% endfor %}
+            {% endif %}
+            <button class="btn" type="submit" data-test="offboarding-speichern">Speichern</button>
+            {% endif %}
+        </p>
+    </form>
+</section>
+{% else %}
 <section class="abschnitt" data-test="protokoll-checkliste">
     <h2>Checkliste Zugänge (F-132)</h2>
     <form method="post" action="/protokolle/{{ protokoll.nr }}/checkliste/" data-test="checkliste-formular">
@@ -64,25 +108,6 @@
             {% endif %}
         </p>
     </form>
-</section>
-
-{% if protokoll.art == "ruecknahme" %}
-<section class="abschnitt" data-test="protokoll-offboarding">
-    <h2>Prüfpunkte IT-Offboarding (F-133)</h2>
-    <table class="tabelle checklist">
-        {% for punkt in offboarding %}
-        <tr>
-            <td>{{ punkt.text }}</td>
-            <td>
-                {% if punkt.wert %}
-                <span class="chip stand-ok">erledigt</span>
-                {% else %}
-                <span class="chip stand-offen">nicht zutreffend</span>
-                {% endif %}
-            </td>
-        </tr>
-        {% endfor %}
-    </table>
 </section>
 {% endif %}
 
