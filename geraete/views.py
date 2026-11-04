@@ -405,12 +405,20 @@ def arbeitsplaetze(request):
     plane = services.plan_auswahl()
     param_hervor = request.GET.get("hervorheben", "")
     if param_hervor:
-        plan = services.plan_finde(*param_hervor.split("|", 1)) or (plane[0] if plane else None)
+        if "|" in param_hervor:
+            standort, etage = param_hervor.split("|", 1)
+            plan = services.plan_finde(standort, etage) or (plane[0] if plane else None)
+        else:
+            plan = (plane[0] if plane else None)
         hervorheben = param_hervor.split("|", 1)[1] if "|" in param_hervor else ""
     else:
         param_plan = request.GET.get("plan", "")
         if param_plan:
-            plan = services.plan_finde(*param_plan.split("|", 1)) or (plane[0] if plane else None)
+            if "|" in param_plan:
+                standort, etage = param_plan.split("|", 1)
+                plan = services.plan_finde(standort, etage) or (plane[0] if plane else None)
+            else:
+                plan = (plane[0] if plane else None)
         else:
             plan = plane[0] if plane else None
         hervorheben = ""

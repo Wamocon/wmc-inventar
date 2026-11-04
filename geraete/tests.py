@@ -1696,6 +1696,18 @@ class RaumplanTests(TestCase):
         for kennung in ["STUDIO-TECHNIK", "ACADEMY-TECHNIK", "SERVER-TECHNIK", "EINGANG"]:
             self.assertIn(f'data-id="{kennung}"', html)
 
+    def test_arbeitsplaetze_plan_nr_kein_500(self):
+        """E: /arbeitsplaetze/?plan=1 antwortet mit 200, nicht 500."""
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get("/arbeitsplaetze/", {"plan": "1"})
+        self.assertEqual(antwort.status_code, 200)
+
+    def test_arbeitsplaetze_plan_unpassend_zeigt_normale_seite(self):
+        """E: Ein unpassender Plan-Wert zeigt die normale Seite."""
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        antwort = self.client.get("/arbeitsplaetze/", {"plan": "999"})
+        self.assertEqual(antwort.status_code, 200)
+
 
 # --- A-0107: Raumplan pflegen (F-67, Teil 2) -----------------------------------
 
