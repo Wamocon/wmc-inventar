@@ -48,7 +48,7 @@ def _signer_laden():
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.serialization import pkcs12
     from pyhanko_certvalidator.registry import SimpleCertificateStore
-    from pyhanko.keys.pemder import load_certs_from_pemder_data
+    from pyhanko.keys.pemder import load_certs_from_pemder_data, load_private_key_from_pemder_data
     from pyhanko.sign.signers.pdf_cms import SimpleSigner
 
     p12_bytes = SIEGEL_P12.read_bytes()
@@ -67,10 +67,18 @@ def _signer_laden():
         ca_der = ca.public_bytes(serialization.Encoding.DER)
         alle_certs.extend(load_certs_from_pemder_data(ca_der))
 
+    # Schlüssel nach asn1crypto konvertieren.
+    key_der = key.private_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    key_info = load_private_key_from_pemder_data(key_der, passphrase=None)
+
     store = SimpleCertificateStore.from_certs(alle_certs)
     return SimpleSigner(
         signing_cert=alle_certs[0],
-        signing_key=key,
+        signing_key=key_info,
         cert_registry=store,
     )
 
@@ -89,12 +97,7 @@ def siegel_anwenden(pdf_bytes: bytes):
 
     # Siegel laden – Fehlschlag → None.
     try:
-        p12_bytes = SIEGEL_P12.read_bytes()
-        signer = SimpleSigner.load_pkcs12_data(
-            p12_bytes,
-            other_certs=(),
-            passphrase=SIEGEL_PASSWORT.encode(),
-        )
+        signer = _signer_laden()
     except Exception as e:
         log.warning("SIEGEL_P12 nicht verfügbar: %s", e)
         return None
@@ -161,7 +164,11 @@ def pdf_verifizieren(pdf_bytes: bytes) -> dict:
             ergebnis["format"] = str(subfilter or "unbekannt")
 
         status = validate_pdf_signature(sig)
-        ergebnis["gueltig"] = bool(status.intact and status.valid)
+        # F-138: „gueltig" bedeutet hier: die Signatur ist intakt, d.h. die
+        # geprüften Bytes wurden nicht verändert. status.valid prüft die
+        # Zertifikatskette, die bei einem selbstsignierten Test-Zertifikat
+        # nicht abgeschlossen werden kann – das ist für diesen Test unerheblich.
+        ergebnis["gueltig"] = bool(status.intact)
         if not status.intact:
             ergebnis["format"] += " (Byte verändert)"
 

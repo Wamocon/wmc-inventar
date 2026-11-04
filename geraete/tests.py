@@ -3384,6 +3384,11 @@ class ProtokollAusgabeTests(TestCase):
         """F-132: PDF entsteht erst, wenn die Checkliste beantwortet ist."""
         self._ausgeben()
         protokoll = Protokoll.objects.first()
+        # Auf bearbeiter-offen setzen (tool-Weg, A-0127),
+        # da der scan-offen-Pfad nicht signiert werden kann.
+        protokoll.stand = Protokoll.STAND_BEARBEITER_OFFEN
+        protokoll.unterschrift_art = "tool"
+        protokoll.save()
         self.client.force_login(self.admin)
         antwort = self.client.get(f"/protokolle/{protokoll.nr}/pdf/")
         self.assertNotEqual(antwort.status_code, 200)
@@ -3601,6 +3606,10 @@ class M6Teil2SignaturTests(TestCase):
             person=self.person, gerat=self.g1,
             erzeugt_von=self.admin,
         )
+        # Checkliste beantworten (F-132), damit Signatur und PDF funktionieren.
+        for schluessel, _text in Protokoll.CHECKLISTE_PUNKTE:
+            self.protokoll.checkliste[schluessel] = 1
+        self.protokoll.save()
 
     def test_bearbeiter_signieren_ungueltiges_passwort(self):
         """F-135: Falsches Passwort wird abgelehnt."""
@@ -3717,6 +3726,10 @@ class M6Teil2GegenzeichnungTests(TestCase):
             person=self.person, gerat=self.g1,
             erzeugt_von=self.admin,
         )
+        # Checkliste beantworten (F-132), damit Signatur und PDF funktionieren.
+        for schluessel, _text in Protokoll.CHECKLISTE_PUNKTE:
+            self.protokoll.checkliste[schluessel] = 1
+        self.protokoll.save()
         # Bearbeiter signiert.
         self.client.force_login(self.admin)
         self.client.post(
@@ -3906,6 +3919,10 @@ class M6Teil2RuecknahmeTests(TestCase):
             erzeugt_von=self.admin,
             art=Protokoll.ART_RUECKNAHME,
         )
+        # Checkliste beantworten (F-132), damit Signatur und PDF funktionieren.
+        for schluessel, _text in Protokoll.CHECKLISTE_PUNKTE:
+            self.protokoll.checkliste[schluessel] = 1
+        self.protokoll.save()
 
     def test_ruecknahme_ohne_gegenzeichnung_nicht_abgeschlossen(self):
         """F-141: Rücknahme ohne Gegenzeichnung ist nicht abgeschlossen."""
@@ -4250,6 +4267,12 @@ class A0128AusgabeTest(TestCase):
     Nach der Gegenzeichnung: weiter „In Benutzung".
     """
 
+    def _checkliste_beantworten(self, protokoll):
+        """Alle Checklisten-Punkte beantworten (F-132)."""
+        for schluessel, _text in Protokoll.CHECKLISTE_PUNKTE:
+            protokoll.checkliste[schluessel] = 1
+        protokoll.save()
+
     def setUp(self):
         self.admin = konto_erstellen("admin0128")
         self.kat = Kategorie.objects.create(name="Testkategorie A0128")
@@ -4303,6 +4326,8 @@ class A0128AusgabeTest(TestCase):
             },
         )
         protokoll = Protokoll.objects.filter(geraet=self.g1).first()
+        # Checkliste beantworten (F-132), damit die Signatur durchgeht.
+        self._checkliste_beantworten(protokoll)
         # Signieren.
         self.client.force_login(self.admin)
         antwort = self.client.post(
@@ -4337,6 +4362,8 @@ class A0128AusgabeTest(TestCase):
             },
         )
         protokoll = Protokoll.objects.filter(geraet=self.g1).first()
+        # Checkliste beantworten (F-132), damit die Signatur durchgeht.
+        self._checkliste_beantworten(protokoll)
         # Signieren.
         self.client.force_login(self.admin)
         self.client.post(
@@ -4410,6 +4437,10 @@ class A0128VerleihTest(TestCase):
         self.assertIsNotNone(protokoll.leihe)
         # Leihe ist „ausgegeben".
         self.assertEqual(protokoll.leihe.status, Leihe.STATUS_AUSGEGEBEN)
+        # Checkliste beantworten (F-132), damit die Signatur durchgeht.
+        for schluessel, _text in Protokoll.CHECKLISTE_PUNKTE:
+            protokoll.checkliste[schluessel] = 1
+        protokoll.save()
         # Signieren.
         self.client.force_login(self.admin)
         antwort = self.client.post(

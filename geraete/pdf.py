@@ -475,9 +475,9 @@ def _pruefprotokoll_seite(protokoll: Protokoll) -> str:
   <tr><td class="lbl">Bearbeiter</td><td>{protokoll.bearbeiter or "–"}</td></tr>
   <tr><td class="lbl">Empfänger</td><td>{protokoll.person.vorname} {protokoll.person.nachname}</td></tr>
   <tr><td class="lbl">Datum der Ausgabe</td><td>{protokoll.datum.strftime("%d.%m.%Y")}</td></tr>
-  <tr><td class="lbl">Signatur des Bearbeiters</td><td>{"vorliegt" if protokoll.bearbeiter_signatur else "fehlt"}</td></tr>
+  <tr><td class="lbl">Signatur des Bearbeiters</td><td>{"vorliegt" if protokoll.bearbeiter_signiert_am else "fehlt"}</td></tr>
   <tr><td class="lbl">Gegenzeichnung</td><td>{"vorliegt" if protokoll.gegenzeichnung_signiert_am else "fehlt"}</td></tr>
-  <tr><td class="lbl">PDF-Hash (SHA-256)</td><td>{(protokoll.pdf_hash or "")[:64] or "–"}</td></tr>
+  <tr><td class="lbl">PDF-Hash (SHA-256)</td><td>{(protokoll.pdf_hash_bearbeiter or "")[:64] or "–"}</td></tr>
   <tr><td class="lbl">Erzeugt am</td><td>{jetzt.strftime("%d.%m.%Y %H:%M")} Uhr</td></tr>
 </table>
 <p class="hinweis">
@@ -492,13 +492,23 @@ def _pruefprotokoll_seite(protokoll: Protokoll) -> str:
 def pdf_fertig_bauen(protokoll: Protokoll) -> bytes:
     """F-137, F-138: Fertiges PDF mit Siegel und Prüfprotokoll als letzte Seite.
 
-    1. PDF bauen (Checkliste muss beantwortet sein).
-    2. Prüfprotokoll-Seite anhängen.
-    3. Mit PAdES-Siegel versiegeln (falls verfügbar).
+    1. Checkliste muss beantwortet sein (F-132).
+    2. PDF bauen.
+    3. Prüfprotokoll-Seite anhängen.
+    4. Mit PAdES-Siegel versiegeln (falls verfügbar).
 
     Liefert die versiegelte PDF-Bytes.
     """
-    # 1. PDF bauen.
+    # 1. Checkliste prüfen (F-132).
+    offene = protokoll.checkliste_unbeantwortet()
+    if offene:
+        from .services import GeratFehler
+        raise GeratFehler(
+            "Die Checkliste ist noch nicht vollständig beantwortet "
+            f"({len(offene)} Punkte offen, F-132); das PDF entsteht erst danach."
+        )
+
+    # 2. PDF bauen.
     html = _render_pdf_html(protokoll)
 
     # 2. Prüfprotokoll-Seite anhängen.
