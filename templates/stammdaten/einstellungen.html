@@ -8,14 +8,6 @@
   </div>
 </div>
 
-{% if messages %}
-<div class="meldungen" data-test="meldungen">
-  {% for m in messages %}
-    <div class="meldung {{ m.tags }}" data-test="meldung">{{ m }}</div>
-  {% endfor %}
-</div>
-{% endif %}
-
 <form method="post" enctype="multipart/form-data" novalidate data-test="einstellungen-formular">
   {% csrf_token %}
 

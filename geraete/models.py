@@ -615,12 +615,15 @@ class Protokoll(models.Model):
     )
 
     def checkliste_unbeantwortet(self) -> list[str]:
-        """F-132: Punkte, die noch nicht ja/nein beantwortet sind."""
+        """F-132: Punkte, die noch nicht ja/nein beantwortet sind.
+
+        Liefert die Textbezeichnung der offenen Punkte (F-132, F-130).
+        """
         werte = self.checkliste or {}
         offene = []
-        for schluessel, _text in self.CHECKLISTE_PUNKTE:
+        for schluessel, text in self.CHECKLISTE_PUNKTE:
             if werte.get(schluessel) not in (0, 1):
-                offene.append(schluessel)
+                offene.append(text)
         return offene
 
     # --- F-133: Prüfpunkte IT-Offboarding (13 Punkte) --------------------------

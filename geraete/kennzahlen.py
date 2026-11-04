@@ -201,9 +201,12 @@ def garantie_laeuft_ab(heute: date | None = None) -> list[dict]:
 
 
 def unterschreibungen_offen(heute: date | None = None) -> list[dict]:
-    """Unterschriften offen: Protokolle in einem der drei wartenden Stände (F-22)."""
+    """Unterschriften offen: Protokolle in einem der drei wartenden Stände (F-22, F-102).
+
+    Liefert jedes nicht abgeschlossene Protokoll mit Sprung ins Protokoll.
+    """
     protokolle = (
-        Protokoll.objects.filter(stand__startswith="wartet")
+        Protokoll.objects.exclude(stand=Protokoll.STAND_ABGESCHLOSSEN)
         .select_related("person", "geraet")
         .order_by("nr")
     )

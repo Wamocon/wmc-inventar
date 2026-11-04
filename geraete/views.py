@@ -1329,7 +1329,8 @@ def meine_geraete_leihe_neu(request):
                 gerat=form.cleaned_data.get("gerat"),
                 erzeugt_von=request.user,
             )
-            return redirect("/verleih/")
+            meldung_success(request, "Leihanfrage gesendet. Sie ist mit dem Status 'angefragt' angelegt.")
+            return redirect("/meine-geraete/")
         except GeratFehler as fehler_vorgang:
             meldung = str(fehler_vorgang)
 

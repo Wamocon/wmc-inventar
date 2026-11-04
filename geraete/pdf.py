@@ -495,9 +495,9 @@ def pdf_fertig_bauen(protokoll: Protokoll) -> bytes:
     1. Checkliste muss beantwortet sein (F-132).
     2. PDF bauen.
     3. Prüfprotokoll-Seite anhängen.
-    4. Mit PAdES-Siegel versiegeln (falls verfügbar).
+    4. Mit PAdES-Siegel versiegeln (F-138: erst nach der letzten Signatur).
 
-    Liefert die versiegelte PDF-Bytes.
+    Liefert die PDF-Bytes (versiegelt, wenn die Gegenzeichnung erfolgt ist).
     """
     # 1. Checkliste prüfen (F-132).
     offene = protokoll.checkliste_unbeantwortet()
@@ -521,10 +521,11 @@ def pdf_fertig_bauen(protokoll: Protokoll) -> bytes:
     HTML(string=html, base_url=os.getcwd()).write_pdf(puffer)
     pdf_bytes = puffer.getvalue()
 
-    # 4. Siegel anwenden (F-138).
-    from . import siegel as siegel_modul
-    versiegelt = siegel_modul.siegel_anwenden(pdf_bytes)
-    if versiegelt is not None:
-        return versiegelt
-    # Ohne Siegel weiterlaufen (Bestätigung ohne Anhang).
+    # 4. Siegel anwenden (F-138): erst nach der letzten Signatur (Gegenzeichnung).
+    if protokoll.gegenzeichnung_signiert_am is not None:
+        from . import siegel as siegel_modul
+        versiegelt = siegel_modul.siegel_anwenden(pdf_bytes)
+        if versiegelt is not None:
+            return versiegelt
+    # Vor der letzten Signatur: PDF ohne Siegel.
     return pdf_bytes
