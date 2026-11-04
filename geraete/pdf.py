@@ -475,8 +475,8 @@ def _pruefprotokoll_seite(protokoll: Protokoll) -> str:
   <tr><td class="lbl">Bearbeiter</td><td>{protokoll.bearbeiter or "–"}</td></tr>
   <tr><td class="lbl">Empfänger</td><td>{protokoll.person.vorname} {protokoll.person.nachname}</td></tr>
   <tr><td class="lbl">Datum der Ausgabe</td><td>{protokoll.datum.strftime("%d.%m.%Y")}</td></tr>
-  <tr><td class="lbl">Signatur des Bearbeiters</td><td>{"vorliegt" if protokoll.signatur else "fehlt"}</td></tr>
-  <tr><td class="lbl">Gegenzeichnung</td><td>{"vorliegt" if protokoll.gegenzeichnung else "fehlt"}</td></tr>
+  <tr><td class="lbl">Signatur des Bearbeiters</td><td>{"vorliegt" if protokoll.bearbeiter_signatur else "fehlt"}</td></tr>
+  <tr><td class="lbl">Gegenzeichnung</td><td>{"vorliegt" if protokoll.gegenzeichnung_signiert_am else "fehlt"}</td></tr>
   <tr><td class="lbl">PDF-Hash (SHA-256)</td><td>{(protokoll.pdf_hash or "")[:64] or "–"}</td></tr>
   <tr><td class="lbl">Erzeugt am</td><td>{jetzt.strftime("%d.%m.%Y %H:%M")} Uhr</td></tr>
 </table>
