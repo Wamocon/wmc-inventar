@@ -62,8 +62,6 @@ def _vorschau_aufladen(stand: dict) -> list[VorschauZeile]:
         stand.get("wert_zu_person", {}),
         stand.get("wert_zu_arbeitsplatz", {}),
     )
-
-
 def import_seite(request: HttpRequest):
     """/import/: die Folge der Schritte (F-80 bis F-86)."""
     if not _darf_import(request.user):
@@ -87,19 +85,32 @@ def import_seite(request: HttpRequest):
             "hinweis_flag": hinweis_flag,
         })
     if schritt == 3:
+        # A-0912 Nr. 3: Kategorie ist eine Auswahl aus den vorhandenen
+        # Kategorien plus „nicht übernehmen“, wie im Prototyp.
+        from stammdaten.models import Kategorie as _Kat
+        kat_namen = list(_Kat.objects.order_by("name").values_list("name", flat=True))
         return render(request, "geraete/import.html", {
             "schritt": 3,
             "vorlage": vorlage,
-            "werte_kategorie": vorlage.werte_von("Kategorie"),
-            "werte_person": vorlage.werte_von("Person"),
-            "werte_arbeitsplatz": vorlage.werte_von("Arbeitsplatz"),
+            "werte_kategorie": vorlage.werte_von("Kategorie", stand.get("spalten_ziel")),
+            "werte_person": vorlage.werte_von("Person", stand.get("spalten_ziel")),
+            "werte_arbeitsplatz": vorlage.werte_von("Arbeitsplatz", stand.get("spalten_ziel")),
+            "kategorie_namen": kat_namen,
             "neuer_person_name": stand.get("neuer_person_name", ""),
         })
     # schritt == 2
+    # A-0912 Nr. 2: Spalten, die „Kategorie/Modell“ anbieten dürfen.
+    wahl_spalten = set()
+    for s in vorlage.spalten:
+        if " ".join(s.name.lower().split()) in import_parser.WAHL_KAT_MOD_SPALTEN:
+            wahl_spalten.add(s.name)
+    ziele = list(import_parser.ZIELFELDER)
     return render(request, "geraete/import.html", {
         "schritt": 2,
         "vorlage": vorlage,
-        "ziele": import_parser.ZIELFELDER,
+        "ziele": ziele,
+        "wahl_kat_mod": import_parser.ZIEL_WAHL_KAT_MOD,
+        "wahl_spalten": wahl_spalten,
     })
 
 
@@ -132,16 +143,17 @@ def import_datei(request: HttpRequest):
             wb.close()
         except Exception:
             blatter = []
+    spalten_ziel = {s.name: s.ziel for s in vorlage.spalten}
     stand = {
         "dateiname": dateiname,
         "datei_hex": byte.hex(),
         "blatt": vorlage.blatt,
         "kopfzeile": vorlage.kopfzeile,
         "blatter": blatter,
-        "spalten_ziel": {s.name: s.ziel for s in vorlage.spalten},
-        "wert_zu_kategorie": {w: "" for w in vorlage.werte_von("Kategorie")},
-        "wert_zu_person": {w: "" for w in vorlage.werte_von("Person")},
-        "wert_zu_arbeitsplatz": {w: "" for w in vorlage.werte_von("Arbeitsplatz")},
+        "spalten_ziel": spalten_ziel,
+        "wert_zu_kategorie": {w: "" for w in vorlage.werte_von("Kategorie", spalten_ziel)},
+        "wert_zu_person": {w: "" for w in vorlage.werte_von("Person", spalten_ziel)},
+        "wert_zu_arbeitsplatz": {w: "" for w in vorlage.werte_von("Arbeitsplatz", spalten_ziel)},
         "neuer_person_name": "",
         "schritt": 2,
     }

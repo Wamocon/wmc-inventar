@@ -48,6 +48,16 @@ ZIELFELDER = [
     IGNORIEREN,
 ]
 
+# A-0912 Nr. 2: Blatt Notebooks: „Gerät wird Modell und über die Werte
+# Kategorie“ (vorlagen/README); der Prototyp sagt dazu: „Die Kategorie kommt
+# aus der Spalte Gerät und wird im nächsten Schritt je Wert zugeordnet.“
+# Deshalb bietet das Zielfeld für eine solche Spalte die Wahl
+# „Kategorie/Modell“ an: der Wert wird Modell, die Spalte steht in
+# Schritt 3 unter Kategorie.
+# Spaltennamen, die in Normalform (klein, zusammengefasst) dazugehören.
+ZIEL_WAHL_KAT_MOD = "Kategorie/Modell"
+WAHL_KAT_MOD_SPALTEN = {"gerät", "geraet", "typ", "modell", "kategorie"}
+
 # Zielfeld, das je Wert in der Datei einmal zugeordnet wird (F-82).
 WERTFELDER = ["Kategorie", "Person", "Arbeitsplatz"]
 
@@ -128,9 +138,18 @@ class Vorlage:
     # und im Bestand stehen, aber in diesem Blatt keine Rolle spielen.
     vorhandene_blatt_zeilen: set[int] = field(default_factory=set)
 
-    def werte_von(self, ziel: str) -> list[str]:
-        """Alle unterschiedlichen Werte einer Zielfeld-Spalte, in Reihenfolge."""
-        spalten = [s for s in self.spalten if s.ziel == ziel]
+    def werte_von(self, ziel: str, spalten_ziel: dict[str, str] | None = None) -> list[str]:
+        """Alle unterschiedlichen Werte einer Zielfeld-Spalte, in Reihenfolge.
+
+        Wenn ``spalten_ziel`` mitgegeben ist (die in Schritt 2 gewählte
+        Zuordnung), wird daraus die Spalte bestimmt; sonst aus
+        ``Quellspalte.ziel`` (automatischer Vorschlag, F-81) (A-0912, Nr. 1).
+        """
+        if spalten_ziel is not None:
+            spalten = [s for s in self.spalten
+                       if spalten_ziel.get(s.name, IGNORIEREN) == ziel]
+        else:
+            spalten = [s for s in self.spalten if s.ziel == ziel]
         if not spalten:
             return []
         name = spalten[0].name
@@ -284,13 +303,12 @@ class VorschauZeile:
     hinweise: list[str] = field(default_factory=list)
 
 
-def _spalten_fuer(vorlage: Vorlage, ziel: str) -> list[Quellspalte]:
-    return [s for s in vorlage.spalten if s.ziel == ziel]
-
-
 def _wert_feld(vorlage: Vorlage, ziel: str, werte: dict) -> str:
     """Den Wert eines Zielfelds aus der Zeile holen, wenn es zugeordnet ist."""
-    for spalte in _spalten_fuer(vorlage, ziel):
+    auswahl = {ziel, ZIEL_WAHL_KAT_MOD} if ziel == "Modell" else {ziel}
+    for spalte in vorlage.spalten:
+        if spalte.ziel not in auswahl:
+            continue
         roh = (werte.get(spalte.name) or "").strip()
         if roh and not _leer(roh):
             return roh
@@ -337,9 +355,12 @@ GARANZIE_TYPOBER = "garantie"
 
 
 def _kategorie_name_aus_wert(vorlage: Vorlage, eintrag: dict, spalten_ziel: dict[str, str]) -> str:
-    """Den Kategorie-Namen der Zeile aus der Werte-Zuordnung holen (F-82)."""
+    """Den Kategorie-Namen der Zeile aus der Werte-Zuordnung holen (F-82).
+
+    A-0912 Nr. 2: Zählt auch die Wahl ``Kategorie/Modell``.
+    """
     for spalte in vorlage.spalten:
-        if spalten_ziel.get(spalte.name, IGNORIEREN) != "Kategorie":
+        if spalten_ziel.get(spalte.name, IGNORIEREN) not in ("Kategorie", ZIEL_WAHL_KAT_MOD):
             continue
         roh = (eintrag["werte"].get(spalte.name) or "").strip()
         if _leer(roh):
@@ -391,9 +412,17 @@ def vorschau_berechnen(
 
 
 def _wert_von(vorlage: Vorlage, eintrag: dict, ziel: str, spalten_ziel: dict[str, str]) -> str:
-    """Den Wert für ein Zielfeld aus den Zeilenwerten holen (F-81)."""
+    """Den Wert für ein Zielfeld aus den Zeilenwerten holen (F-81).
+
+    A-0912 Nr. 2: Zählt auch die Wahl ``Kategorie/Modell``, deren Wert
+    Modell ist (die Spalte steht in Schritt 3 unter Kategorie).
+    """
+    if ziel == "Modell":
+        auswahl = {"Modell", ZIEL_WAHL_KAT_MOD}
+    else:
+        auswahl = {ziel}
     for spalte in vorlage.spalten:
-        if spalten_ziel.get(spalte.name, IGNORIEREN) != ziel:
+        if spalten_ziel.get(spalte.name, IGNORIEREN) not in auswahl:
             continue
         roh = (eintrag["werte"].get(spalte.name) or "").strip()
         if not _leer(roh):
@@ -417,7 +446,7 @@ def _zeile_berechnen(vorlage, eintrag, spalten_ziel, kat_map, pers_map, arbp_map
     geraetename = _wert_von(vorlage, eintrag, "Gerätename", spalten_ziel)
     kategorie_name = ""
     for spalte in vorlage.spalten:
-        if spalten_ziel.get(spalte.name, IGNORIEREN) != "Kategorie":
+        if spalten_ziel.get(spalte.name, IGNORIEREN) not in ("Kategorie", ZIEL_WAHL_KAT_MOD):
             continue
         roh = (werte.get(spalte.name) or "").strip()
         if not _leer(roh):

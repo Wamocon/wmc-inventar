@@ -59,6 +59,9 @@
         <td>
           <select name="ziel_{{ s.name }}" data-test="ziel" value="ignorieren">
             <option value="ignorieren">ignorieren</option>
+            {% if s.name in wahl_spalten %}
+            <option value="{{ wahl_kat_mod }}">{{ wahl_kat_mod }}</option>
+            {% endif %}
             {% for z in ziele %}
             <option value="{{ z }}">{{ z }}</option>
             {% endfor %}
@@ -81,13 +84,21 @@
     {% csrf_token %}
 
     <h3>Kategorie</h3>
+    <p class="muted">Jeder Wert einmal: die passende Kategorie wählen oder „nicht übernehmen“. Leere Werte der Datei zählen mit (F-82).</p>
     <table class="tabelle" data-test="werte-kategorie">
       <thead><tr><th>Wert in der Datei</th><th>Zielfeld</th></tr></thead>
       <tbody>
       {% for wert in werte_kategorie %}
       <tr data-test="wert" data-name="{{ wert }}">
         <td>{{ wert }}</td>
-        <td><input type="text" name="wert_zu_kategorie_{{ wert }}" data-test="ziel-kategorie" value=""></td>
+        <td>
+          <select name="wert_zu_kategorie_{{ wert }}" data-test="ziel-kategorie">
+            <option value="">nicht übernehmen</option>
+            {% for k in kategorie_namen %}
+            <option value="{{ k }}">{{ k }}</option>
+            {% endfor %}
+          </select>
+        </td>
       </tr>
       {% endfor %}
       </tbody>

@@ -1143,21 +1143,23 @@ def import_speichern(
             notiz_s = import_parser._wert_von(vorlage, eintrag, "Notiz", spalten_ziel)
 
             # Kategorie über Wertezuordnung auflösen
+            # A-0912 Nr. 2: zählt auch die Wahl „Kategorie/Modell“.
             kategorie = None
             kategorie_name = ""
             for spalte in vorlage.spalten:
-                if spalten_ziel.get(spalte.name, import_parser.IGNORIEREN) != "Kategorie":
+                if spalten_ziel.get(spalte.name, import_parser.IGNORIEREN) not in ("Kategorie", import_parser.ZIEL_WAHL_KAT_MOD):
                     continue
                 roh = (eintrag["werte"].get(spalte.name) or "").strip()
                 if not import_parser._leer(roh):
                     kategorie_name = roh
                 break
             if kategorie_name:
-                ziel_name = wert_zu_kategorie.get(kategorie_name, "")
-                if ziel_name:
-                    kategorie = import_parser._kategorie_finden(ziel_name)
-                else:
-                    kategorie = import_parser._kategorie_finden(kategorie_name)
+                if kategorie_name not in wert_zu_kategorie or not wert_zu_kategorie.get(kategorie_name):
+                    # „nicht übernommen“ (F-82, A-0912 Nr. 4): übersprungen.
+                    ubersprungen += 1
+                    continue
+                ziel_name = wert_zu_kategorie[kategorie_name]
+                kategorie = import_parser._kategorie_finden(ziel_name)
 
             # Person über Wertezuordnung auflösen, neu anlegen wenn nötig (O-18)
             person_wert = import_parser._wert_von(vorlage, eintrag, "Person", spalten_ziel)
@@ -1184,9 +1186,10 @@ def import_speichern(
                 except ValueError:
                     preis_wert = None
 
-            # F-85: Defekt-Vermerk in der Notiz → Zustand Stufe 4
+            # F-85: Defekt-Vermerk in der Notiz → Zustand Stufe 4.
+            # A-0912 Nr. 6: Zeile 5 (Kommentar „Defect") hat Zustand 4.
             notiz_klein = notiz_s.lower() if notiz_s else ""
-            defekt = "defekt" in notiz_klein
+            defekt = "defekt" in notiz_klein or "defect" in notiz_klein
             if defekt:
                 zustand_val = Gerat.ZUSTAND_EINGESCHRAENKT
             else:
