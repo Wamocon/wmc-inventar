@@ -144,12 +144,19 @@ class Vorlage:
         Wenn ``spalten_ziel`` mitgegeben ist (die in Schritt 2 gewählte
         Zuordnung), wird daraus die Spalte bestimmt; sonst aus
         ``Quellspalte.ziel`` (automatischer Vorschlag, F-81) (A-0912, Nr. 1).
+        Zählt auch die Wahl ``Kategorie/Modell`` (A-0912, Nr. 2).
         """
+        if ziel == "Kategorie":
+            auswahl = {"Kategorie", ZIEL_WAHL_KAT_MOD}
+        elif ziel == "Modell":
+            auswahl = {"Modell", ZIEL_WAHL_KAT_MOD}
+        else:
+            auswahl = {ziel}
         if spalten_ziel is not None:
             spalten = [s for s in self.spalten
-                       if spalten_ziel.get(s.name, IGNORIEREN) == ziel]
+                       if spalten_ziel.get(s.name, IGNORIEREN) in auswahl]
         else:
-            spalten = [s for s in self.spalten if s.ziel == ziel]
+            spalten = [s for s in self.spalten if s.ziel in auswahl]
         if not spalten:
             return []
         name = spalten[0].name
@@ -402,12 +409,27 @@ def vorschau_berechnen(
     for gerat in Gerat.objects.filter(seriennummer__isnull=False):
         bestands_sn[gerat.seriennummer.lower()] = gerat.id
 
+    # A-0912: Seriennummern, die in diesem Import neu angelegt werden.
+    # Die Garantiezeile (Zeile 5) ergänzt das Mac Studio (Zeile 4),
+    # das in diesem Import erstellt wird.
+    neu_sn: dict[str, str] = {}
+
     zeilen: list[VorschauZeile] = []
     for eintrag in vorlage.zeilen:
-        zeilen.append(_zeile_berechnen(vorlage, eintrag, spalten_ziel,
-                                       wert_zu_kategorie, wert_zu_person,
-                                       wert_zu_arbeitsplatz,
-                                       doppelt_sn, bestands_sn))
+        zeile = _zeile_berechnen(vorlage, eintrag, spalten_ziel,
+                                 wert_zu_kategorie, wert_zu_person,
+                                 wert_zu_arbeitsplatz,
+                                 doppelt_sn, bestands_sn, neu_sn)
+        zeilen.append(zeile)
+        # Wenn eine Zeile neu angelegt wird und eine Seriennummer hat,
+        # merken wir uns die Seriennummer für spätere Zeilen (Garantiezeile,
+        # vorlagen/README Zeile 18). Die Garantiezeile ergänzt das Gerät
+        # mit derselben Seriennummer, auch wenn die Nummer doppelt im Blatt
+        # ist (Zeile 5 ergänzt Zeile 4, beide SN Y4CO2WPZPY).
+        if zeile.ergebnis == "neu":
+            sn = _wert_von(vorlage, eintrag, "Seriennummer", spalten_ziel)
+            if sn:
+                neu_sn[sn.lower()] = f"neu-zeile-{zeile.zeile}"
     return zeilen
 
 
@@ -431,7 +453,7 @@ def _wert_von(vorlage: Vorlage, eintrag: dict, ziel: str, spalten_ziel: dict[str
 
 
 def _zeile_berechnen(vorlage, eintrag, spalten_ziel, kat_map, pers_map, arbp_map,
-                     doppelt_sn, bestands_sn) -> VorschauZeile:
+                     doppelt_sn, bestands_sn, neu_sn: dict[str, str]) -> VorschauZeile:
     werte = eintrag["werte"]
     zeile_nr = eintrag["zeile"]
     grund_teile: list[str] = []
@@ -453,9 +475,45 @@ def _zeile_berechnen(vorlage, eintrag, spalten_ziel, kat_map, pers_map, arbp_map
             kategorie_name = roh
         break
     kategorie = None
+    kat_nicht_uebernehmen = False
     if kategorie_name and kategorie_name in kat_map:
-        kategorie = _kategorie_finden(kat_map[kategorie_name])
+        kat_ziel = kat_map[kategorie_name].strip()
+        if kat_ziel:
+            kategorie = _kategorie_finden(kat_ziel)
+        else:
+            kat_nicht_uebernehmen = True
     modell = _wert_von(vorlage, eintrag, "Modell", spalten_ziel)
+
+    # F-84: Seriennummer geht vor, dann Gerätenamen (gleiche Kategorie).
+    # F-84 (vorlagen/README Zeile 18): Garantiezeile ergänzt das Gerät,
+    # auch wenn die Kategorie „nicht übernehmen" ist.
+    if seriennummer:
+        sn_klein = seriennummer.lower()
+        # 1a) Bestandstreffer über die Seriennummer (F-84).
+        if sn_klein in bestands_sn:
+            gerat = Gerat.objects.get(id=bestands_sn[sn_klein])
+            ergebnis = _ergaenzt_oder_konflikt(gerat, seriennummer, geraetename,
+                                                kat_map, pers_map, arbp_map,
+                                                vorlage, eintrag, spalten_ziel)
+            grund_teile = [f"besteht bereits: {gerat.inventarnummer}" if gerat else "besteht bereits"]
+            if ergebnis == "konflikt":
+                grund_teile.append("abweichende Seriennummer")
+            if gerat:
+                _ergaenzt_hinweise(gerat, hinweise)
+            return VorschauZeile(zeile_nr, ergebnis, "; ".join(grund_teile), gerat, hinweise)
+        # 1b) A-0912: Gerät aus diesem Import (Garantiezeile, vorlagen/README Zeile 18).
+        # Die Garantiezeile (Typ „Garantie") hat die Kategorie „nicht übernehmen",
+        # aber sie ergänzt das Gerät mit derselben Seriennummer.
+        if sn_klein in neu_sn and kategorie_name.strip().lower() == GARANZIE_TYPOBER:
+            ergebnis = "ergaenzt"
+            grund_teile.append(f"ergänzt Gerät aus Zeile {neu_sn[sn_klein]}")
+            return VorschauZeile(zeile_nr, ergebnis, "; ".join(grund_teile), None, hinweise)
+
+    # F-82: Kategorie auf „nicht übernehmen" → übersprungen.
+    if kat_nicht_uebernehmen:
+        return VorschauZeile(zeile_nr, "uebersprungen",
+                             "Kategorie nicht übernehmen",
+                             None, hinweise)
 
     # F-83: ohne Kategorie/Modell/Gerätename wird übersprungen.
     if not kategorie and not modell and not geraetename:
@@ -466,29 +524,16 @@ def _zeile_berechnen(vorlage, eintrag, spalten_ziel, kat_map, pers_map, arbp_map
     # F-84: Seriennummer geht vor, dann Gerätenamen (gleiche Kategorie).
     if seriennummer:
         sn_klein = seriennummer.lower()
-        # 1) Bestandstreffer über die Seriennummer (F-84).
-        if sn_klein in bestands_sn:
-            gerat = Gerat.objects.get(id=bestands_sn[sn_klein])
-            # F-84: verschiedene Seriennummern = anderes Gerät, Konflikt.
-            # (Hier kann das nicht vorkommen, wir suchen über die SN.)
-            ergebnis = _ergaenzt_oder_konflikt(gerat, seriennummer, geraetename,
-                                                kat_map, pers_map, arbp_map,
-                                                vorlage, eintrag, spalten_ziel)
-            grund_teile = [f"besteht bereits: {gerat.inventarnummer}"]
-            if ergebnis == "konflikt":
-                grund_teile.append("abweichende Seriennummer")
-            _ergaenzt_hinweise(gerat, hinweise)
-            return VorschauZeile(zeile_nr, ergebnis, "; ".join(grund_teile), gerat, hinweise)
         # 2) Doppelte Seriennummer im Blatt (F-84, vorlagen/README Zeile 18):
         #    das Gerät wird ohne sie angelegt, die Notiz nennt sie, Hinweis.
-        if sn_klein in doppelt_sn:
+        if sn_klein in doppelt_sn and sn_klein in neu_sn:
             ergebnis = "neu"
             grund_teile.append("Seriennummer doppelt im Blatt, ohne sie angelegt")
             hinweise.append("seriennummer-doppelt")
             return _neu_abschließen(zeile_nr, vorlage, eintrag, spalten_ziel,
                                     kat_map, pers_map, arbp_map, grund_teile, hinweise)
 
-    elif geraetename:
+    if geraetename:
         # F-84: Gerätenamen allein nur bei gleicher Kategorie, keine Blatts.
         kategorie_name_zeile = kategorie.name if kategorie else ""
         for gerat in Gerat.objects.filter(geraetename__iexact=geraetename):

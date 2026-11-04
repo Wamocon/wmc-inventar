@@ -179,7 +179,7 @@ def import_spalten(request: HttpRequest):
                       ("wert_zu_person", "Person"),
                       ("wert_zu_arbeitsplatz", "Arbeitsplatz")):
         alt = stand.get(key, {})
-        stand[key] = {w: alt.get(w, "") for w in vorlage.werte_von(feld)}
+        stand[key] = {w: alt.get(w, "") for w in vorlage.werte_von(feld, stand.get("spalten_ziel"))}
     stand["schritt"] = 3
     _stand_in_sitzung(request, stand)
     return redirect("/import/")
@@ -202,7 +202,7 @@ def import_werte(request: HttpRequest):
                       ("wert_zu_person", "Person"),
                       ("wert_zu_arbeitsplatz", "Arbeitsplatz")):
         mappe: dict[str, str] = {}
-        for wert in vorlage.werte_von(feld):
+        for wert in vorlage.werte_von(feld, stand.get("spalten_ziel")):
             mappe[wert] = request.POST.get(f"{key}_{wert}", "").strip()
         stand[key] = mappe
     stand["neuer_person_name"] = request.POST.get("neuer_person_name", "").strip()

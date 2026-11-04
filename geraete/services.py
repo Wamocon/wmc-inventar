@@ -1109,7 +1109,16 @@ def import_speichern(
     Rückgabe: {„neu": int, „ergaenzt": int, „konflikt": int, „uebersprungen": int}
     """
     from . import import_parser
-    from django.utils.dateparse import parse_date
+    from datetime import datetime as _datetime
+
+    def datum_aus_datei(text):
+        # import_parser._text_wert schreibt Datumswerte als TT.MM.JJJJ.
+        for muster in ("%d.%m.%Y", "%Y-%m-%d"):
+            try:
+                return _datetime.strptime(text, muster).date()
+            except ValueError:
+                pass
+        return None
 
     neu = ergaenzt = konflikt = ubersprungen = 0
     lauf: Importlauf | None = None
@@ -1118,6 +1127,9 @@ def import_speichern(
         lauf = Importlauf.objects.create(
             dateiname=dateiname, blatt=blatt, erzeugt_von=konto,
         )
+
+        # A-0912: Geräte dieses Laufs, damit die Garantiezeile sie findet.
+        neu_nach_sn = {}
 
         for vz in vorschau:
             ergebnis = vz.ergebnis
@@ -1154,12 +1166,12 @@ def import_speichern(
                     kategorie_name = roh
                 break
             if kategorie_name:
-                if kategorie_name not in wert_zu_kategorie or not wert_zu_kategorie.get(kategorie_name):
+                if wert_zu_kategorie.get(kategorie_name):
+                    kategorie = import_parser._kategorie_finden(wert_zu_kategorie[kategorie_name])
+                elif ergebnis != "ergaenzt":
                     # „nicht übernommen“ (F-82, A-0912 Nr. 4): übersprungen.
                     ubersprungen += 1
                     continue
-                ziel_name = wert_zu_kategorie[kategorie_name]
-                kategorie = import_parser._kategorie_finden(ziel_name)
 
             # Person über Wertezuordnung auflösen, neu anlegen wenn nötig (O-18)
             person_wert = import_parser._wert_von(vorlage, eintrag, "Person", spalten_ziel)
@@ -1177,8 +1189,8 @@ def import_speichern(
             if person is None and ort is None:
                 ort = import_parser._lagerort_finden()
 
-            kaufdatum = parse_date(kaufdatum_s) if kaufdatum_s else None
-            garantie_bis = parse_date(garantie_s) if garantie_s else None
+            kaufdatum = datum_aus_datei(kaufdatum_s) if kaufdatum_s else None
+            garantie_bis = datum_aus_datei(garantie_s) if garantie_s else None
             preis_wert = None
             if preis_s:
                 try:
@@ -1214,6 +1226,13 @@ def import_speichern(
                     hinweis_defekt = "laut Altliste defekt: reparieren oder ausmustern"
                     notiz_final = (notiz_final + "; " + hinweis_defekt) if notiz_final else hinweis_defekt
 
+                # F-84: die zweite Zeile mit derselben Nummer entsteht ohne sie,
+                # die Notiz nennt sie.
+                if "seriennummer-doppelt" in vz.hinweise and seriennummer:
+                    vermerk = f"Seriennummer {seriennummer} doppelt im Blatt"
+                    notiz_final = f"{notiz_final}; {vermerk}" if notiz_final else vermerk
+                    seriennummer = ""
+
                 gerat = Gerat.objects.create(
                     inventarnummer=naechste_inventarnummer(),
                     kategorie=kategorie,
@@ -1236,6 +1255,8 @@ def import_speichern(
                     erstellt_von=konto,
                     erstellt_am=timezone.now(),
                 )
+                if seriennummer:
+                    neu_nach_sn[seriennummer.lower()] = gerat
                 # F-87: Vorgang „Import"
                 Vorgang.objects.create(
                     gerat=gerat,
@@ -1247,7 +1268,7 @@ def import_speichern(
                 neu += 1
 
             elif ergebnis == "ergaenzt":
-                gerat = vz.gerat
+                gerat = vz.gerat or neu_nach_sn.get((seriennummer or "").lower())
                 if gerat is None:
                     ubersprungen += 1
                     continue
@@ -1281,6 +1302,11 @@ def import_speichern(
                     geaendert.append("kaufpreis_netto")
                 if not gerat.notiz and notiz_s:
                     gerat.notiz = notiz_s
+                    geaendert.append("notiz")
+                elif (notiz_s and kategorie_name.strip().lower() == import_parser.GARANZIE_TYPOBER
+                        and notiz_s not in gerat.notiz):
+                    # F-84: die Garantiezeile ergänzt auch die Notiz.
+                    gerat.notiz = f"{gerat.notiz}; {notiz_s}"
                     geaendert.append("notiz")
                 if not gerat.lieferant and lieferant:
                     gerat.lieferant = lieferant
