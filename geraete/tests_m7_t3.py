@@ -416,3 +416,55 @@ class GesamtschrankTests(TestCase):
         for data_id in ["ueberfaellig", "anfragen-offen", "garantie-30-tage", "unterschriften-offen"]:
             block = html.split(f'data-id="{data_id}"')[1].split("</tr>")[0] if f'data-id="{data_id}"' in html else ""
             self.assertNotIn('data-test="gesamt"', block, msg=f"{data_id} hat unerwartet gesamt")
+
+
+class GegenzeichnungsseiteTests(TestCase):
+    """F-136 (A-0910): /signieren/<token>/ hat data-name gegenzeichnen und Button signieren."""
+
+    def setUp(self):
+        from stammdaten.models import Person, Kategorie, Ort
+        from konten.models import Konto
+        from . import services
+        Einstellungen.aktuelles()
+        self.kat = Kategorie.objects.create(name="Notebook")
+        self.ort = Ort.objects.create(typ=Ort.TYP_LAGER, kennung="WMC-L-01")
+        self.person = Person.objects.create(
+            anrede=Person.ANREDE_FRAU, vorname="Anna",
+            nachname="Becker", email="a.becker@beispiel.test",
+        )
+        self.admin, _, _ = _konten_anlegen()
+        self.g1 = services.gerat_anlegen(
+            kategorie=self.kat, hersteller="Lenovo", modell="ThinkPad T14",
+            seriennummer="SN99002", ort=self.ort,
+        )
+        self.protokoll = services._protokoll_erstellen(
+            person=self.person, gerat=self.g1,
+            erzeugt_von=self.admin,
+        )
+        # Checkliste beantworten (F-132), damit Signatur und PDF funktionieren.
+        from .models import Protokoll
+        for schluessel, _text in Protokoll.CHECKLISTE_PUNKTE:
+            self.protokoll.checkliste[schluessel] = 1
+        self.protokoll.save()
+        # Bearbeiter signiert.
+        self.client.force_login(self.admin)
+        self.client.post(
+            f"/protokolle/{self.protokoll.nr}/signieren/",
+            {"passwort": "test12345678"},
+        )
+        self.client.logout()
+        self.protokoll.refresh_from_db()
+        self.token = self.protokoll.gegenzeichnung_token
+
+    def test_dialog_hat_data_name_gegenzeichnen(self):
+        """Der Bereich trägt data-name gegenzeichnen."""
+        antwort = self.client.get(f"/signieren/{self.token}/")
+        html = antwort.content.decode()
+        self.assertIn('data-name="gegenzeichnen"', html)
+
+    def test_button_heisst_signieren(self):
+        """Die Schaltfläche zum Absenden des Codes heißt signieren."""
+        antwort = self.client.get(f"/signieren/{self.token}/")
+        html = antwort.content.decode()
+        self.assertIn('data-test="signieren"', html)
+        self.assertIn(">Signieren<", html)
