@@ -171,7 +171,8 @@ class Command(BaseCommand):
             self._anlegen_orte()
             self._anlegen_personen()
             self._anlegen_konten()
-            self._anlegen_geraete()
+            if opts["demo"]:
+                self._anlegen_geraete()
             self._anlegen_einstellungen()
 
         self.stdout.write(self.style.SUCCESS("Beispieldaten angelegt."))

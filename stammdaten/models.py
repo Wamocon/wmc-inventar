@@ -77,7 +77,7 @@ class Person(models.Model):
     anrede = models.CharField("Anrede", max_length=1, choices=ANREDEN, default=ANREDE_HERR)
     vorname = models.CharField("Vorname", max_length=120)
     nachname = models.CharField("Nachname", max_length=120)
-    email = models.EmailField("E-Mail", unique=True)
+    email = models.EmailField("E-Mail", null=True, blank=True, unique=True)
     abteilung = models.CharField("Abteilung", max_length=120, blank=True)
     eintritt = models.DateField("Eintritt", null=True, blank=True)
     austritt = models.DateField("Austritt", null=True, blank=True)
