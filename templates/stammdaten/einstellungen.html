@@ -166,12 +166,29 @@
       </div>
     </div>
 
-    <div class="field" style="margin-top:12px">
-      <label for="testmail-adresse">Testmail an</label>
-      <input type="email" id="testmail-adresse" name="testmail_adresse" placeholder="empfaenger@beispiel.test" data-test="testmail-adresse">
-      <button type="button" class="btn" id="btn-testmail" data-test="testmail" style="margin-top:8px">Testmail senden</button>
-      <span id="testmail-ergebnis" data-test="testmail-ergebnis" style="margin-left:12px"></span>
+    {% if testmail_meldung %}
+    <div class="meldung meldung-erfolg" data-test="testmail-meldung">
+      {{ testmail_meldung }}
     </div>
+    {% endif %}
+    {% if testmail_fehler %}
+    <div class="meldung meldung-fehler" data-test="testmail-fehler" role="alert">
+      {{ testmail_fehler }}
+    </div>
+    {% endif %}
+
+    <form method="post" action="/einstellungen/testmail/" data-test="testmail-formular">
+      {% csrf_token %}
+      <div class="form-grid">
+        <div class="field">
+          <label for="testmail-adresse">Testmail an</label>
+          <input type="email" id="testmail-adresse" name="empfaenger" placeholder="empfaenger@beispiel.test" data-test="testmail-adresse" required>
+        </div>
+        <div class="field">
+          <button type="submit" class="btn" data-test="testmail">Testmail senden</button>
+        </div>
+      </div>
+    </form>
   </fieldset>
 
   <fieldset class="card">
@@ -217,38 +234,8 @@
     </div>
   </fieldset>
 
-  <div class="actions" style="margin-top:16px">
+  <div class="actions">
     <button type="submit" class="btn primary" data-test="speichern">Speichern</button>
   </div>
 </form>
-{% endblock %}
-
-{% block skripte %}
-<script>
-(function(){
-  var btn = document.getElementById('btn-testmail');
-  if (!btn) return;
-  btn.addEventListener('click', function(){
-    var adresse = document.getElementById('testmail-adresse').value.trim();
-    var ergebnis = document.getElementById('testmail-ergebnis');
-    if (!adresse) { ergebnis.textContent = 'Bitte eine E-Mail-Adresse angeben.'; return; }
-    ergebnis.textContent = 'Sende…';
-    var csrf = document.querySelector('meta[name="csrf-token"]').content;
-    var body = new URLSearchParams();
-    body.append('empfaenger', adresse);
-    body.append('csrfmiddlewaretoken', csrf);
-    fetch('/einstellungen/testmail/', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRFToken': csrf},
-      body: body.toString()
-    })
-    .then(function(r){ return r.json().then(function(j){ return {status: r.status, j: j}; }); })
-    .then(function(res){
-      if (res.j.ok) { ergebnis.textContent = res.j.meldung; ergebnis.style.color = '#0a0'; }
-      else { ergebnis.textContent = res.j.meldung || 'Fehler'; ergebnis.style.color = '#c00'; }
-    })
-    .catch(function(e){ ergebnis.textContent = 'Fehler: ' + e; ergebnis.style.color = '#c00'; });
-  });
-})();
-</script>
 {% endblock %}

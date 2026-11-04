@@ -43,6 +43,7 @@ a{color:var(--red)}
 button{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--red);outline-offset:2px}
 .num,.mono,.inv{font-family:var(--font-cond);font-stretch:var(--narrow);font-variant-numeric:tabular-nums;letter-spacing:.01em}
+.inventarwert-wert{font-size:24px;font-weight:700}
 .inv{font-size:15px;font-weight:700;white-space:nowrap}
 .muted{color:var(--fg-2)}
 .small{font-size:12.5px}

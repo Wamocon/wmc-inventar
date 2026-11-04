@@ -638,25 +638,34 @@ def einstellungen_sehen(request):
 
 @require_POST
 def einstellungen_testmail(request):
-    """F-90: „Testmail senden“ — erzeugt eine Mail in der Mailablage.
+    """F-90: „Testmail senden" — erzeugt eine Mail in der Mailablage.
 
-    POST /einstellungen/testmail/?empfaenger=<adresse>
-    Nur Admin. Antwort: JSON {ok: true/false, meldung: "..."}.
+    POST /einstellungen/testmail/ mit Feld "empfaenger".
+    Nur Admin. Antwort: leitet an /einstellungen/ zurück mit meldung oder fehler.
     """
     user = request.user
     if not user.is_authenticated or not user.ist_admin:
-        return JsonResponse({"ok": False, "meldung": "Keine Berechtigung."}, status=403)
+        return _keine_berechtigung(request)
 
     empfaenger = request.POST.get("empfaenger", "").strip()
     if not empfaenger or "@" not in empfaenger:
-        return JsonResponse({"ok": False, "meldung": "Bitte eine gültige E-Mail-Adresse angeben."}, status=400)
+        return render(request, "stammdaten/einstellungen.html", {
+            "einstellungen": Einstellungen.aktuelles(),
+            "testmail_fehler": "Bitte eine gültige E-Mail-Adresse angeben.",
+        })
 
     einstellungen = Einstellungen.aktuelles()
     try:
         _testmail_senden(einstellungen, empfaenger)
-        return JsonResponse({"ok": True, "meldung": f"Testmail an {empfaenger} gesendet."})
+        return render(request, "stammdaten/einstellungen.html", {
+            "einstellungen": einstellungen,
+            "testmail_meldung": f"Testmail an {empfaenger} gesendet.",
+        })
     except Exception as fehler:
-        return JsonResponse({"ok": False, "meldung": f"Testmail fehlgeschlagen: {fehler}"}, status=500)
+        return render(request, "stammdaten/einstellungen.html", {
+            "einstellungen": einstellungen,
+            "testmail_fehler": f"Testmail fehlgeschlagen: {fehler}",
+        })
 
 
 @require_POST

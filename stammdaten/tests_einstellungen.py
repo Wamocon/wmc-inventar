@@ -121,37 +121,45 @@ class EinstellungenDatenTests(TestCase):
 class EinstellungenTestmailTests(TestCase):
     """F-90: Testmail senden erzeugt eine Mail in der Mailablage."""
 
-    def test_testmail_erzeugt_mail_in_ablage(self):
-        """POST /einstellungen/testmail/ erzeugt eine .eml-Datei in MAIL_ABLAGE."""
+    def setUp(self):
+        # MAILDIR für den Test setzen, unabhängig von der Umgebung.
         import os
-        from django.conf import settings
         from pathlib import Path
+        self.ablage_pfad = Path(os.environ.get("MAILDIR", "")) if os.environ.get("MAILDIR") else Path(__file__).parent.parent / "var" / "mails_test"
+        self.ablage_pfad.mkdir(parents=True, exist_ok=True)
+        # Die alte Anzahl .eml-Dateien merken.
+        self.eml_vor = len(list(self.ablage_pfad.rglob("*.eml")))
+        # MAILDIR für den Test setzen.
+        self._alte_maildir = os.environ.get("MAILDIR")
+        os.environ["MAILDIR"] = str(self.ablage_pfad)
 
+    def tearDown(self):
+        # Testdateien aufräumen.
+        import os
+        for f in self.ablage_pfad.rglob("*.eml"):
+            f.unlink()
+        # MAILDIR wiederherstellen.
+        if self._alte_maildir is not None:
+            os.environ["MAILDIR"] = self._alte_maildir
+        else:
+            os.environ.pop("MAILDIR", None)
+
+    def test_testmail_erzeugt_mail_in_ablage(self):
+        """POST /einstellungen/testmail/ erzeugt eine .eml-Datei in der Ablage."""
         _konto("it-admin@beispiel.test", Konto.ROLLE_ADMIN)
         self.client.login(username="it-admin@beispiel.test", password="test-passwort-123")
-
-        # MAIL_ABLAGE muss gesetzt sein
-        ablage = getattr(settings, "MAIL_ABLAGE", "")
-        if not ablage:
-            self.skipTest("MAIL_ABLAGE ist nicht gesetzt")
-
-        ablage_pfad = Path(ablage)
-        ablage_pfad.mkdir(parents=True, exist_ok=True)
-
-        # Anzahl .eml-Dateien vor dem Test
-        vor = len(list(ablage_pfad.glob("*.eml")))
 
         antwort = self.client.post(
             reverse("stammdaten:einstellungen-testmail"),
             {"empfaenger": "test@beispiel.test"},
         )
         self.assertEqual(antwort.status_code, 200)
-        daten = antwort.json()
-        self.assertTrue(daten.get("ok"))
+        html = antwort.content.decode()
+        self.assertIn("Testmail an test@beispiel.test gesendet.", html)
 
         # Anzahl .eml-Dateien nach dem Test
-        nach = len(list(ablage_pfad.glob("*.eml")))
-        self.assertGreater(nach, vor)
+        nach = len(list(self.ablage_pfad.rglob("*.eml")))
+        self.assertGreater(nach, self.eml_vor)
 
 
 class EinstellungenLogoTests(TestCase):
