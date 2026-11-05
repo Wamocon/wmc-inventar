@@ -23,6 +23,7 @@
         <div class="zeile" data-test="zeile" data-id="{{ eintrag.gerat.inventarnummer }}">
             <span class="inv num">{{ eintrag.gerat.inventarnummer }}</span>
             <span>
+                <span data-test="meine-modell">{{ eintrag.gerat.hersteller }} {{ eintrag.gerat.modell }}</span>
                 <span class="muted">Ausgabe: {% if eintrag.ausgabe_datum %}{{ eintrag.ausgabe_datum|date:"d.m.Y" }}{% else %}—{% endif %}</span>
                 {% if eintrag.leihe %}<span class="muted"> · Leihe bis {{ eintrag.leihe.rueckgabe_bis|date:"d.m.Y" }}</span>{% endif %}
             </span>
@@ -42,6 +43,21 @@
     <p class="muted">Ihnen sind keine Geräte ausgegeben.</p>
     {% endif %}
 </section>
+
+{% if am_platz %}
+<section class="abschnitt" data-test="am-arbeitsplatz">
+    <h2>An meinem Arbeitsplatz</h2>
+    <div class="liste" data-test="liste" data-liste="am-arbeitsplatz">
+        {% for g in am_platz %}
+        <div class="zeile" data-test="zeile" data-id="{{ g.inventarnummer }}">
+            <span class="inv num">{{ g.inventarnummer }}</span>
+            <span>{{ g.kategorie.name }}, {{ g.hersteller }} {{ g.modell }}</span>
+            <span class="muted">{{ g.ort.kennung }}</span>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
 
 <section class="abschnitt" data-test="meine-protokolle">
     <h2>Meine Protokolle</h2>

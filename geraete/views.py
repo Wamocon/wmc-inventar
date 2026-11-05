@@ -715,7 +715,7 @@ def arbeitsplatz_detail(request, kennung: str):
     )
     abgleich = services.soll_ist_abgleich(ort)
     gerate = services.gerate_am_ort(ort)
-    personen_gerate = services.gerate_der_person(ort.feste_person) if ort.feste_person else []
+    personen_gerate = [g for g in services.gerate_der_person(ort.feste_person) if g not in gerate] if ort.feste_person else []
     return render(
         request,
         "geraete/arbeitsplatz_detail.html",
@@ -874,7 +874,7 @@ def platz_popup(request, kennung: str):
     )
     abgleich = services.soll_ist_abgleich(ort)
     gerate = services.gerate_am_ort(ort)
-    personen_gerate = services.gerate_der_person(ort.feste_person) if ort.feste_person else []
+    personen_gerate = [g for g in services.gerate_der_person(ort.feste_person) if g not in gerate] if ort.feste_person else []
     return render(
         request,
         "geraete/platz_popup.html",
@@ -1774,6 +1774,12 @@ def meine_geraete_zeige(request):
         {
             "geraete": gerate_eintraege,
             "protokolle": protokolle,
+            "am_platz": (
+                Gerat.objects.filter(ort__feste_person=person)
+                .exclude(person=person).exclude(status=Gerat.STATUS_AUSGEMUSTERT)
+                .select_related("kategorie", "ort").order_by("inventarnummer")
+                if person is not None else []
+            ),
             "leihen": leihen,
             # Kapitel 2: Der Leser fragt nicht an und ändert nichts.
             "darf_anfragen": not request.user.ist_leser,

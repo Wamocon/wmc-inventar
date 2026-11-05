@@ -185,6 +185,10 @@ def _blatt_uebernehmen(request: HttpRequest, stand: dict, blatt: str, kopfzeile_
         kopfzeile = int(kopfzeile_text) if kopfzeile_text else None
     except ValueError:
         kopfzeile = None
+    if import_parser.blatt_gesperrt(blatt):
+        stand["schritt"] = 1
+        _stand_in_sitzung(request, stand)
+        return _schritt_eins(request, stand, f"Das Blatt {blatt} ist keine Bestandsliste und wird nicht übernommen.", status=400)
     byte = bytes.fromhex(stand["datei_hex"])
     try:
         vorlage = import_parser.lade_datei(stand["dateiname"], byte, blatt, kopfzeile)

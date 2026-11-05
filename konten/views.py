@@ -266,6 +266,21 @@ def konten_liste(request):
     """Liste der Konten (F-02)."""
     if not _nur_admin(request):
         return _keine_berechtigung(request)
+    format_export = request.GET.get("format", "")
+    if format_export in ("csv", "xlsx"):
+        from geraete import export as _export
+        kopfzeile = ["E-Mail", "Rolle", "Person", "aktiv"]
+        daten = [
+            {
+                "E-Mail": k.email,
+                "Rolle": k.get_rolle_display(),
+                "Person": k.person.voller_name() if k.person_id else "",
+                "aktiv": "ja" if k.aktiv else "nein",
+            }
+            for k in Konto.objects.select_related("person").order_by("email")
+        ]
+        antwort = _export.antwort_csv if format_export == "csv" else _export.antwort_xlsx
+        return antwort(kopfzeile, daten, "konten")
     return render(
         request,
         "konten/konten_liste.html",

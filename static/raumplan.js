@@ -102,7 +102,12 @@
     var marke = plan.querySelector('.orte[data-id="' + kennung + '"]');
     if (marke) {
       marke.classList.add('hervorgehoben');
-      marke.scrollIntoView({ block: 'center', inline: 'center' });
+      var zeigen = function () { marke.scrollIntoView({ block: 'center', inline: 'center' }); };
+      var bild = plan.querySelector('img');
+      zeigen();
+      // Erst mit dem geladenen Grundriss steht die Marke an ihrer Stelle.
+      if (bild && !bild.complete) { bild.addEventListener('load', zeigen); bild.addEventListener('error', zeigen); }
+      window.addEventListener('load', zeigen);
     }
   }
 })();

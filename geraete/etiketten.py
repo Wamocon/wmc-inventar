@@ -142,7 +142,8 @@ def _css(fmt: EtikettenFormat = STANDARD_FORMAT) -> str:
 body {{
   margin: 0;
   padding: 0;
-  font-family: sans-serif;
+  font-family: Archivo, sans-serif;
+  font-stretch: condensed;
 }}
 .etiketten-grid {{
   display: grid;
@@ -247,7 +248,9 @@ def bogen_pdf(geraete: Sequence[Gerat], startposition: int = 1,
         "<!DOCTYPE html><html><head><meta charset=\"utf-8\">"
         f"<style>{_css(fmt)}</style></head><body>{''.join(bloecke)}</body></html>"
     )
-    return HTML(string=dokument).write_pdf()
+    from .pdf import _STATIC_FONTS, _schrift_css
+    schrift = f"<style>{_schrift_css()}</style>"
+    return HTML(string=schrift + dokument, base_url=_STATIC_FONTS.as_uri() + "/").write_pdf()
 
 
 def etikett_pdf(gerat: Gerat) -> bytes:

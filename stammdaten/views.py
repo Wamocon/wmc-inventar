@@ -484,6 +484,20 @@ def profile_liste(request):
     """Liste der Profile (F-61)."""
     if not _darf_lesen(request):
         return _keine_berechtigung(request)
+    format_export = request.GET.get("format", "")
+    if format_export in ("csv", "xlsx"):
+        from geraete import export as _export
+        kopfzeile = ["Name", "Positionen", "Arbeitsplätze"]
+        daten = [
+            {
+                "Name": p.name,
+                "Positionen": [f"{q.anzahl} × {q.kategorie.name}" for q in p.positionen.all()],
+                "Arbeitsplätze": [o.kennung for o in p.plaetze.all()],
+            }
+            for p in Ausstattungsprofil.objects.prefetch_related("positionen__kategorie", "plaetze")
+        ]
+        antwort = _export.antwort_csv if format_export == "csv" else _export.antwort_xlsx
+        return antwort(kopfzeile, daten, "profile")
     return render(
         request,
         "stammdaten/profile_liste.html",

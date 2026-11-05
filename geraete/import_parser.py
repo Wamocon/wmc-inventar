@@ -299,6 +299,11 @@ def kopfzeile_erkennen(zeilen: list[tuple]) -> int:
     return 1
 
 
+def blatt_gesperrt(name: str) -> bool:
+    """F-80, Vorlagen-README: Die Blätter „Bedarfsanalyse“ sind keine Bestandsliste."""
+    return name.strip().lower().startswith("bedarfsanalyse")
+
+
 def blaetter_lesen(byte: bytes) -> list[dict]:
     """Die Blätter der Datei mit Zeilenzahl und erkannter Kopfzeile (F-80)."""
     wb = _mappe_oeffnen(byte)
@@ -308,6 +313,7 @@ def blaetter_lesen(byte: bytes) -> list[dict]:
         kopf = kopfzeile_erkennen(roh)
         spalten = _spalten_lesen(gefuellt, kopf) if gefuellt else []
         blaetter.append({
+            "gesperrt": blatt_gesperrt(ws.title),
             "name": ws.title,
             "kopfzeile": kopf,
             "zeilen": len(_datensaetze(roh, gefuellt, kopf, spalten)) if spalten else 0,
@@ -746,6 +752,9 @@ def zeile_lesen(vorlage: Vorlage, eintrag: dict, spalten_ziel: dict[str, str],
         garantie_bis=datum_aus_text(wert("Garantie bis")),
         kaufpreis=_preis_aus_text(wert("Kaufpreis netto")) if wert("Kaufpreis netto") else None,
     )
+    # „Nicht vorhanden“ in der Raumliste ist kein Gerät, sondern eine Lücke am Platz (F-62, F-83).
+    if w.geraetename.strip().lower() == "nicht vorhanden":
+        w.geraetename = ""
     w.defekt = _ist_defekt(wert(ZIEL_DEFEKT), w.notiz)
 
     for spalte in vorlage.spalten:
@@ -822,9 +831,10 @@ def ergaenzungen(gerat: Gerat, w: Zeilenwerte) -> dict:
             plan[feld] = neu
 
     notiz = gerat.notiz or ""
+    # F-87: Der Kommentar jeder Zeile wird Notiz; Vorhandenes bleibt stehen (F-84).
     if w.notiz and not notiz:
         notiz = w.notiz
-    elif w.notiz and w.ist_garantiezeile and w.notiz not in notiz:
+    elif w.notiz and w.notiz not in notiz:
         notiz = f"{notiz}; {w.notiz}"
     if w.defekt and gerat.zustand_ungeprueft and ist_importiert_unbewegt(gerat):
         plan["zustand"] = Gerat.ZUSTAND_EINGESCHRAENKT
@@ -873,6 +883,9 @@ def abweichungen(gerat: Gerat, w: Zeilenwerte) -> list[tuple[str, str, str]]:
     schon entschiedener Konflikt mit demselben Wert kommt nicht wieder.
     """
     liste: list[tuple[str, str, str]] = []
+    # Gleiche Seriennummer, andere Kategorie: Das sagt die Liste anders als das Gerät (F-84).
+    if w.kategorie is not None and gerat.kategorie_id != w.kategorie.pk:
+        liste.append(("kategorie", gerat.kategorie.name, w.kategorie.name))
     for feld, neu in (("geraetename", w.geraetename), ("rechnungsnummer", w.rechnungsnummer),
                       ("lieferant", w.lieferant)):
         alt = getattr(gerat, feld) or ""
@@ -1075,14 +1088,28 @@ def _zeile_berechnen(lauf: _Lauf, eintrag: dict, w: Zeilenwerte) -> VorschauZeil
     # F-84: Über den Gerätenamen nur bei gleicher Kategorie, und bei
     # verschiedenen Seriennummern ist es ein anderes Gerät.
     if w.geraetename:
+        passende = []
         for kandidat in Gerat.objects.filter(geraetename__iexact=w.geraetename) \
-                .select_related("kategorie", "person", "ort"):
+                .select_related("kategorie", "person", "ort").order_by("inventarnummer"):
             if not ersatz and kandidat.kategorie_id != kategorie.pk:
                 continue
             if w.seriennummer and kandidat.seriennummer \
                     and w.seriennummer.lower() != kandidat.seriennummer.lower():
                 continue
-            return _gegen_geraet(lauf, zeile_nr, w, kandidat)
+            passende.append(kandidat)
+        if len(passende) > 1:
+            nummern = ", ".join(g.inventarnummer for g in passende)
+            return VorschauZeile(zeile_nr, "uebersprungen",
+                                 f"Gerätename passt auf mehrere Geräte ({nummern}); bitte von Hand zuordnen")
+        if passende:
+            return _gegen_geraet(lauf, zeile_nr, w, passende[0])
+        # Manche Listen tragen die Seriennummer in der Spalte für die Kennung (Raumliste).
+        if not w.seriennummer:
+            kandidat = Gerat.objects.filter(seriennummer__iexact=w.geraetename) \
+                .select_related("kategorie", "person", "ort").first()
+            if kandidat is not None and (ersatz or kandidat.kategorie_id == kategorie.pk):
+                w.seriennummer, w.geraetename = w.geraetename, ""
+                return _gegen_geraet(lauf, zeile_nr, w, kandidat)
 
     teile: list[str] = []
     hinweise: list[str] = []

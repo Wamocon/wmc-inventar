@@ -14,7 +14,7 @@ from django.core.management.base import BaseCommand, CommandError
 from konten.forms import MIN_PASSWORT_LAENGE
 from konten.models import Konto
 from stammdaten.checklisten import vorbelegen
-from stammdaten.models import Kategorie, Ort
+from stammdaten.models import Kategorie, Ort, Person
 
 from .beispieldaten import KATEGORIEN
 
@@ -50,6 +50,10 @@ class Command(BaseCommand):
         if len(passwort) < MIN_PASSWORT_LAENGE:
             raise CommandError(f"Das Passwort muss mindestens {MIN_PASSWORT_LAENGE} Zeichen lang sein.")
         konto = Konto(email=email, rolle=Konto.ROLLE_ADMIN)
+        # Ohne Person stünde im Protokoll als Bearbeiter die Mailadresse.
+        vorname, nachname = os.environ.get("ADMIN_VORNAME", "").strip(), os.environ.get("ADMIN_NACHNAME", "").strip()
+        if vorname and nachname:
+            konto.person = Person.objects.create(vorname=vorname, nachname=nachname, email=email, anrede="")
         konto.set_password(passwort)
         konto.save()
         self.stdout.write(f"Admin-Konto {email} angelegt")

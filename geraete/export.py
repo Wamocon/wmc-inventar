@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import csv
 import io
+import re
 from datetime import date, datetime
 from decimal import Decimal
 
@@ -25,6 +26,9 @@ def _wert_zelle(wert) -> object:
     if isinstance(wert, (list, tuple)):
         return " · ".join(str(w) for w in wert if w)
     if isinstance(wert, str):
+        # Ein Tabellenprogramm führt „=…“ sonst als Formel aus; reine Zahlen bleiben, wie sie sind.
+        if wert[:1] in ("=", "+", "-", "@") and not re.fullmatch(r"[+-]?\d[\d.,]*", wert):
+            return "'" + wert
         return wert
     if wert is None:
         return ""

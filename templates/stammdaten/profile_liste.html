@@ -3,6 +3,7 @@
 {% block inhalt %}
 <div class="page-head">
   <div><h1>Ausstattungsprofile</h1><p class="muted lead">Profile pflegen und Arbeitsplätzen zuweisen. Die Zuweisung geschieht am Ort.</p></div>
+  <div class="actions"><a class="btn" href="/profile/?format=xlsx" data-test="export-xlsx">Export .xlsx</a><a class="btn" href="/profile/?format=csv" data-test="export-csv">Export .csv</a></div>
   {% if ist_admin %}<div class="actions"><a class="btn primary" href="/profile/neu/" data-test="profil-anlegen">Neues Profil</a></div>{% endif %}
 </div>
 <div class="liste" data-test="liste">

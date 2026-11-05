@@ -135,6 +135,12 @@ class EinstellungenForm(forms.ModelForm):
             for name, text, hilfe, marke in MAILARTEN
         ]
 
+    def clean_smtp_port(self):
+        port = self.cleaned_data.get("smtp_port")
+        if port is not None and not 1 <= port <= 65535:
+            raise forms.ValidationError("Der Port liegt zwischen 1 und 65535.")
+        return port
+
 
 class KategorieForm(forms.ModelForm):
     """F-120: Kategorie pflegen (Name, hat Datenträger, Seriennummer Pflicht)."""

@@ -118,32 +118,22 @@ def kennzahlen(heute: date | None = None) -> list[dict]:
 
 
 def delta_zum_vortag(heute: date | None = None) -> dict | None:
-    """F-101: Delta zum Vortag aus den Zählerständen.
+    """F-101: Die angezeigte Zahl gegen den nächtlichen Zählerstand des Vortags.
 
-    None, wenn für den Vortag oder den heutigen Tag kein Zählerstand steht.
-    Sonst {data_id: Zahl} für jede Kennzahl, die in beiden Zählerständen
-    eine ist trägt.
-
-    Wenn heute None ist, wird das Datum des letzten Zählerstands verwendet.
+    None, wenn für den Vortag kein Zählerstand steht. Sonst {data_id: Zahl} für
+    jede Kennzahl, die im Zählerstand steht.
     """
     if heute is None:
-        letzter = Zaehlerstand.objects.order_by("-stichtag").first()
-        if letzter is None:
-            return None
-        heute = letzter.stichtag
-    vortag = heute - timedelta(days=1)
-    alt = Zaehlerstand.objects.filter(stichtag=vortag).first()
-    neu = Zaehlerstand.objects.filter(stichtag=heute).first()
-    if alt is None or neu is None:
+        heute = _heute()
+    alt = Zaehlerstand.objects.filter(stichtag=heute - timedelta(days=1)).first()
+    if alt is None:
         return None
     delta = {}
     alt_wert = alt.kennzahlen or {}
-    neu_wert = neu.kennzahlen or {}
-    for data_id in {*alt_wert, *neu_wert}:
-        ist_neu = (neu_wert.get(data_id) or {}).get("ist")
-        ist_alt = (alt_wert.get(data_id) or {}).get("ist")
-        if ist_neu is not None and ist_alt is not None:
-            delta[data_id] = ist_neu - ist_alt
+    for eintrag in kennzahlen(heute):
+        ist_alt = (alt_wert.get(eintrag["data_id"]) or {}).get("ist")
+        if eintrag["ist"] is not None and ist_alt is not None:
+            delta[eintrag["data_id"]] = eintrag["ist"] - ist_alt
     return delta
 
 

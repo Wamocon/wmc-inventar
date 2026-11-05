@@ -380,7 +380,7 @@ def protokolltexte(art: str) -> dict:
         "nutzung": e.nutzungsbedingungen_ausgabe,
         "erklaerung": e.erklaerungen_ausgabe,
         "unterzeichnung": e.unterzeichnung_ausgabe,
-        "version": f"{e.nutzungsbedingungen_ausgabe_version} / {e.erklaerungen_ausgabe_version} / {e.unterzeichnung_ausgabe_version}",
+        "version": f"{e.nutzungsbedingungen_version} / {e.erklaerungen_version} / {e.unterzeichnung_version}",
     }
 
 
@@ -1111,6 +1111,10 @@ def _konfliktwert_uebernehmen(konflikt: GeratKonflikt, ausgefuehrt_von: Konto | 
     wert: object = konflikt.neuer_wert
     if feld in ("kaufdatum", "garantie_bis"):
         wert = import_parser.datum_aus_text(konflikt.neuer_wert)
+    elif feld == "kategorie":
+        wert = Kategorie.objects.filter(name=konflikt.neuer_wert).first()
+        if wert is None:
+            raise GeratFehler("Diese Kategorie gibt es nicht mehr.")
     elif feld == "kaufpreis_netto":
         try:
             wert = Decimal(konflikt.neuer_wert)

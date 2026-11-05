@@ -32,7 +32,7 @@ cp .env.example .env
 docker compose up -d --build
 
 # 3. Einmalig: Kategorien, erster Lagerort und Admin-Konto
-docker compose exec -e ADMIN_EMAIL=it@firma.example -e ADMIN_PASSWORT='...' web python manage.py startdaten
+docker compose exec -e ADMIN_EMAIL=it@firma.example -e ADMIN_PASSWORT='...' -e ADMIN_VORNAME=Vorname -e ADMIN_NACHNAME=Nachname web python manage.py startdaten
 ```
 
 Danach unter `BASIS_URL` anmelden und in den Einstellungen Firmendaten, Logo und die verbindlichen Texte der Protokolle eintragen. Beispieldaten laufen nur im Entwicklungsmodus (`INVENTAR_DEBUG=1`).
@@ -143,12 +143,8 @@ python manage.py migrate
 #### SQLite (Entwicklung)
 
 ```bash
-# 1. Dump einspielen
-sqlite3 var/inventar.sqlite3 < inventar.sql
-
-# 2. Dateien zurückkopieren
-cp -a /srv/inventar/sicherung/<Stempel>/dateien/ var/dateien/
-cp -a /srv/inventar/sicherung/<Stempel>/mails/ var/mails/
+cp /srv/inventar/sicherung/<Stempel>/inventar.sqlite3 var/inventar.sqlite3
+rm -rf var/dateien && cp -a /srv/inventar/sicherung/<Stempel>/dateien var/dateien
 ```
 
 #### Docker

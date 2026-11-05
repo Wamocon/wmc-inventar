@@ -28,7 +28,7 @@
       <label for="import-blatt">Blatt</label>
       <select id="import-blatt" name="blatt" data-test="blatt">
         {% for b in blaetter %}
-        <option value="{{ b.name }}"{% if b.name == blatt_wahl %} selected{% endif %}>{{ b.name }} ({{ b.zeilen }} Zeilen, Kopfzeile in Zeile {{ b.kopfzeile }})</option>
+        <option value="{{ b.name }}"{% if b.gesperrt %} disabled{% elif b.name == blatt_wahl %} selected{% endif %}>{{ b.name }}{% if b.gesperrt %}, wird nicht übernommen{% endif %} ({{ b.zeilen }} Zeilen, Kopfzeile in Zeile {{ b.kopfzeile }})</option>
         {% endfor %}
       </select>
     </div>
