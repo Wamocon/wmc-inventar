@@ -149,7 +149,7 @@ class GeratAusgabeForm(forms.Form):
     ]
 
     ziel_person = forms.ModelChoiceField(
-        queryset=Person.objects.all(),
+        queryset=Person.objects.filter(aktiv=True),
         required=False,
         label="Person",
         widget=forms.Select(attrs={"data-test": "ausgabe-person"}),
@@ -505,7 +505,35 @@ class GeratNotizForm(forms.Form):
 
 # --- M5 Verleih (F-30) ---------------------------------------------------------
 
-class VerleihForm(forms.Form):
+class _LeihAngabenForm(forms.Form):
+    """Zustand, Zubehör und Bemerkung, wie bei der Ausgabe (F-30: „Protokoll wie F-21“)."""
+
+    zustand = forms.ChoiceField(
+        choices=Gerat.ZUSTAENDE,
+        required=False,
+        label="Zustand",
+        widget=forms.Select(attrs={"data-test": "ausgabe-zustand"}),
+    )
+    zubehoer_komplett = forms.ChoiceField(
+        choices=[("ja", "Ja"), ("nein", "Nein")],
+        required=False,
+        initial="ja",
+        label="Zubehör komplett",
+        widget=forms.Select(attrs={"data-test": "zubehoer-komplett"}),
+    )
+    anmerkung = forms.CharField(
+        required=False,
+        label="Bemerkung",
+        widget=forms.Textarea(attrs={"rows": 2, "data-test": "anmerkung"}),
+    )
+
+    def __init__(self, *args, gerat: Gerat | None = None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if gerat is not None:
+            self.fields["zustand"].initial = gerat.zustand
+
+
+class VerleihForm(_LeihAngabenForm):
     """Formular für den Verleih (F-30, TESTSCHNITTSTELLE 4).
 
     Person, Rückgabe bis (Pflicht), Zweck (Pflicht).
@@ -654,7 +682,7 @@ class LeiheZurueckziehenForm(forms.Form):
     """M5 Teil 2 (F-37): Mitarbeiter zieht die Leihe zurück. Der Knopf genügt."""
 
 
-class LeiheAusgebenForm(forms.Form):
+class LeiheAusgebenForm(_LeihAngabenForm):
     """M5 Teil 4 (F-33): IT gibt eine genehmigte Leihe aus.
 
     Unterschrift wie beim direkten Verleih (F-30). Ohne Angabe gilt der

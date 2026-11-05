@@ -47,13 +47,11 @@ class PasswortSetForm(forms.Form):
     passwort = forms.CharField(
         label="Neues Passwort",
         widget=forms.PasswordInput,
-        min_length=MIN_PASSWORT_LAENGE,
         validators=[_passwort_mind_12],
     )
     passwort_wiederholung = forms.CharField(
         label="Passwort wiederholen",
         widget=forms.PasswordInput,
-        min_length=MIN_PASSWORT_LAENGE,
     )
 
     def clean(self):
@@ -73,13 +71,11 @@ class PasswortAenderForm(forms.Form):
     neues_passwort = forms.CharField(
         label="Neues Passwort",
         widget=forms.PasswordInput,
-        min_length=MIN_PASSWORT_LAENGE,
         validators=[_passwort_mind_12],
     )
     neues_passwort_wiederholung = forms.CharField(
         label="Neues Passwort wiederholen",
         widget=forms.PasswordInput,
-        min_length=MIN_PASSWORT_LAENGE,
     )
 
     def clean(self):

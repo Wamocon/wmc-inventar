@@ -14,7 +14,7 @@ import os
 from datetime import date, timedelta
 
 from django.db import transaction
-from django.db.models import Max
+from django.db.models import Max, Q
 from django.utils import timezone
 
 from konten.models import Konto
@@ -205,6 +205,27 @@ def gerat_ausgeben(
     return gerat
 
 
+def _ausgabe_entwurf(gerat: Gerat) -> Protokoll | None:
+    """Der offene Entwurf einer Ausgabe oder Leihe, in dem das Gerät steht (F-21).
+
+    Eine Rücknahme sperrt nichts, das Gerät ist da schon im Lager (F-141). Eine neue
+    Fassung auch nicht, das Original hat seine Wirkung schon gehabt (F-135).
+    """
+    return gerat.alle_protokolle().filter(
+        stand=Protokoll.STAND_BEARBEITER_OFFEN, art=Protokoll.ART_AUSGABE, ist_korrektur=False,
+    ).first()
+
+
+def _ohne_ausgabe_entwurf(gerat: Gerat) -> None:
+    """F-21: Solange ein Entwurf offen ist, ändert sich am Gerät nichts."""
+    entwurf = _ausgabe_entwurf(gerat)
+    if entwurf is not None:
+        raise GeratFehler(
+            f"Für dieses Gerät steht ein offenes Protokoll ({entwurf.nr}). "
+            "Bitte zuerst signieren oder verwerfen."
+        )
+
+
 def ausgabe_sperrgrund(gerat: Gerat) -> str:
     """Warum dieses Gerät nicht ausgegeben werden kann (F-20, F-21); leer, wenn es geht."""
     if gerat.status == Gerat.STATUS_AUSGEMUSTERT:
@@ -214,7 +235,7 @@ def ausgabe_sperrgrund(gerat: Gerat) -> str:
     # Kapitel 4: Nur „Auf Lager“; ein Personenwechsel läuft über die Rückgabe.
     if gerat.status != Gerat.STATUS_AUF_LAGER:
         return "Nur Geräte „Auf Lager“ können ausgegeben werden. Bitte zuerst zurücknehmen."
-    if gerat.alle_protokolle().filter(stand=Protokoll.STAND_BEARBEITER_OFFEN).exists():
+    if _ausgabe_entwurf(gerat) is not None:
         return (
             "Für dieses Gerät steht bereits ein offenes Protokoll. "
             "Eine weitere Ausgabe ist solange nicht möglich."
@@ -431,6 +452,7 @@ def ausmustern(
     """
     if gerat.status == Gerat.STATUS_AUSGEMUSTERT:
         raise GeratFehler("Gerät ist bereits ausgemustert.")
+    _ohne_ausgabe_entwurf(gerat)
     if not grund:
         raise GeratFehler("Grund der Ausmusterung muss angegeben werden.")
     if not datum:
@@ -760,6 +782,7 @@ def gerat_in_reparatur_geschickt(
         raise GeratFehler("Ausgemusterte Geräte können nicht repariert werden.")
     if gerat.status not in (Gerat.STATUS_AUF_LAGER, Gerat.STATUS_IN_BENUTZUNG):
         raise GeratFehler("Nur Geräte auf Lager oder in Benutzung können repariert werden.")
+    _ohne_ausgabe_entwurf(gerat)
 
     gerat.status = Gerat.STATUS_IN_REPARATUR
 
@@ -1684,6 +1707,9 @@ def leih_gerat_ausgeben(
     zweck: str,
     ausgefuehrt_von: Konto,
     unterschrift: str = "papier",
+    zustand: int | None = None,
+    zubehoer_komplett: bool = True,
+    anmerkung: str = "",
 ) -> Leihe | None:
     """Vorgang „Verleih" (F-30, Kapitel 3.2, Kapitel 8).
 
@@ -1711,9 +1737,6 @@ def leih_gerat_ausgeben(
     if gerat.status != Gerat.STATUS_AUF_LAGER:
         raise GeratFehler(f"Gerät ist nicht auf Lager (Status: {gerat.status}).")
 
-    if _gerat_ist_reserviert(gerat):
-        raise GeratFehler("Gerät ist reserviert und kann nicht verliehen werden.")
-
     if not zweck or not zweck.strip():
         raise GeratFehler("Zweck ist Pflicht.")
 
@@ -1721,11 +1744,12 @@ def leih_gerat_ausgeben(
     if rueckgabe_bis is None or rueckgabe_bis <= heute:
         raise GeratFehler("Das Rückgabedatum muss nach heute liegen.")
 
+    if _gerat_ist_reserviert(gerat, heute, rueckgabe_bis):
+        raise GeratFehler("Gerät ist in diesem Zeitraum reserviert und kann nicht verliehen werden.")
+
     # A-0128: Zweiter Verleih abgelehnt, solange ein Protokoll
     # auf "bearbeiter-offen" steht (F-30, F-33).
-    if Protokoll.objects.filter(
-        geraet=gerat, stand=Protokoll.STAND_BEARBEITER_OFFEN
-    ).exists():
+    if _ausgabe_entwurf(gerat) is not None:
         raise GeratFehler(
             "Für dieses Gerät steht bereits ein offenes Protokoll. "
             "Ein weiterer Verleih ist solange nicht möglich."
@@ -1748,7 +1772,7 @@ def leih_gerat_ausgeben(
             zeitpunkt=jetzt_wie_im_entwicklungsmodus(),
             erzeugt_von=ausgefuehrt_von,
         )
-        _protokoll_erstellen(
+        protokoll = _protokoll_erstellen(
             person=person,
             gerat=gerat,
             art=Protokoll.ART_AUSGABE,
@@ -1762,16 +1786,22 @@ def leih_gerat_ausgeben(
             ),
             unterschrift_art="tool" if im_tool else "papier",
             leihe=leihe,
+            positionen=[position_aus_gerat(
+                gerat,
+                zustand_ausgabe=int(zustand) if zustand else None,
+                zubehoer_komplett=zubehoer_komplett,
+                bemerkung=(anmerkung or "").strip(),
+            )],
         )
         if im_tool:
             _reservierung_nachziehen(gerat)
         else:
-            _leihe_ausgabe_buchen(leihe, ausgefuehrt_von)
+            _leihe_ausgabe_buchen(leihe, ausgefuehrt_von, protokoll)
 
     return leihe
 
 
-def _leihe_ausgabe_buchen(leihe: Leihe, ausgefuehrt_von: Konto | None) -> None:
+def _leihe_ausgabe_buchen(leihe: Leihe, ausgefuehrt_von: Konto | None, protokoll: Protokoll | None = None) -> None:
     """Der eine Zeitpunkt der Ausgabe (F-30, F-33, Zeitpunkt wie in F-21).
 
     Gerät „Verliehen" bei der Person, Leihe „ausgegeben", Vorgang „Ausgabe",
@@ -1779,13 +1809,21 @@ def _leihe_ausgabe_buchen(leihe: Leihe, ausgefuehrt_von: Konto | None) -> None:
     Aufrufers: beim Papierweg mit dem Speichern, sonst mit der Signatur.
     """
     gerat = leihe.gerat
+    position = (protokoll.positionen or [{}])[0] if protokoll is not None else {}
     gerat.status = Gerat.STATUS_VERLIEHEN
     gerat.person = leihe.person
     gerat.ort = None
-    gerat.save(update_fields=["status", "person", "ort"])
+    gerat.altbestand_ohne_protokoll = False
+    if position.get("zustand_ausgabe"):
+        gerat.zustand = int(position["zustand_ausgabe"])
+    gerat.save(update_fields=["status", "person", "ort", "altbestand_ohne_protokoll", "zustand"])
 
     leihe.status = Leihe.STATUS_AUSGEGEBEN
     leihe.save(update_fields=["status"])
+
+    teile = [leihe.zweck or "Leihgerät ausgegeben."]
+    if protokoll is not None:
+        teile.append(_ausgabe_notiz(protokoll.nr, position))
 
     Vorgang.objects.create(
         gerat=gerat,
@@ -1794,7 +1832,8 @@ def _leihe_ausgabe_buchen(leihe: Leihe, ausgefuehrt_von: Konto | None) -> None:
         erzeugt_von=ausgefuehrt_von,
         leihgabe_an=leihe.person,
         zurueck_am=leihe.rueckgabe_bis,
-        notiz=leihe.zweck or "Leihgerät ausgegeben.",
+        notiz=", ".join(teile),
+        protokoll=protokoll,
         abschliesst=False,
     )
     _reservierung_nachziehen(gerat)
@@ -1834,15 +1873,17 @@ def _gerat_ist_reserviert(
 ) -> bool:
     """Ist das Gerät reserviert? (F-20, Kapitel 4, F-34)
 
-    Ohne Zeitraum: es gibt eine genehmigte Leihe für das Gerät. Mit
+    Ohne Zeitraum: es gibt eine genehmigte Leihe, die noch nicht vorbei ist. Mit
     Zeitraum: Überschneidung mit einer genehmigten oder ausgegebenen Leihe
     desselben Geräts – ein Gerät gehört in einem Zeitraum nur zu einer
     Leihe (F-34, O-12).
     """
     if beginn is not None and ende is not None:
         return bool(_belegende_leihen(gerat, beginn, ende, ohne=ohne))
+    heute = jetzt_wie_im_entwicklungsmodus().date()
     return Leihe.objects.filter(
-        gerat=gerat, genehmigt=True, status=Leihe.STATUS_GENEHMIGT
+        Q(ende__isnull=True) | Q(ende__gte=heute),
+        gerat=gerat, genehmigt=True, status=Leihe.STATUS_GENEHMIGT,
     ).exists()
 
 
@@ -2200,6 +2241,7 @@ def leihe_genehmigen(
             "Das Gerät ist in diesem Zeitraum bereits für eine "
             "Leihe reserviert."
         )
+    _ohne_ausgabe_entwurf(gerat)
     with transaction.atomic():
         leihe.gerat = gerat
         leihe.genehmigt = True
@@ -2233,11 +2275,12 @@ def leihe_ablehnen(
     """
     from .models import Vorgang
 
-    if leihe.status != Leihe.STATUS_ANGEFRAGT:
-        raise GeratFehler("Diese Leihe ist nicht angefragt.")
+    if leihe.status not in (Leihe.STATUS_ANGEFRAGT, Leihe.STATUS_GENEHMIGT):
+        raise GeratFehler("Diese Leihe ist weder angefragt noch genehmigt.")
     if not begruendung or not begruendung.strip():
         raise GeratFehler("Begründung ist Pflicht.")
     with transaction.atomic():
+        leihe.protokolle.filter(stand=Protokoll.STAND_BEARBEITER_OFFEN).delete()
         leihe.abgelehnt = True
         leihe.abgelehnt_bis = begruendung.strip()
         leihe.abgelehnt_von = ausgefuehrt_von
@@ -2280,10 +2323,7 @@ def leihe_zurueckziehen(
     from .models import Vorgang
 
     if not leihe.ist_zurueckziehbar():
-        raise GeratFehler(
-            "Diese Leihe ist nicht zurückziehbar – sie ist ausgegeben "
-            "."
-        )
+        raise GeratFehler("Diese Leihe lässt sich nicht mehr zurückziehen.")
     with transaction.atomic():
         leihe.status = Leihe.STATUS_ZURUECKGEZOGEN
         leihe.genehmigt = False
@@ -2325,6 +2365,9 @@ def leihe_ausgeben(
     leihe: Leihe,
     ausgefuehrt_von: Konto,
     unterschrift: str = "papier",
+    zustand: int | None = None,
+    zubehoer_komplett: bool = True,
+    anmerkung: str = "",
 ) -> Leihe:
     """M5 Teil 4 (F-33, F-21, F-22): IT gibt eine genehmigte Leihe aus.
 
@@ -2374,9 +2417,7 @@ def leihe_ausgeben(
     if _gerat_ist_reserviert(gerat, leihe.beginn or rueckgabe_bis, rueckgabe_bis, ohne=leihe):
         raise GeratFehler("Gerät ist für eine andere Leihe reserviert und kann nicht ausgegeben werden.")
 
-    if Protokoll.objects.filter(
-        geraet=gerat, stand=Protokoll.STAND_BEARBEITER_OFFEN
-    ).exists():
+    if _ausgabe_entwurf(gerat) is not None:
         raise GeratFehler(
             "Für dieses Gerät steht bereits ein offenes Protokoll. "
             "Die Ausgabe ist solange nicht möglich."
@@ -2390,7 +2431,7 @@ def leihe_ausgeben(
     with transaction.atomic():
         # A-0123 (M6 Teil 1): F-21, F-22, F-130 — Protokoll in der
         # Service-Schicht bei Verleih, mit Bezug auf die Leihe.
-        _protokoll_erstellen(
+        protokoll = _protokoll_erstellen(
             person=person,
             gerat=gerat,
             art=Protokoll.ART_AUSGABE,
@@ -2404,9 +2445,15 @@ def leihe_ausgeben(
             ),
             unterschrift_art="tool" if im_tool else "papier",
             leihe=leihe,
+            positionen=[position_aus_gerat(
+                gerat,
+                zustand_ausgabe=int(zustand) if zustand else None,
+                zubehoer_komplett=zubehoer_komplett,
+                bemerkung=(anmerkung or "").strip(),
+            )],
         )
         if not im_tool:
-            _leihe_ausgabe_buchen(leihe, ausgefuehrt_von)
+            _leihe_ausgabe_buchen(leihe, ausgefuehrt_von, protokoll)
 
     return leihe
 
@@ -2502,6 +2549,28 @@ def leihe_verlaengern(
         )
         _mail_verlaengerung_an_person(leihe)
 
+    return leihe
+
+
+def leihe_verlaengerung_ablehnen(leihe: Leihe, ausgefuehrt_von: Konto) -> Leihe:
+    """F-35: Die IT lehnt eine angefragte Verlängerung ab. Die Leihe läuft zur alten Frist weiter."""
+    from django.core.mail import send_mail
+
+    if leihe.status != Leihe.STATUS_AUSGEGEBEN or leihe.verlaengerung_bis is None:
+        raise GeratFehler("Für diese Leihe ist keine Verlängerung angefragt.")
+    leihe.verlaengerung_bis = None
+    leihe.save(update_fields=["verlaengerung_bis"])
+    empfaenger = leihe_mail_empfaenger(leihe.person)
+    if empfaenger and Einstellungen.aktuelles().mail_verleih_ablehnung:
+        frist = leihe.rueckgabe_bis.strftime("%d.%m.%Y") if leihe.rueckgabe_bis else ""
+        send_mail(
+            f"Verlängerung abgelehnt: Leihe {leihe.nr}",
+            f"Ihre angefragte Verlängerung der Leihe {leihe.nr} wurde abgelehnt. "
+            f"Die Rückgabe bleibt am {frist}.\n\nDetails: {link_ins_tool('/meine-geraete/')}\n\n{mail_signatur()}",
+            mail_absender(),
+            [empfaenger],
+            fail_silently=True,
+        )
     return leihe
 
 
@@ -2616,6 +2685,15 @@ def protokoll_bearbeiter_signieren(
         konto.registriere_fehlversuch(jetzt=now)
         return protokoll, False
 
+    # F-21: Inzwischen anderswo gelandet? Dann überschreibt die Signatur nichts.
+    if protokoll.art == Protokoll.ART_AUSGABE and protokoll.unterschrift_art == "tool" and not protokoll.ist_korrektur:
+        for gerat in protokoll.geraete_liste():
+            if gerat.status != Gerat.STATUS_AUF_LAGER:
+                raise GeratFehler(
+                    f"{gerat.inventarnummer} steht nicht mehr auf Lager ({gerat.status_anzeige}). "
+                    "Bitte den Entwurf verwerfen."
+                )
+
     # F-132: Signatur wird abgelehnt, solange die Checkliste noch offen ist.
     from . import pdf as pdf_modul
     if pdf_modul._offene_punkte(protokoll):
@@ -2649,7 +2727,7 @@ def protokoll_bearbeiter_signieren(
         if protokoll.leihe is None:
             _ausgabe_wirksam_machen(protokoll, konto, now)
         elif protokoll.leihe.status == Leihe.STATUS_GENEHMIGT:
-            _leihe_ausgabe_buchen(protokoll.leihe, konto)
+            _leihe_ausgabe_buchen(protokoll.leihe, konto, protokoll)
 
     # F-136: Token für die Gegenzeichnung (14 Tage gültig).
     import secrets

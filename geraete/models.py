@@ -222,6 +222,16 @@ class Gerat(models.Model):
             einstellungen.save(update_fields=["inventar_zaehler"])
         return super().delete(*args, **kwargs)
 
+    @property
+    def reserviert_aktiv(self) -> bool:
+        """Die Reservierung gilt, bis ihr Zeitraum vorbei ist (Kapitel 4, F-20)."""
+        if not self.reserviert:
+            return False
+        if self.reserviert_bis is None:
+            return True
+        from konten.zeit import jetzt_wie_im_entwicklungsmodus
+        return self.reserviert_bis >= jetzt_wie_im_entwicklungsmodus().date()
+
     def alle_protokolle(self):
         """Alle Protokolle des Geräts, auch wenn es darin nicht das erste Gerät ist."""
         return Protokoll.objects.filter(

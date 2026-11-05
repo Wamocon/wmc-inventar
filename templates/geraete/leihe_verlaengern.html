@@ -24,6 +24,7 @@
     </div>
     <div class="actions">
       <button type="submit" class="btn primary" data-test="speichern">Verlängern</button>
+      {% if leihe.verlaengerung_bis %}<button type="submit" class="btn" name="aktion" value="ablehnen" data-test="verlaengerung-ablehnen">Ablehnen</button>{% endif %}
       <a class="btn link" href="/verleih/" data-test="abbrechen">Abbrechen</a>
     </div>
   </form>

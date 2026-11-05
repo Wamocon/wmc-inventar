@@ -6,6 +6,7 @@
         <p class="lead"><span data-test="anzahl">{{ leihen|length }}</span> Leihen: angefragt, genehmigt, ausgegeben, überfällig, zurückgegeben, abgelehnt, zurückgezogen</p>
     </div>
     <div class="actions">
+        {% if request.user.ist_admin %}<a class="btn primary" href="/geraete/?status=auf-lager&amp;leihpool=1" data-test="direkt-verleihen">Direkt verleihen</a>{% endif %}
         <a class="btn" href="/verleih/?format=xlsx" data-test="export-xlsx">Export .xlsx</a>
         <a class="btn" href="/verleih/?format=csv" data-test="export-csv">Export .csv</a>
     </div>
@@ -69,6 +70,7 @@
                             <a href="{% url 'geraete:leih_ablehnen' leihe.id %}" class="btn sm" data-test="ablehnen">Ablehnen</a>
                         {% elif leihe.status == "genehmigt" %}
                             <a href="{% url 'geraete:leih_ausgeben' leihe.id %}" class="btn sm primary" data-test="ausgeben">Ausgeben</a>
+                            <a href="{% url 'geraete:leih_ablehnen' leihe.id %}" class="btn sm" data-test="reservierung-aufheben">Reservierung aufheben</a>
                         {% elif leihe.status == "ausgegeben" %}
                             <a href="/geraete/{{ leihe.gerat.inventarnummer }}/rueckgeben/" class="btn sm" data-test="ruecknahme">Rücknahme</a>
                             <a href="{% url 'geraete:leih_verlaengern' leihe.id %}" class="btn sm" data-test="verlaengern">Verlängern</a>

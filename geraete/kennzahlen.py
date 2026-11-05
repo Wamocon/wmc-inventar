@@ -280,13 +280,20 @@ def daten_unvollstaendig(heute: date | None = None) -> list[dict]:
 def offene_punkte_in_klaerung(heute: date | None = None) -> list[dict]:
     """Offene Prüfpunkte IT-Offboarding (F-133, Prüfpunkte „in Klärung“).
 
-    Die Offboarding-Werte sind Boolesche Werte (protokoll.py). Ein Punkt
-    gilt als offen, solange er nicht abgehackt ist; die Punkte „in Klärung“
-    sind die offenen, die noch nicht „erledigt“ sind.
+    Nur Rücknahmeprotokolle, nur Punkte mit dem Stand „in Klärung“; die Zeile nennt sie.
     """
     zeilen = []
-    for protokoll in Protokoll.objects.select_related("person", "geraet").order_by("nr"):
-        offene = protokoll.offboarding_unbeantwortet()
+    protokolle = (
+        Protokoll.objects.filter(art=Protokoll.ART_RUECKNAHME)
+        .exclude(stand=Protokoll.STAND_ERSETZT)
+        .select_related("person", "geraet").order_by("nr")
+    )
+    for protokoll in protokolle:
+        werte = protokoll.offboarding or {}
+        offene = [
+            text for schluessel, text in protokoll.punkte_zum_anzeigen("offboarding")
+            if isinstance(werte.get(schluessel), dict) and werte[schluessel].get("status") == "in_klaerung"
+        ]
         if not offene:
             continue
         person = protokoll.person

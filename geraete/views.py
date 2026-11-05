@@ -206,6 +206,8 @@ def liste(request):
             qs = qs.filter(ort_id=ort_id)
         else:
             qs = qs.filter(ort__kennung=ort_id)
+    if request.GET.get("leihpool") == "1":
+        qs = qs.filter(leihpool=True)
     if kategorie_id:
         # Kategorie-Filter: Name (Kapitel 3) oder Datenbanknummer (ältere Links).
         if kategorie_id.isdigit():
@@ -1040,9 +1042,12 @@ def ausgeben(request, inventarnummer: str):
             except services.GeratFehler as fehler:
                 meldung_error(request, str(fehler))
                 return redirect("/geraete/" + gerat.inventarnummer + "/")
-            if ziel_person is not None:
-                _fotos_anhaengen(request, gerat.alle_protokolle().first(), gerat)
-            meldung_success(request, "Gerät ausgegeben.")
+            protokoll = gerat.alle_protokolle().first() if ziel_person is not None else None
+            _fotos_anhaengen(request, protokoll, gerat)
+            if protokoll is not None and protokoll.stand == Protokoll.STAND_BEARBEITER_OFFEN:
+                meldung_success(request, f"Protokoll {protokoll.nr} angelegt. Das Gerät wird mit Ihrer Signatur ausgegeben.")
+            else:
+                meldung_success(request, "Gerät ausgegeben.")
             return redirect("/geraete/" + gerat.inventarnummer + "/")
     else:
         form = GeratAusgabeForm(gerat=gerat)
@@ -1107,7 +1112,10 @@ def sammelausgabe(request):
         except services.GeratFehler as fehler:
             form.add_error(None, str(fehler))
         else:
-            meldung_success(request, f"{len(geraete)} Geräte ausgegeben.")
+            if protokoll is not None and protokoll.stand == Protokoll.STAND_BEARBEITER_OFFEN:
+                meldung_success(request, f"Protokoll {protokoll.nr} angelegt. Die Geräte werden mit Ihrer Signatur ausgegeben.")
+            else:
+                meldung_success(request, f"{len(geraete)} Geräte ausgegeben.")
             if protokoll is not None:
                 return redirect(f"/protokolle/{protokoll.nr}/")
             return redirect("/geraete/")
@@ -1294,8 +1302,7 @@ def nachweis_zeigen(request, inventarnummer: str, vorgang_id: int):
 def loeschen_zeigen(request, inventarnummer: str):
     """Bestätigungsdialog für „Gerät löschen“ (F-14, A-0099)."""
     if not request.user.ist_admin:
-        meldung_error(request, "Zugriff verweigert: Löschen ist Ihnen nicht erlaubt.")
-        return redirect("/")
+        raise PermissionDenied("Zugriff verweigert: Löschen ist Ihnen nicht erlaubt.")
     gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
     return render(request, "geraete/loeschen.html", {"gerat": gerat})
 
@@ -1308,8 +1315,7 @@ def loeschen(request, inventarnummer: str):
     Nur für Admin und nur, solange außer Aufnahme kein Vorgang existiert.
     """
     if not request.user.ist_admin:
-        meldung_error(request, "Zugriff verweigert: Löschen ist Ihnen nicht erlaubt.")
-        return redirect("/")
+        raise PermissionDenied("Zugriff verweigert: Löschen ist Ihnen nicht erlaubt.")
     gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
     if gerat.vorgaenge.exclude(typ=Vorgang.TYP_AUFNAHME).count() > 0:
         meldung_error(request, "Das Gerät hat schon Vorgänge und kann nicht gelöscht werden.")
@@ -1514,6 +1520,7 @@ def verleih_zeige(request, inventarnummer):
     gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
     form = VerleihForm(
         request.POST or None,
+        gerat=gerat,
         initial={"rueckgabe_bis": jetzt_wie_im_entwicklungsmodus().date() + timedelta(days=7)},
     )
 
@@ -1532,7 +1539,11 @@ def verleih_zeige(request, inventarnummer):
                 zweck=zweck,
                 ausgefuehrt_von=request.user,
                 unterschrift=unterschrift,
+                zustand=form.cleaned_data.get("zustand"),
+                zubehoer_komplett=form.cleaned_data.get("zubehoer_komplett") != "nein",
+                anmerkung=form.cleaned_data.get("anmerkung", ""),
             )
+            _fotos_anhaengen(request, leihe.protokolle.order_by("-id").first(), gerat)
             offen = leihe.offenes_protokoll
             if offen is not None:
                 meldung_success(
@@ -1970,6 +1981,7 @@ def leihe_ausgeben_zeige(request, leih_id):
     leihe = get_object_or_404(Leihe, id=leih_id)
     form = LeiheAusgebenForm(
         request.POST if request.method == "POST" else None,
+        gerat=leihe.gerat,
         initial={"unterschrift": "tool"},
     )
     fehler = ""
@@ -1979,7 +1991,11 @@ def leihe_ausgeben_zeige(request, leih_id):
                 leihe,
                 ausgefuehrt_von=request.user,
                 unterschrift=form.cleaned_data.get("unterschrift") or "papier",
+                zustand=form.cleaned_data.get("zustand"),
+                zubehoer_komplett=form.cleaned_data.get("zubehoer_komplett") != "nein",
+                anmerkung=form.cleaned_data.get("anmerkung", ""),
             )
+            _fotos_anhaengen(request, leihe.protokolle.order_by("-id").first(), leihe.gerat)
             offen = leihe.offenes_protokoll
             if offen is not None:
                 meldung_success(
@@ -2025,6 +2041,14 @@ def leihe_verlaengern_zeige(request, leih_id):
     )
     form = LeiheVerlaengernForm(request.POST or None, vorschlag=vorschlag)
     fehler = ""
+    if request.method == "POST" and request.POST.get("aktion") == "ablehnen":
+        try:
+            services.leihe_verlaengerung_ablehnen(leihe, request.user)
+        except services.GeratFehler as fehler_vorgang:
+            meldung_error(request, str(fehler_vorgang))
+        else:
+            meldung_success(request, "Verlängerung abgelehnt. Die Mail an die Person ist unterwegs.")
+        return redirect("/verleih/")
     if request.method == "POST" and form.is_valid():
         try:
             leihe_verlaengern(

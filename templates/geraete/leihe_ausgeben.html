@@ -14,13 +14,17 @@
     <dt>Rückgabe bis</dt><dd>{{ leihe.rueckgabe_bis|date:"d.m.Y" }}</dd>
     <dt>Zweck</dt><dd>{{ leihe.zweck }}</dd>
   </dl>
-  <form method="post" novalidate data-test="verleih-formular">
+  <form method="post" novalidate enctype="multipart/form-data" data-test="verleih-formular">
     {% csrf_token %}
     <div class="meldungen">
       {% include "fragmente/fehler.html" %}
       {% if fehler %}<div class="meldung error" data-test="fehler">{{ fehler }}</div>{% endif %}
     </div>
     <div class="form-grid">
+      <div class="field"><label for="id_zustand">Zustand</label>{{ form.zustand }}</div>
+      <div class="field"><label for="id_zubehoer_komplett">Zubehör komplett</label>{{ form.zubehoer_komplett }}</div>
+      <div class="field full"><label for="id_anmerkung">Bemerkung</label>{{ form.anmerkung }}</div>
+      <div class="field full"><label for="id_fotos">Fotos (JPG, PNG oder HEIC bis 10 MB)</label><input type="file" name="fotos" id="id_fotos" multiple accept="image/jpeg,image/png,image/heic" data-test="foto-datei"></div>
       <div class="field full" data-test="unterschrift">
         <label>Unterschrift</label>
         {% for radio in form.unterschrift %}

@@ -34,7 +34,7 @@
     <ul class="ledger" data-test="liste">
       {% for kz in kennzahlen %}
       <li data-test="kennzahl" data-id="{{ kz.data_id }}"{% if kz.achtung %} class="attn"{% endif %}>
-        <span class="k-name">{{ kz.titel }}{% if kz.unterzeile %}<small>{{ kz.unterzeile }}</small>{% endif %}</span>
+        <span class="k-name">{{ kz.titel }}{% if kz.data_id == "ueberfaellig" and kz.ist %} <span class="chip-status warn" data-test="markierung-ueberfaellig"><span aria-hidden="true">⚠</span> überfällig</span>{% endif %}{% if kz.unterzeile %}<small>{{ kz.unterzeile }}</small>{% endif %}</span>
         <span class="k-val"><span data-test="ist">{% if kz.ist is not None %}{{ kz.ist }}{% else %}–{% endif %}</span>{% if kz.gesamt is not None %}<small> / <span data-test="gesamt">{{ kz.gesamt }}</span></small>{% endif %}</span>
         {% if kz.delta is None %}<span class="delta flat"></span>{% else %}<span class="delta{% if not kz.delta %} flat{% endif %}" data-test="delta">{% if kz.delta == 0 %}±0{% elif kz.delta > 0 %}+{{ kz.delta }}{% else %}−{{ kz.delta_abs }}{% endif %}</span>{% endif %}
       </li>
@@ -63,6 +63,7 @@
           <span class="what">
             {% if z.link %}<a href="{{ z.link }}" data-test="sprung">{% if z.nr %}{{ z.nr }}{% elif z.kennung %}{{ z.kennung }}{% else %}{{ z.person|default:z.name }}{% endif %}</a>{% else %}<b>{{ z.nr }}</b>{% endif %}
             <small>
+              {% if liste.data_id == "ueberfaellig" %}<span class="chip-status warn" data-test="markierung-ueberfaellig"><span aria-hidden="true">⚠</span> überfällig</span> {% endif %}
               {% if liste.data_id == "ueberfaellig" or liste.data_id == "anfragen" %}
                 {{ z.gerat }} · {{ z.person }}{% if z.frist %} · Rückgabe {{ z.frist|date:"d.m.Y" }}{% endif %}{% if z.zweck %} · {{ z.zweck }}{% endif %}
               {% elif liste.data_id == "arbeitsplaetze-unvollstaendig" %}
@@ -74,7 +75,7 @@
               {% elif liste.data_id == "daten-unvollstaendig" %}
                 {{ z.modell }} · fehlt: {{ z.luecken|join:", " }}
               {% elif liste.data_id == "offene-punkte" %}
-                Offene Punkte: {{ z.punkte|length }}
+                In Klärung: {{ z.punkte|join:", " }}
               {% elif liste.data_id == "austritte" %}
                 Austritt {{ z.austritt|date:"d.m.Y" }} · {{ z.geraete }} Gerät(e)
               {% endif %}

@@ -85,6 +85,10 @@ def _jetzt():
 # Anmeldung (F-01)
 # ---------------------------------------------------------------------------
 
+# F-01: Immer derselbe Satz, er verrät nicht, ob es das Konto gibt oder ob es gesperrt ist.
+NEUTRAL = "E-Mail oder Passwort ist falsch. Nach mehreren Fehlversuchen ist die Anmeldung 15 Minuten gesperrt."
+
+
 def anmelden(request):
     """Anmeldung mit E-Mail und Passwort (F-01).
 
@@ -101,6 +105,8 @@ def anmelden(request):
     form = AnmeldeForm(request.POST or None)
     fehler = ""
 
+    if request.method == "POST" and not form.is_valid():
+        fehler = NEUTRAL
     if request.method == "POST" and form.is_valid():
         email = form.cleaned_data["email"]
         passwort = form.cleaned_data["passwort"]
@@ -113,12 +119,12 @@ def anmelden(request):
 
         if konto is None or not konto.aktiv or konto.ist_gesperrt(jetzt=_jetzt()):
             # Neutrale Meldung (F-01), auch bei Sperre: Sie verrät nicht, ob es das Konto gibt.
-            fehler = "E-Mail oder Passwort ist falsch. Nach mehreren Fehlversuchen ist die Anmeldung für 15 Minuten gesperrt."
+            fehler = NEUTRAL
         else:
             benutzer = authenticate(request, email=konto.email, password=passwort)
             if benutzer is None:
                 konto.registriere_fehlversuch(jetzt=_jetzt())
-                fehler = "E-Mail oder Passwort ist falsch."
+                fehler = NEUTRAL
             else:
                 # F-05: Sitzung wird bei jeder Aktivität aktualisiert
                 benutzer.letzter_login = _jetzt()

@@ -20,7 +20,7 @@
     </div>
     {% if form.errors %}
       <div class="fehler-kasten" data-test="fehler">
-        {% for f in form.errors.values %}{% for e in f %}{{ e }}{% endfor %}{% endfor %}
+        {% for f in form.errors.values %}{% for e in f %}<div>{{ e }}</div>{% endfor %}{% endfor %}
       </div>
     {% endif %}
     <div class="login-akt">

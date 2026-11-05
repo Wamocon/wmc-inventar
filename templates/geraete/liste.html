@@ -92,7 +92,7 @@
           <td data-test="zeile-name">{{ g.kategorie.name }}<span class="sub">{{ g.hersteller }} {{ g.modell }}</span>{% if unvollstaendig %}<span class="sub" data-test="fehlende-felder">fehlt: {{ g.datenluecken_text|join:", " }}</span>{% endif %}</td>
           <td class="nowrap mono">{{ g.geraetename|default:"–" }}</td>
           <td class="nowrap mono">{{ g.seriennummer|default:"–" }}</td>
-          <td class="nowrap"><span class="chip-status {{ g.status }}" data-test="status">{{ g.status_anzeige }}</span>{% if g.reserviert %} <span class="chip-status warn" data-test="zusatz-reserviert">reserviert</span>{% endif %}</td>
+          <td class="nowrap"><span class="chip-status {{ g.status }}" data-test="status">{{ g.status_anzeige }}</span>{% if g.reserviert_aktiv %} <span class="chip-status warn" data-test="zusatz-reserviert">reserviert</span>{% endif %}</td>
           <td>{% if g.person %}{{ g.person.voller_name }}{% elif g.ort %}{{ g.ort.kennung }}{% else %}–{% endif %}</td>
           <td class="nowrap">{{ g.garantie_bis|date:"d.m.Y"|default:"–" }}</td>
         </tr>
