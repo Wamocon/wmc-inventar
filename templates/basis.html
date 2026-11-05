@@ -1,79 +1,82 @@
-{% load static %}<!DOCTYPE html>
-<html lang="de" dir="ltr">
+<!DOCTYPE html>
+<html lang="de">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="csrf-token" content="{{ csrf_token }}">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block titel %}WMC Inventar{% endblock %}</title>
-  <link rel="stylesheet" href="{% static 'fonts/archivo.css' %}">
-  <link rel="stylesheet" href="{% static 'basis.css' %}">
-  {% block kopf %}{% endblock %}
+  <link rel="stylesheet" href="/static/fonts/archivo.css">
+  <link rel="stylesheet" href="/static/basis.css">
+  {% block stile %}{% endblock %}
 </head>
 <body>
-  <header class="topbar" data-test="rahmen">
+  {% block rahmen %}
+  <header class="topbar">
     <div class="top-in">
-      <a class="brand" href="/" data-test="nav-uebersicht">
+      <a class="brand" href="/" aria-label="WMC Inventar, Startseite">
         <span class="brand-tag" aria-hidden="true">WMC</span>
         <span>Inventar</span>
       </a>
-      {% block navigation %}
-      <nav class="topnav" data-test="hauptnavigation" aria-label="Hauptnavigation">
-        {% if user.is_authenticated %}
-          {% if user.ist_admin or user.ist_leser %}
-            <a class="nav-item" href="/geraete/" data-test="nav-geraete">Geräte</a>
-            <a class="nav-item" href="/arbeitsplaetze/" data-test="nav-arbeitsplaetze">Arbeitsplätze</a>
-            <a class="nav-item" href="/personen/" data-test="nav-personen">Personen</a>
-          {% endif %}
-          {% if user.ist_admin %}
-            <a class="nav-item" href="/import/" data-test="nav-import">Import</a>
-            <a class="nav-item" href="/etiketten/" data-test="nav-etiketten">Etiketten</a>
-            <a class="nav-item" href="/einstellungen/" data-test="nav-einstellungen">Einstellungen</a>
-          {% endif %}
-          {% if user.ist_admin or user.ist_mitarbeiter %}
-            <a class="nav-item" href="/meine-geraete/" data-test="nav-meine-geraete">Meine Geräte</a>
-          {% endif %}
-          {% if user.ist_mitarbeiter %}
-            <a class="nav-item" href="/meine-geraete/" data-test="nav-leihen">Leihen</a>
-          {% endif %}
-        {% endif %}
-      </nav>
-      {% endblock %}
+      {% if user.is_authenticated %}
+      <form class="search" role="search" method="get" action="/geraete/" data-test="suche-formular" aria-label="Suche">
+        <input type="search" name="q" value="{{ suche_query }}" placeholder="Inventarnummer, Seriennr., Modell, Hostname, Person" autocomplete="off" aria-label="Suche" data-test="suche">
+      </form>
+      {% endif %}
       <div class="user">
         {% if user.is_authenticated %}
-          <div class="who">
-            <span>{{ user.email }}</span>
-            <small>{{ user.get_rolle_display }}</small>
-          </div>
-          <form method="post" action="/abmelden/" data-test="abmelden">
-            {% csrf_token %}
-            <button type="submit" class="btn link">Abmelden</button>
-          </form>
+        <div class="who">
+          <b>{{ user.email }}</b>
+          <small>{{ user.get_rolle_display }}</small>
+        </div>
+        <form method="post" action="/abmelden/" data-test="abmelden">
+          {% csrf_token %}
+          <button type="submit" class="btn sm">Abmelden</button>
+        </form>
         {% endif %}
       </div>
     </div>
   </header>
-
-  <main class="main">
-    {% if messages %}
-      <div class="meldungen" data-test="meldungen">
+  <div class="shell">
+    {% block navigation %}
+    <nav class="nav" data-test="hauptnavigation" aria-label="Hauptnavigation">
+      {% if user.is_authenticated %}
+        <a class="nav-item" href="/" data-test="nav-uebersicht">Übersicht</a>
+        {% if user.ist_admin or user.ist_leser %}
+          <a class="nav-item" href="/geraete/" data-test="nav-geraete">Geräte</a>
+          <a class="nav-item" href="/arbeitsplaetze/" data-test="nav-arbeitsplaetze">Arbeitsplätze</a>
+          <a class="nav-item" href="/verleih/" data-test="nav-verleih">Verleih</a>
+          <a class="nav-item" href="/personen/" data-test="nav-personen">Personen</a>
+        {% endif %}
+        {% if user.ist_admin %}
+          <a class="nav-item" href="/import/" data-test="nav-import">Import</a>
+          <a class="nav-item" href="/etiketten/" data-test="nav-etiketten">Etiketten</a>
+          <a class="nav-item" href="/konten/" data-test="nav-konten">Konten</a>
+          <a class="nav-item" href="/orte/" data-test="nav-orte">Orte</a>
+          <a class="nav-item" href="/kategorien/" data-test="nav-kategorien">Kategorien</a>
+          <a class="nav-item" href="/profile/" data-test="nav-profile">Profile</a>
+          <a class="nav-item" href="/einstellungen/" data-test="nav-einstellungen">Einstellungen</a>
+        {% endif %}
+        {% if user.ist_admin or user.ist_mitarbeiter %}
+          <a class="nav-item" href="/meine-geraete/" data-test="nav-meine-geraete">Meine Geräte</a>
+          <a class="nav-item" href="/verleih/meine/" data-test="nav-leihen">Leihen</a>
+        {% endif %}
+      {% endif %}
+    </nav>
+    {% endblock %}
+    <main class="main">
+      {% if messages %}
+      <div class="meldungen">
         {% for m in messages %}
-          {% if m.tags == "error" %}
-            <div class="meldung {{ m.tags }}" data-test="fehler">{{ m }}</div>
-          {% else %}
-            <div class="meldung {{ m.tags }}" data-test="meldung">{{ m }}</div>
-          {% endif %}
+        <div class="meldung {{ m.tags }}" data-test="{% if 'error' in m.tags %}fehler{% else %}meldung{% endif %}">{{ m }}</div>
         {% endfor %}
       </div>
-    {% endif %}
-    {% block inhalt %}{% endblock %}
-  </main>
-
+      {% endif %}
+      {% block inhalt %}{% endblock %}
+    </main>
+  </div>
   <footer class="footer">
-    <div class="footer-in">
-      <span>WMC Inventar · Version 1</span>
-    </div>
+    <div class="footer-in">WMC Inventar · Version 1 · WAMOCON GmbH</div>
   </footer>
-  {% block ende %}{% endblock %}
+  {% endblock %}
   {% block skripte %}{% endblock %}
 </body>
 </html>
