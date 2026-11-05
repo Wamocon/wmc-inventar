@@ -178,7 +178,8 @@ def passwort_vergessen(request):
                 from_email=mail_absender(),
                 to=[konto.email],
             )
-            msg.send()
+            # Ein Versandfehler darf nicht verraten, dass es das Konto gibt.
+            msg.send(fail_silently=True)
 
         # Neutrale Antwort, egal ob das Konto existiert (Schutz vor Kontenaufdeckung)
         messages.success(request, "Falls die E-Mail existiert, wurde ein Link gesendet.")

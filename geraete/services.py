@@ -994,10 +994,10 @@ def fehlendes_ausgeben(ort: Ort, geraete_ids: list[int], *, ausgefuehrt_von: Kon
     """
     zeilen = fehlendes_vom_lager(ort)
     erlaubt = {e["gerat"].pk: z for z in zeilen for e in z["geraete"]}
-    gewaehlt = {int(i) for i in geraete_ids}
-    if not gewaehlt:
+    if not geraete_ids:
         raise GeratFehler("Bitte mindestens ein Gerät wählen.")
-    if not gewaehlt <= erlaubt.keys():
+    gewaehlt = {int(i) for i in geraete_ids if str(i).isdigit()}
+    if len(gewaehlt) < len(set(geraete_ids)) or not gewaehlt <= erlaubt.keys():
         raise GeratFehler("Ein gewähltes Gerät ist nicht mehr frei. Bitte erneut wählen.")
     for z in zeilen:
         anzahl = sum(1 for e in z["geraete"] if e["gerat"].pk in gewaehlt)

@@ -479,6 +479,8 @@ class ArbeitsplatzTests(Grundlage):
         self.assertContains(antwort, "fehlen nur 2")
         antwort = self.client.post(pfad, {"gerat": [999999]}, follow=True)
         self.assertContains(antwort, "nicht mehr frei")
+        antwort = self.client.post(pfad, {"gerat": ["abc"]}, follow=True)
+        self.assertContains(antwort, "nicht mehr frei")
         antwort = self.client.post(pfad, {}, follow=True)
         self.assertContains(antwort, "mindestens ein Gerät")
         self.assertEqual(Gerat.objects.filter(ort=self.ort).count(), 0)

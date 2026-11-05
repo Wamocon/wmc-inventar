@@ -92,7 +92,8 @@ def kategorien_anlegen(request):
         return _keine_berechtigung(request)
     form = KategorieForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
-        form.save()
+        kat = form.save()
+        messages.success(request, f"Kategorie {kat.name} angelegt.")
         return redirect(reverse("stammdaten:kategorien-liste"))
     return render(request, "stammdaten/kategorie_anlegen.html", {"form": form})
 
@@ -109,6 +110,7 @@ def kategorien_aendern(request, pk):
     form = KategorieForm(request.POST or None, instance=kat)
     if request.method == "POST" and form.is_valid():
         form.save()
+        messages.success(request, f"Kategorie {kat.name} geändert.")
         return redirect(reverse("stammdaten:kategorien-liste"))
     return render(request, "stammdaten/kategorie_aendern.html", {"form": form, "kategorie": kat})
 
@@ -190,7 +192,8 @@ def personen_anlegen(request):
         return _keine_berechtigung(request)
     form = PersonForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
-        form.save()
+        person = form.save()
+        messages.success(request, f"{person.voller_name()} angelegt.")
         return redirect(reverse("stammdaten:personen-liste"))
     return render(request, "stammdaten/person_anlegen.html", {"form": form})
 

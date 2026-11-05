@@ -782,7 +782,7 @@ def platz_ausgeben(request, kennung: str):
             anzahl = services.fehlendes_ausgeben(
                 ort, request.POST.getlist("gerat"), ausgefuehrt_von=request.user
             )
-        except (services.GeratFehler, ValueError) as fehler:
+        except services.GeratFehler as fehler:
             meldung_error(request, str(fehler))
             return redirect(f"/arbeitsplaetze/{ort.kennung}/ausgeben/")
         meldung_success(request, f"{anzahl} Gerät(e) an {ort.kennung} ausgegeben.")
