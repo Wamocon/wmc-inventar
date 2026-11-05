@@ -71,19 +71,22 @@ class EinstellungenDatenTests(TestCase):
 
         e = Einstellungen.aktuelles()
         self.assertIsNotNone(e)
-        self.assertEqual(e.firmenname, "Wamocon GmbH")
-        self.assertEqual(e.absenderzeile, "Wamocon GmbH · IT")
-        self.assertEqual(e.telefon, "0157 77709235")
-        self.assertEqual(e.email_it, "it@wamocon.de")
+        self.assertEqual(e.firmenname, "WAMOCON GmbH")
+        self.assertEqual(e.absenderzeile, "WAMOCON GmbH · Mergenthalerallee 77 · 65760 Eschborn")
+        self.assertEqual(e.telefon, "+49 6196 0000000")
+        self.assertEqual(e.email_it, "it-admin@beispiel.test")
         self.assertEqual(e.nutzungsbedingungen_version, "1")
         self.assertEqual(e.erklaerungen_version, "1")
         self.assertEqual(e.unterzeichnung_version, "1")
         self.assertEqual(e.etikettenformat, "a4")
-        self.assertEqual(e.erinnerungsfrist_tage, 7)
+        self.assertEqual(e.frist_leihe_tage, 1)
+        self.assertEqual(e.frist_garantie_tage, 30)
+        self.assertEqual(e.frist_unterschrift_tage, 3)
+        self.assertEqual(e.frist_gegenzeichnung_tage, 3)
         self.assertEqual(e.smtp_server, "mail.beispiel.test")
         self.assertEqual(e.smtp_port, 587)
         self.assertTrue(e.smtp_tls)
-        self.assertEqual(e.smtp_absender, "it@beispiel.test")
+        self.assertEqual(e.smtp_absender, "inventar@beispiel.test")
         self.assertTrue(e.mail_verleih_anfrage)
         self.assertTrue(e.mail_verleih_ablehnung)
         self.assertTrue(e.mail_verleih_genehmigung)
@@ -119,47 +122,24 @@ class EinstellungenDatenTests(TestCase):
 
 
 class EinstellungenTestmailTests(TestCase):
-    """F-90: Testmail senden erzeugt eine Mail in der Mailablage."""
+    """F-90: Testmail senden geht denselben Weg wie alle Mails."""
 
-    def setUp(self):
-        # MAILDIR für den Test setzen, unabhängig von der Umgebung.
-        import os
-        from pathlib import Path
-        self.ablage_pfad = Path(os.environ.get("MAILDIR", "")) if os.environ.get("MAILDIR") else Path(__file__).parent.parent / "var" / "mails_test"
-        self.ablage_pfad.mkdir(parents=True, exist_ok=True)
-        # Die alte Anzahl .eml-Dateien merken.
-        self.eml_vor = len(list(self.ablage_pfad.rglob("*.eml")))
-        # MAILDIR für den Test setzen.
-        self._alte_maildir = os.environ.get("MAILDIR")
-        os.environ["MAILDIR"] = str(self.ablage_pfad)
+    def test_testmail_erzeugt_mail(self):
+        """POST /einstellungen/testmail/ versendet die Mail und meldet das Ergebnis."""
+        from django.core import mail
 
-    def tearDown(self):
-        # Testdateien aufräumen.
-        import os
-        for f in self.ablage_pfad.rglob("*.eml"):
-            f.unlink()
-        # MAILDIR wiederherstellen.
-        if self._alte_maildir is not None:
-            os.environ["MAILDIR"] = self._alte_maildir
-        else:
-            os.environ.pop("MAILDIR", None)
-
-    def test_testmail_erzeugt_mail_in_ablage(self):
-        """POST /einstellungen/testmail/ erzeugt eine .eml-Datei in der Ablage."""
         _konto("it-admin@beispiel.test", Konto.ROLLE_ADMIN)
         self.client.login(username="it-admin@beispiel.test", password="test-passwort-123")
 
         antwort = self.client.post(
             reverse("stammdaten:einstellungen-testmail"),
             {"empfaenger": "test@beispiel.test"},
+            follow=True,
         )
         self.assertEqual(antwort.status_code, 200)
-        html = antwort.content.decode()
-        self.assertIn("Testmail an test@beispiel.test gesendet.", html)
-
-        # Anzahl .eml-Dateien nach dem Test
-        nach = len(list(self.ablage_pfad.rglob("*.eml")))
-        self.assertGreater(nach, self.eml_vor)
+        self.assertIn("Testmail an test@beispiel.test gesendet.", antwort.content.decode())
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ["test@beispiel.test"])
 
 
 class EinstellungenLogoTests(TestCase):

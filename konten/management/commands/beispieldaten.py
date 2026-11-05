@@ -21,7 +21,9 @@ from geraete import services
 from geraete.models import Gerat
 
 
-# Kategorien nach Kapitel 3.2 der Anforderungen (TESTSCHNITTSTELLE 2)
+# Kategorien nach Kapitel 3.2 der Anforderungen (TESTSCHNITTSTELLE 2): Name, hat
+# Datenträger, Seriennummer Pflicht. Ohne Pflicht nur Tastatur, Maus, Headset,
+# Notebook-Ständer, Powerbank, USB-Hub und Sonstiges (O-11, O-18).
 KATEGORIEN = [
     ("Notebook", True, True),
     ("Desktop-PC", True, True),
@@ -74,6 +76,9 @@ PROFILE = [
     ("Entwicklung", [("Monitor", 2), ("Dockingstation", 1), ("Tastatur", 1), ("Maus", 1), ("Headset", 1), ("Webcam", 1)]),
     ("Studio", [("Monitor", 2), ("Dockingstation", 1), ("Tastatur", 1), ("Maus", 1), ("Headset", 1), ("Webcam", 1)]),
 ]
+
+# Notizen der Plätze ohne feste Person (TESTSCHNITTSTELLE 2)
+NOTIZEN = {"WMC-WP-14": "Gäste", "WMC-WP-15": "Studio-Arbeitsplatz"}
 
 # Arbeitsplätze (TESTSCHNITTSTELLE 2)
 ARBEITSPLAETZE = [
@@ -145,7 +150,15 @@ def _anrede(vorname: str) -> str:
     # Anrede im Beispieldatensatz nicht explizit festgelegt ist.
     # Für die bekannten Namen (TESTSCHNITTSTELLE 2) gibt es eine feste Zuordnung.
     frau = {"Anna", "Elena", "Sophie", "Marie", "Leonie", "Lena"}
-    return "Frau" if vorname in frau else "Herr"
+    return Person.ANREDE_FRAU if vorname in frau else Person.ANREDE_HERR
+
+
+def _email_person(vorname: str, nachname: str) -> str:
+    """vorname.nachname@beispiel.test, Umlaute umgeschrieben (TESTSCHNITTSTELLE 2)."""
+    lokal = f"{vorname}.{nachname}".lower()
+    for alt, neu in (("ä", "ae"), ("ö", "oe"), ("ü", "ue"), ("ß", "ss"), ("ı", "i")):
+        lokal = lokal.replace(alt, neu)
+    return f"{lokal}@beispiel.test"
 
 
 class Command(BaseCommand):
@@ -168,8 +181,9 @@ class Command(BaseCommand):
         with transaction.atomic():
             self._anlegen_kategorien()
             self._anlegen_profile()
-            self._anlegen_orte()
+            # Personen zuerst: Die Orte verweisen auf ihre feste Person.
             self._anlegen_personen()
+            self._anlegen_orte()
             self._anlegen_konten()
             if opts["demo"]:
                 self._anlegen_geraete()
@@ -231,6 +245,7 @@ class Command(BaseCommand):
                 name=kennung,
                 standort="Eschborn",
                 raum=raum,
+                notiz=NOTIZEN.get(kennung, ""),
                 profil=profil,
                 feste_person=fest_person,
                 position_x=x,
@@ -279,39 +294,30 @@ class Command(BaseCommand):
 
     def _anlegen_personen(self):
         eintritt = date(2024, 1, 1)
-        # Personen mit Konto
+        # Personen mit Konto: die E-Mail der Tabelle gilt für Konto und Person
         for email, rolle, name, abteilung, _ in KONTEN:
             vorname = _vorname(name)
             nachname = _nachname(name)
-            email_person = f"{vorname.lower()}.{nachname.lower()}@beispiel.test"
-            if nachname == "Albers":
-                email_person = "gf@beispiel.test"
             Person.objects.create(
                 anrede=_anrede(vorname),
                 vorname=vorname,
                 nachname=nachname,
-                email=email_person,
+                email=email,
                 abteilung=abteilung,
-                eintritt=eintritt,
+                eintritt=date(2025, 9, 15) if vorname == "Felix" else eintritt,
                 anschrift="Beispielweg 3, 65760 Eschborn" if vorname == "Anna" else "",
             )
         # Personen ohne Konto
         for name, abteilung, _ in PERSONEN_OHNE_KONTO:
             vorname = _vorname(name)
             nachname = _nachname(name)
-            email_person = f"{vorname.lower()}.{nachname.lower()}@beispiel.test"
-            if vorname == "Murat":
-                email_person = "murat.yilmaz@beispiel.test"
-            eintritt_p = date(2024, 1, 1)
-            if vorname == "Felix":
-                eintritt_p = date(2025, 9, 15)
             Person.objects.create(
                 anrede=_anrede(vorname),
                 vorname=vorname,
                 nachname=nachname,
-                email=email_person,
+                email=_email_person(vorname, nachname),
                 abteilung=abteilung,
-                eintritt=eintritt_p,
+                eintritt=eintritt,
             )
         self.stdout.write(f"  {len(KONTEN) + len(PERSONEN_OHNE_KONTO)} Personen")
 
@@ -368,10 +374,10 @@ class Command(BaseCommand):
         einstellungen = Einstellungen.objects.filter(pk=1).first()
         if einstellungen is None:
             einstellungen = Einstellungen.objects.create(pk=1)
-        einstellungen.firmenname = "Wamocon GmbH"
-        einstellungen.absenderzeile = "Wamocon GmbH · IT"
-        einstellungen.telefon = "0157 77709235"
-        einstellungen.email_it = "it@wamocon.de"
+        einstellungen.firmenname = "WAMOCON GmbH"
+        einstellungen.absenderzeile = "WAMOCON GmbH · Mergenthalerallee 77 · 65760 Eschborn"
+        einstellungen.telefon = "+49 6196 0000000"
+        einstellungen.email_it = "it-admin@beispiel.test"
         einstellungen.nutzungsbedingungen_ausgabe = (
             "Beispieltext Nutzungsbedingungen, WMC-IT-FRM-001. "
             "Den verbindlichen Text pflegt die IT in den Einstellungen."
@@ -382,7 +388,7 @@ class Command(BaseCommand):
         )
         einstellungen.erklaerungen_version = "1"
         einstellungen.unterzeichnung_ausgabe = (
-            "Beispieltext Elektronische Unterzeichnung, WMC-IT-FRM-001.\n"
+            "Beispieltext Elektronische Unterzeichnung, WMC-IT-FRM-001.\n\n"
             "Den verbindlichen Text pflegt die IT in den Einstellungen."
         )
         einstellungen.unterzeichnung_version = "1"
@@ -392,23 +398,17 @@ class Command(BaseCommand):
         )
         einstellungen.erklaerungen_ruecknahme_version = "1"
         einstellungen.unterzeichnung_ruecknahme = (
-            "Beispieltext Elektronische Unterzeichnung, WMC-IT-FRM-002.\n"
+            "Beispieltext Elektronische Unterzeichnung, WMC-IT-FRM-002.\n\n"
             "Den verbindlichen Text pflegt die IT in den Einstellungen."
         )
         einstellungen.unterzeichnung_ruecknahme_version = "1"
         einstellungen.etikettenformat = "a4"
-        einstellungen.erinnerungsfrist_tage = 7
         einstellungen.smtp_server = "mail.beispiel.test"
         einstellungen.smtp_port = 587
         einstellungen.smtp_tls = True
-        einstellungen.smtp_absender = "it@beispiel.test"
-        einstellungen.smtp_benutzer = "it@beispiel.test"
+        einstellungen.smtp_absender = "inventar@beispiel.test"
+        einstellungen.smtp_benutzer = "inventar@beispiel.test"
         einstellungen.smtp_passwort = "BeispielPasswort123"
-        einstellungen.mail_verleih_anfrage = True
-        einstellungen.mail_verleih_ablehnung = True
-        einstellungen.mail_verleih_genehmigung = True
-        einstellungen.mail_verleih_zuruecknahme = True
-        einstellungen.mail_protokoll_gesendet = True
-        einstellungen.mail_protokoll_unterzeichnet = True
+        # Alle Mailarten an (TESTSCHNITTSTELLE 2): das ist der Standard der Felder.
         einstellungen.save()
         self.stdout.write("  Einstellungen (F-122, F-90, F-96, F-130, N-02)")

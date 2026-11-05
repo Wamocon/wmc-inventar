@@ -21,6 +21,7 @@ from konten.models import Konto
 from stammdaten.models import Ausstattungsprofil, Kategorie, Ort, Person, Einstellungen
 
 from .models import Gerat, GeratKonflikt, Importlauf, Leihe, Protokoll, Vorgang
+from konten.mail import link_ins_tool, mail_absender, mail_signatur
 from konten.zeit import jetzt_aware, jetzt_wie_im_entwicklungsmodus
 
 
@@ -383,6 +384,7 @@ def _protokoll_erstellen(
         nr=_naechste_protokollnummer(),
         person=person,
         geraet=gerat,
+        # TESTSCHNITTSTELLE 1.2: Datum nach der Zeit der Anwendung (F-95 rechnet damit).
         datum=jetzt_wie_im_entwicklungsmodus().date(),
         stand=stand,
         art=art,
@@ -724,6 +726,7 @@ def gerat_umziehen(
 
     alter_ort = gerat.ort
     gerat.ort = ziel_ort
+    gerat.altbestand_ohne_protokoll = False
 
     Vorgang.objects.create(
         gerat=gerat,
@@ -1164,11 +1167,14 @@ def soll_ist_abgleich(ort: Ort) -> dict:
 
     Ergebnis: „vollstaendig", „unvollstaendig" oder „mehr-als-soll",
     jeweils mit Fehlliste („fehlt: n x Kategorie") und Mehrliste
-    („mehr: n x Kategorie").
+    („mehr: n x Kategorie"). Ein Gerät „Auf Lager“ ist nicht ausgegeben und
+    zählt deshalb nicht zur Ist-Ausstattung, auch wenn es am Platz vermerkt ist.
     """
     soll = dict((k, a) for k, a in soll_zahlen(ort))
     ist: dict[Kategorie, int] = {}
     for gerat in gerate_am_ort(ort):
+        if gerat.status == Gerat.STATUS_AUF_LAGER:
+            continue
         ist[gerat.kategorie] = ist.get(gerat.kategorie, 0) + 1
 
     fehlend: list[tuple[Kategorie, int]] = []
@@ -1205,7 +1211,8 @@ def bedarf_uebersicht(orte: list[Ort] | None = None) -> dict:
     """Bedarf: fehlende Ausstattung je Kategorie mit Lagerbestand (F-63).
 
     Ergebnis: Zeilen je Kategorie mit Summe „fehlt" und Lagerbestand
-    („Auf Lager" an einem Lagerort), sortiert nach Kategorie.
+    (alle Geräte „Auf Lager", sortiert nach Kategorie). Ein zurückgegebenes
+    Gerät hat oft keinen Ort und ist trotzdem auf Lager.
     """
     if orte is None:
         orte = list(
@@ -1220,17 +1227,71 @@ def bedarf_uebersicht(orte: list[Ort] | None = None) -> dict:
             summe[kategorie] = summe.get(kategorie, 0) + mangelt
     summe = dict(sorted(summe.items(), key=lambda x: x[0].name))
 
-    lager_orte = Ort.objects.filter(typ=Ort.TYP_LAGER)
     lagerbestand: dict[Kategorie, int] = {}
     for kategorie in summe:
-        lagerbestand[kategorie] = (
-            Gerat.objects.filter(
-                kategorie=kategorie,
-                status=Gerat.STATUS_AUF_LAGER,
-                ort__in=lager_orte,
-            ).count()
+        lagerbestand[kategorie] = _im_lager(kategorie).count()
+    zeilen = [
+        {"kategorie": k, "fehlt": anzahl, "lager": lagerbestand[k]}
+        for k, anzahl in summe.items()
+    ]
+    return {"summe": summe, "lagerbestand": lagerbestand, "zeilen": zeilen}
+
+
+def _im_lager(kategorie: Kategorie):
+    """Geräte „Auf Lager“ einer Kategorie: am Lagerort oder ohne Ort (Kapitel 4)."""
+    from django.db.models import Q
+
+    return Gerat.objects.filter(kategorie=kategorie, status=Gerat.STATUS_AUF_LAGER).filter(
+        Q(ort__isnull=True) | Q(ort__typ=Ort.TYP_LAGER)
+    )
+
+
+def fehlendes_vom_lager(ort: Ort) -> list[dict]:
+    """F-66: Je fehlender Kategorie die freien Lagergeräte (ohne reservierte, F-20)."""
+    zeilen = []
+    for kategorie, fehlt in soll_ist_abgleich(ort)["fehlend"]:
+        frei = [
+            g for g in _im_lager(kategorie).order_by("inventarnummer")
+            if not _gerat_ist_reserviert(g)
+        ]
+        zeilen.append(
+            {
+                "kategorie": kategorie,
+                "fehlt": fehlt,
+                "geraete": [
+                    {"gerat": g, "vorbelegt": i < fehlt} for i, g in enumerate(frei)
+                ],
+            }
         )
-    return {"summe": summe, "lagerbestand": lagerbestand}
+    return zeilen
+
+
+@transaction.atomic
+def fehlendes_ausgeben(ort: Ort, geraete_ids: list[int], *, ausgefuehrt_von: Konto) -> int:
+    """F-66: Gewählte Lagergeräte an den Arbeitsplatz ausgeben, alle oder keins.
+
+    Nur freie Geräte einer fehlenden Kategorie, je Kategorie höchstens so viele,
+    wie fehlen. Das Gerät gehört zum Platz, nicht zu einer Person, also kein
+    Protokoll (Kapitel 3.2).
+    """
+    zeilen = fehlendes_vom_lager(ort)
+    erlaubt = {e["gerat"].pk: z for z in zeilen for e in z["geraete"]}
+    if not geraete_ids:
+        raise GeratFehler("Bitte mindestens ein Gerät wählen.")
+    gewaehlt = {int(i) for i in geraete_ids if str(i).isdigit()}
+    if len(gewaehlt) < len(set(geraete_ids)) or not gewaehlt <= erlaubt.keys():
+        raise GeratFehler("Ein gewähltes Gerät ist nicht mehr frei. Bitte erneut wählen.")
+    for z in zeilen:
+        anzahl = sum(1 for e in z["geraete"] if e["gerat"].pk in gewaehlt)
+        if anzahl > z["fehlt"]:
+            raise GeratFehler(
+                f"Für {z['kategorie'].name} fehlen nur {z['fehlt']}, gewählt sind {anzahl}."
+            )
+    for gerat in Gerat.objects.filter(pk__in=gewaehlt).order_by("inventarnummer"):
+        gerat_ausgeben(
+            gerat, ort, ausgefuehrt_von=ausgefuehrt_von, anmerkung="Fehlendes vom Lager"
+        )
+    return len(gewaehlt)
 
 
 # --- Erstinventur (F-89, AUFTRAG M4) ------------------------------------------
@@ -1314,12 +1375,19 @@ def raumorte_des_plans(plan) -> list[Ort]:
 
 
 def ohne_position(plan) -> list[dict]:
-    """Plätze eines Plans ohne Position (F-67, Markierung ``ohne-position``)."""
-    return [
-        zeile
-        for zeile in plaetze_des_plans(plan)
-        if zeile["ort"].position_x is None or zeile["ort"].position_y is None
-    ]
+    """Plätze und Räume ohne Position (F-67, Markierung ``ohne-position``).
+
+    Dazu gehören Orte desselben Standorts, die noch keinem Plan zugeordnet sind.
+    """
+    from django.db.models import Q
+
+    orte = Ort.objects.filter(
+        Q(plan_id=plan.id, position_x__isnull=True)
+        | Q(plan_id=plan.id, position_y__isnull=True)
+        | Q(plan_id__isnull=True, standort=plan.standort),
+        typ__in=(Ort.TYP_ARBEITSPLATZ, Ort.TYP_RAUM),
+    ).order_by("kennung")
+    return [{"ort": ort, "abgleich": soll_ist_abgleich(ort)} for ort in orte]
 
 
 def grundriss_pfad(plan) -> str:
@@ -1882,19 +1950,18 @@ def _mail_anfrage_an_it(leihe: Leihe) -> None:
     Abschaltbar über Einstellungen (F-96).
     """
     from django.core.mail import send_mail
-    from django.conf import settings as _settings
+    from konten.mail import aktive_empfaenger, link_ins_tool, mail_absender, mail_signatur
 
     einstellungen = Einstellungen.aktuelles()
     if not (einstellungen.mail_leihe_neu and einstellungen.mail_verleih_anfrage):
         return
-    it_email = einstellungen.email_it
-    if not it_email:
+    it_empfaenger = aktive_empfaenger([einstellungen.email_it])
+    if not it_empfaenger:
         return
     kat_name = leihe.kat.name if leihe.kat else ""
     gerat_name = leihe.gerat.inventarnummer if leihe.gerat else "keines (Kategorie)"
     beginn = leihe.beginn.strftime("%d.%m.%Y") if leihe.beginn else ""
     ende = leihe.ende.strftime("%d.%m.%Y") if leihe.ende else ""
-    basis = _settings.BASIS_URL.rstrip("/") if _settings.BASIS_URL else "http://127.0.0.1:8000"
     send_mail(
         subject=f"Neue Leihanfrage – {leihe.person.vorname} {leihe.person.nachname}",
         message=(
@@ -1904,11 +1971,11 @@ def _mail_anfrage_an_it(leihe: Leihe) -> None:
             f"Gerät: {gerat_name}\n"
             f"Zeitraum: {beginn} bis {ende}\n"
             f"Zweck: {leihe.zweck}\n\n"
-            f"Entscheidung: {basis}/verleih/\n\n"
-            f"{einstellungen.absenderzeile or 'Wamocon GmbH · IT'}"
+            f"Entscheidung: {link_ins_tool('/verleih/')}\n\n"
+            f"{mail_signatur()}"
         ),
-        from_email=_settings.DEFAULT_FROM_EMAIL or "inventar@beispiel.test",
-        recipient_list=[it_email],
+        from_email=mail_absender(),
+        recipient_list=it_empfaenger,
         fail_silently=True,
     )
 
@@ -1919,7 +1986,7 @@ def _mail_entscheidung_an_person(leihe: Leihe, genehmigt: bool, begruendung: str
     Abschaltbar über Einstellungen (F-96).
     """
     from django.core.mail import send_mail
-    from django.conf import settings as _settings
+    from konten.mail import aktive_empfaenger, link_ins_tool, mail_absender, mail_signatur
 
     einstellungen = Einstellungen.aktuelles()
     if genehmigt:
@@ -1928,10 +1995,12 @@ def _mail_entscheidung_an_person(leihe: Leihe, genehmigt: bool, begruendung: str
     else:
         if not einstellungen.mail_verleih_ablehnung:
             return
-    empfaenger = leihe_mail_empfaenger(leihe.person)
+    # F-96: keine Mail an deaktivierte Konten.
+    empfaenger = aktive_empfaenger([leihe.person.email])
     if not empfaenger:
         return
-    basis = _settings.BASIS_URL.rstrip("/") if _settings.BASIS_URL else "http://127.0.0.1:8000"
+    # F-96: Der Link muss für den Mitarbeiter erreichbar sein; /verleih/ ist nur Admin.
+    link = link_ins_tool("/meine-geraete/")
     if genehmigt:
         gerat_name = leihe.gerat.inventarnummer if leihe.gerat else ""
         beginn = leihe.beginn.strftime("%d.%m.%Y") if leihe.beginn else ""
@@ -1940,23 +2009,23 @@ def _mail_entscheidung_an_person(leihe: Leihe, genehmigt: bool, begruendung: str
             f"Ihre Leihanfrage {leihe.nr} wurde genehmigt.\n\n"
             f"Gerät: {gerat_name}\n"
             f"Zeitraum: {beginn} bis {ende}\n\n"
-            f"Details: {basis}/meine-geraete/\n\n"
-            f"{einstellungen.absenderzeile or 'Wamocon GmbH · IT'}"
+            f"Details: {link}\n\n"
+            f"{mail_signatur()}"
         )
         subject = f"Leihanfrage genehmigt – {gerat_name}"
     else:
         betrag = (
             f"Ihre Leihanfrage {leihe.nr} wurde abgelehnt.\n\n"
             f"Begründung: {begruendung}\n\n"
-            f"Details: {basis}/meine-geraete/\n\n"
-            f"{einstellungen.absenderzeile or 'Wamocon GmbH · IT'}"
+            f"Details: {link}\n\n"
+            f"{mail_signatur()}"
         )
         subject = "Leihanfrage abgelehnt"
     send_mail(
         subject=subject,
         message=betrag,
-        from_email=_settings.DEFAULT_FROM_EMAIL or "inventar@beispiel.test",
-        recipient_list=[empfaenger],
+        from_email=mail_absender(),
+        recipient_list=empfaenger,
         fail_silently=True,
     )
 
@@ -2459,14 +2528,16 @@ def _nachweisnummer(jetzt) -> str:
     return f"SIG-{jahr}-{laufend:04d}"
 
 
-def _mail_absender() -> str:
-    from django.conf import settings
-    return settings.DEFAULT_FROM_EMAIL
+def _senden(betreff: str, inhalt: str, empfaenger: list) -> bool:
+    """Mail senden. Scheitert der Versand, bleibt der Vorgang gültig und der Aufrufer meldet es."""
+    from django.core.mail import send_mail
+    from smtplib import SMTPException
 
-
-def _firmenname() -> str:
-    from stammdaten.models import Einstellungen
-    return Einstellungen.aktuelles().firmenname
+    try:
+        send_mail(betreff, inhalt, mail_absender(), empfaenger)
+    except (SMTPException, OSError):
+        return False
+    return True
 
 
 def _link_gegenzeichnung(token: str) -> str:
@@ -2561,7 +2632,9 @@ def protokoll_bearbeiter_signieren(
     protokoll.stand = Protokoll.STAND_GEGENZEICHNUNG_OFFEN
     protokoll.save()
 
-    _mail_gegenzeichnen_link(protokoll, token, empfaenger, bearbeiter_name=konto.bezeichnung())
+    protokoll.mail_ging_nicht = not _mail_gegenzeichnen_link(
+        protokoll, token, empfaenger, bearbeiter_name=konto.bezeichnung()
+    )
     return protokoll, True
 
 
@@ -2601,12 +2674,16 @@ def _mail_gegenzeichnen_link(
     token: str,
     empfaenger: str,
     bearbeiter_name: str = "",
-) -> None:
-    """Mail mit persönlichem Link (F-136), 14 Tage gültig."""
+) -> bool:
+    """Mail mit persönlichem Link (F-136), 14 Tage gültig. Liefert, ob der Versand klappte."""
     from django.core.mail import send_mail
+    from konten.mail import link_ins_tool, mail_absender, mail_signatur
 
     if not empfaenger:
-        return
+        return True
+    # F-96: Mailart abschaltbar.
+    if not Einstellungen.aktuelles().mail_protokoll_gesendet:
+        return True
     inhalt = (
         f"{_anrede_mail(protokoll.person)},\n\n"
         f"das Protokoll {protokoll.nr} steht zur Gegenzeichnung bereit.\n"
@@ -2614,9 +2691,9 @@ def _mail_gegenzeichnen_link(
         "mit einem Einmalcode, den Sie dort per Mail anfordern:\n\n"
         f"Link: {_link_gegenzeichnung(token)}\n\n"
         "Der Link ist 14 Tage gültig.\n\n"
-        f"Mit freundlichen Grüßen\n{bearbeiter_name or _firmenname()}"
+        f"Mit freundlichen Grüßen\n{bearbeiter_name or mail_signatur()}"
     )
-    send_mail(f"Gegenzeichnung: Protokoll {protokoll.nr}", inhalt, _mail_absender(), [empfaenger])
+    return _senden(f"Gegenzeichnung: Protokoll {protokoll.nr}", inhalt, [empfaenger])
 
 
 def protokoll_code_senden(
@@ -2629,6 +2706,7 @@ def protokoll_code_senden(
     6-stellig, 10 Minuten gültig, höchstens 5 Versuche. Die Adresse kann die IT
     im Dialog ändern (F-141, Rückgabe per Post); sie steht dann im Prüfprotokoll.
     """
+    from konten.mail import mail_absender, mail_signatur
     from .models import SignaturCode
     import secrets
     from datetime import timedelta
@@ -2656,10 +2734,10 @@ def protokoll_code_senden(
         f"Ihr Einmalcode für die Gegenzeichnung des Protokolls {protokoll.nr}:\n\n"
         f"Einmalcode: {code}\n\n"
         "Der Code ist 10 Minuten gültig, Sie haben höchstens 5 Versuche.\n\n"
-        f"Mit freundlichen Grüßen\n{_firmenname()}"
+        f"Mit freundlichen Grüßen\n{mail_signatur()}"
     )
-    from django.core.mail import send_mail
-    send_mail(f"Einmalcode für Protokoll {protokoll.nr}", inhalt, _mail_absender(), [empfaenger])
+    if not _senden(f"Einmalcode für Protokoll {protokoll.nr}", inhalt, [empfaenger]):
+        return False, "Die Mail ließ sich nicht senden. Bitte wenden Sie sich an die IT."
     return True, "Code gesendet."
 
 
@@ -2690,19 +2768,24 @@ def _mail_anhang(
 ) -> None:
     """F-139: Mail mit dem versiegelten PDF als Anhang an einen Empfänger."""
     from django.core.mail import EmailMessage
+    from konten.mail import mail_absender, mail_signatur
 
+    # F-96: Mailart abschaltbar.
+    if not Einstellungen.aktuelles().mail_protokoll_unterzeichnet:
+        return
     msg = EmailMessage(
         subject=f"Protokoll {protokoll.nr}: abgeschlossen",
         body=(
             f"Das Protokoll {protokoll.nr} ist von beiden Seiten signiert.\n\n"
             f"Anbei erhalten Sie das versiegelte PDF ({dateiname}).\n\n"
-            f"{_firmenname()}"
+            f"{mail_signatur()}"
         ),
-        from_email=_mail_absender(),
+        from_email=mail_absender(),
         to=[empfaenger],
     )
     msg.attach(dateiname, pdf_bytes, "application/pdf")
-    msg.send()
+    # Das Protokoll ist abgeschlossen und liegt im Tool, auch wenn diese Mail nicht ankommt.
+    msg.send(fail_silently=True)
 
 
 @transaction.atomic
@@ -2733,10 +2816,12 @@ def protokoll_link_neu_senden(
     protokoll.link_neu_gesendet_am = now
     protokoll.save()
     bearbeiter = protokoll.bearbeiter_signiert_von
-    _mail_gegenzeichnen_link(
+    gesendet = _mail_gegenzeichnen_link(
         protokoll, protokoll.gegenzeichnung_token, empfaenger,
         bearbeiter_name=bearbeiter.bezeichnung() if bearbeiter is not None else "",
     )
+    if not gesendet:
+        return protokoll, False, "Der Link ist neu, die Mail ließ sich aber nicht senden."
     return protokoll, True, f"Neuer Link gesendet an {empfaenger}."
 
 

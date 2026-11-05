@@ -53,7 +53,7 @@
     <a class="btn schnell" href="/geraete/{{ gerat.inventarnummer }}/notiz/" data-test="aktion-notiz">Notiz</a>
   {% endif %}
   {% if kann_etikett_sehen %}<a class="btn" href="/geraete/{{ gerat.inventarnummer }}/etikett/" data-test="aktion-etikett">Etikett</a>{% endif %}
-  {% if gerat.ort and gerat.ort.standort %}<a class="btn" href="/arbeitsplaetze/?hervorheben={{ gerat.ort.standort|urlencode }}|{{ gerat.ort.kennung|urlencode }}" data-test="aktion-im-raumplan">Im Raumplan zeigen</a>{% endif %}
+  {% if platz_im_plan %}<a class="btn" href="/arbeitsplaetze/?hervorheben={{ platz_im_plan.kennung|urlencode }}" data-test="aktion-im-raumplan">Im Raumplan zeigen</a>{% endif %}
   {% if kann_loeschen %}<a class="btn" href="/geraete/{{ gerat.inventarnummer }}/loeschen/" data-test="aktion-loeschen">Löschen</a>{% endif %}
 </div>
 

@@ -107,13 +107,16 @@ def grundriss_zeige(request, plan_id: int):
         _keine_berechtigung(request, f"/arbeitsplaetze/plan/{plan_id}/grundriss/")
     plan = get_object_or_404(Plan, id=plan_id)
     if not plan.grundriss:
-        meldung_error(request, "Kein Grundriss hinterlegt.")
-        raise PermissionDenied(f"Kein Grundriss: /arbeitsplaetze/plan/{plan_id}/grundriss/")
+        raise Http404("Kein Grundriss hinterlegt.")
     datei = plan.grundriss
     pfad = datei.name
     inhalt = datei.open("rb")
     antwort = HttpResponse(inhalt, content_type=_inhalt_typ_datei(pfad))
     antwort["Content-Disposition"] = f'inline; filename="{datei.name.split("/")[-1]}"'
+    if str(pfad).lower().endswith(".svg"):
+        # N-02: SVG nie mit Skripten ausliefern, auch nicht beim direkten Aufruf.
+        from stammdaten.uploads import CSP_SVG
+        antwort["Content-Security-Policy"] = CSP_SVG
     return antwort
 
 
@@ -336,6 +339,7 @@ def detail(request, inventarnummer: str):
             "ausmusterung": gerat.vorgaenge.filter(typ=Vorgang.TYP_AUSMUSTERUNG).order_by("-id").first()
             if gerat.status == Gerat.STATUS_AUSGEMUSTERT else None,
             "loeschung_arten": services.LOESCHUNG_ARTEN,
+            "platz_im_plan": _platz_im_plan(gerat),
         },
     )
 
@@ -364,6 +368,21 @@ def _inventur(request, gerat: Gerat) -> dict | None:
         "kaufdatum_fehlt": not gerat.kaufdatum and not gerat.kaufdatum_nicht_ermittelbar,
         "garantie_fehlt": not gerat.garantie_bis and not gerat.garantie_nicht_ermittelbar,
     }
+
+
+def _platz_im_plan(gerat: Gerat) -> Ort | None:
+    """F-69: Wo steht das Gerät im Raumplan?
+
+    Der eigene Ort, sonst der feste Platz der Person, etwa beim Notebook. Ohne
+    Plan und Position (Lager) gibt es nichts zu zeigen.
+    """
+    if gerat.ort_id:
+        return gerat.ort if gerat.ort.plan_id and gerat.ort.hat_position else None
+    if gerat.person_id:
+        return gerat.person.feste_plaetze.filter(
+            plan_id__isnull=False, position_x__isnull=False, position_y__isnull=False
+        ).order_by("kennung").first()
+    return None
 
 
 # --- Neu anlegen (F-11 bis F-14) -------------------------------------------------
@@ -536,25 +555,21 @@ def arbeitsplaetze(request):
     if not _darf_sehen_raumplan(request.user):
         _keine_berechtigung(request, "/arbeitsplaetze/")
     plane = services.plan_auswahl()
-    param_hervor = request.GET.get("hervorheben", "")
-    if param_hervor:
-        if "|" in param_hervor:
-            standort, etage = param_hervor.split("|", 1)
-            plan = services.plan_finde(standort, etage) or (plane[0] if plane else None)
-        else:
-            plan = (plane[0] if plane else None)
-        hervorheben = param_hervor.split("|", 1)[1] if "|" in param_hervor else ""
-    else:
+    # F-69: ?hervorheben=<Kennung> öffnet den Plan des Orts, auf jedem Plan.
+    # Die ältere Form Standort|Kennung bleibt gültig.
+    kennung = request.GET.get("hervorheben", "").rsplit("|", 1)[-1].strip()
+    ort_hervor = Ort.objects.filter(kennung=kennung).first() if kennung else None
+    plan = next((p for p in plane if ort_hervor and p.id == ort_hervor.plan_id), None)
+    hervorheben = ort_hervor.kennung if plan else ""
+    if plan is None:
         param_plan = request.GET.get("plan", "")
-        if param_plan:
-            if "|" in param_plan:
-                standort, etage = param_plan.split("|", 1)
-                plan = services.plan_finde(standort, etage) or (plane[0] if plane else None)
-            else:
-                plan = next((p for p in plane if str(p.id) == param_plan), plane[0] if plane else None)
-        else:
-            plan = plane[0] if plane else None
-        hervorheben = ""
+        if "|" in param_plan:
+            standort, etage = param_plan.split("|", 1)
+            plan = services.plan_finde(standort, etage)
+        elif param_plan:
+            plan = next((p for p in plane if str(p.id) == param_plan), None)
+        if plan is None and plane:
+            plan = plane[0]
     if plan is None:
         plaetze, raumorte, ohne_pos = [], [], []
     else:
@@ -567,25 +582,36 @@ def arbeitsplaetze(request):
     nur_unvollstaendig = bool(request.GET.get("unvollstaendig"))
 
     def _platz_zusatz(p):
+        """Klasse, Symbol, Text (F-62, TESTSCHNITTSTELLE 5), data-soll-ist (Kapitel 4)."""
         ergebnis = p["abgleich"]["ergebnis"]
         if ergebnis == "vollstaendig":
-            return "vollstaendig", "✓", "vollständig"
-        elif ergebnis == "mehr-als-soll":
-            return "zuviel", "+", "mehr als Soll"
-        else:
-            return "fehlt", "−", "fehlt etwas"
+            return "vollstaendig", "✓", "vollständig", "vollstaendig"
+        if ergebnis == "mehr-als-soll":
+            return "zuviel", "+", "mehr als Soll", "mehr"
+        return "fehlt", "−", "unvollständig", "unvollstaendig"
 
     plaetze_reich = []
     for p in plaetze:
-        klasse, zeichen, text = _platz_zusatz(p)
-        plaetze_reich.append({**p, "klasse": klasse, "zeichen": zeichen, "text": text})
+        klasse, zeichen, text, soll_ist = _platz_zusatz(p)
+        fehlt = ", ".join(f"fehlt: {a} × {k.name}" for k, a in p["abgleich"]["fehlend"])
+        plaetze_reich.append(
+            {
+                **p,
+                "klasse": klasse,
+                "zeichen": zeichen,
+                "text": text,
+                "soll_ist": soll_ist,
+                # F-65: Screenreader hören dasselbe wie das Bild zeigt.
+                "beschriftung": ", ".join(
+                    t for t in (f"Arbeitsplatz {p['ort'].kennung}", text, fehlt) if t
+                ),
+            }
+        )
+    for raum in raumorte:
+        raum.geraete_anzahl = len(services.gerate_am_ort(raum))
 
-    if anzeige == "liste" and nur_unvollstaendig:
-        plaetze_anzeige = [p for p in plaetze_reich if p["abgleich"]["ergebnis"] != "vollstaendig"]
-    else:
-        plaetze_anzeige = plaetze_reich
-    ok_anzahl = sum(1 for p in plaetze_reich if p["abgleich"]["ergebnis"] == "vollstaendig")
-    unvollstaendig = [p for p in plaetze_reich if p["abgleich"]["ergebnis"] != "vollstaendig"]
+    unvollstaendig = [p for p in plaetze_reich if p["abgleich"]["ergebnis"] == "unvollstaendig"]
+    plaetze_anzeige = unvollstaendig if anzeige == "liste" and nur_unvollstaendig else plaetze_reich
     return render(
         request,
         "geraete/raumplan.html",
@@ -593,6 +619,7 @@ def arbeitsplaetze(request):
             "plane": plane,
             "plan_auswahl": plan,
             "plaetze": plaetze_anzeige,
+            "plaetze_gesamt": len(plaetze_reich),
             "raumorte": raumorte,
             "ohne_pos": ohne_pos,
             "ohne_position": ohne_pos,
@@ -604,7 +631,8 @@ def arbeitsplaetze(request):
             "anzeige_raumplan": anzeige == "raumplan",
             "anzeige_liste": anzeige == "liste",
             "nur_unvollstaendig": nur_unvollstaendig,
-            "ok_anzahl": ok_anzahl,
+            # Wie im Prototyp: Mehr als Soll hat seine Soll-Ausstattung.
+            "ok_anzahl": len(plaetze_reich) - len(unvollstaendig),
         },
     )
 
@@ -650,7 +678,12 @@ def arbeitsplaetze_liste(request):
     return render(
         request,
         "geraete/arbeitsplaetze_liste.html",
-        {"zeilen": zeilen, "koennen_aendern": _darf_ändern(request.user)},
+        {
+            "zeilen": zeilen,
+            # F-63: Liste aller Plätze und daneben die Summe je Kategorie.
+            "uebersicht": services.bedarf_uebersicht(),
+            "koennen_aendern": _darf_ändern(request.user),
+        },
     )
 
 
@@ -732,6 +765,7 @@ def raum_popup(request, kennung: str):
         "geraete/platz_popup.html",
         {
             "ort": ort,
+            "etage": _etage_des_orts(ort),
             "abgleich": None,
             "gerate": gerate,
             "personen_gerate": [],
@@ -834,11 +868,47 @@ def platz_popup(request, kennung: str):
         "geraete/platz_popup.html",
         {
             "ort": ort,
+            "etage": _etage_des_orts(ort),
             "abgleich": abgleich,
             "gerate": gerate,
             "personen_gerate": personen_gerate,
             "koennen_aendern": _darf_ändern(request.user),
         },
+    )
+
+
+def _etage_des_orts(ort: Ort) -> str:
+    """Etage aus dem Plan des Orts, für die Kopfzeile des Pop-ups (F-66)."""
+    from stammdaten.models import Plan
+
+    plan = Plan.objects.filter(pk=ort.plan_id).first() if ort.plan_id else None
+    return plan.etage if plan else ""
+
+
+@login_required
+def platz_ausgeben(request, kennung: str):
+    """F-66: „Fehlendes vom Lager ausgeben“ für einen Arbeitsplatz.
+
+    Adresse /arbeitsplaetze/<Kennung>/ausgeben/. GET zeigt je fehlender Kategorie
+    die freien Lagergeräte, die nötigen sind vorbelegt; POST gibt die gewählten aus.
+    """
+    if not _darf_ändern(request.user):
+        _keine_berechtigung(request, f"/arbeitsplaetze/{kennung}/ausgeben/")
+    ort = get_object_or_404(Ort.objects.filter(typ=Ort.TYP_ARBEITSPLATZ), kennung=kennung)
+    if request.method == "POST":
+        try:
+            anzahl = services.fehlendes_ausgeben(
+                ort, request.POST.getlist("gerat"), ausgefuehrt_von=request.user
+            )
+        except services.GeratFehler as fehler:
+            meldung_error(request, str(fehler))
+            return redirect(f"/arbeitsplaetze/{ort.kennung}/ausgeben/")
+        meldung_success(request, f"{anzahl} Gerät(e) an {ort.kennung} ausgegeben.")
+        return redirect(f"/arbeitsplaetze/{ort.kennung}/")
+    return render(
+        request,
+        "geraete/platz_ausgeben.html",
+        {"ort": ort, "zeilen": services.fehlendes_vom_lager(ort)},
     )
 
 
@@ -2364,6 +2434,8 @@ def protokoll_signieren(request, protokoll_nr: str):
             meldung_error(request, "Passwort ungültig (F-135).")
     elif not protokoll.gegenzeichnung_empfaenger:
         meldung_success(request, "Protokoll signiert. Für diese Person ist keine E-Mail hinterlegt: bitte eine Adresse eintragen oder vor Ort am Tablet gegenzeichnen.")
+    elif getattr(protokoll, "mail_ging_nicht", False):
+        meldung_error(request, "Protokoll signiert, die Mail ließ sich aber nicht senden. Bitte den Link neu senden oder vor Ort am Tablet gegenzeichnen.")
     else:
         meldung_success(request, "Protokoll signiert. Mail mit Link gesendet (F-135, F-136).")
     return redirect(f"/protokolle/{protokoll_nr}/")

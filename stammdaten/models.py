@@ -40,6 +40,7 @@ class Plan(models.Model):
 
     standort = models.CharField("Standort", max_length=120)
     etage = models.CharField("Etage", max_length=40)
+    name = models.CharField("Name", max_length=120, blank=True, default="")
     # F-67: Grundriss als Datei in der DATEIABLAGE; die Positionen bleiben
     # beim Austausch erhalten, weil sie pro Ort in Prozent gespeichert sind.
     grundriss = models.FileField(
@@ -265,10 +266,22 @@ class Einstellungen(models.Model):
         verbose_name="Etikettenformat",
     )
 
-    # --- Erinnerungsfristen ---
-    erinnerungsfrist_tage = models.PositiveIntegerField(
-        default=7,
-        verbose_name="Erinnerungsfrist (Tage vor Fälligkeit)",
+    # --- Erinnerungsfristen (F-122); Vorgabe nach F-91, F-94, F-95, F-140 ---
+    frist_leihe_tage = models.PositiveIntegerField(
+        default=1,
+        verbose_name="Leihe endet: Erinnerung (Tage vorher)",
+    )
+    frist_garantie_tage = models.PositiveIntegerField(
+        default=30,
+        verbose_name="Garantie endet: Sammelmail (Tage vorher)",
+    )
+    frist_unterschrift_tage = models.PositiveIntegerField(
+        default=3,
+        verbose_name="Unterschrift offen: Sammelmail (mehr als Tage)",
+    )
+    frist_gegenzeichnung_tage = models.PositiveIntegerField(
+        default=3,
+        verbose_name="Gegenzeichnung: Erinnerung (Tage nach dem Versand)",
     )
 
     # --- SMTP (F-90) ---

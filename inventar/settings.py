@@ -177,13 +177,15 @@ if MAIL_ABLAGE:
     EMAIL_HOST = "mail-ablage"
     DEFAULT_FROM_EMAIL = os.environ.get("MAIL_ABSENDER", "inventar@beispiel.test")
 else:
-    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    # F-90: Die SMTP-Werte stehen in /einstellungen/, die Umgebung ist der Ersatz.
+    EMAIL_BACKEND = "konten.mail.EinstellungenSmtpBackend"
     EMAIL_HOST = os.environ.get("SMTP_HOST", "localhost")
     EMAIL_PORT = int(os.environ.get("SMTP_PORT", "587"))
     EMAIL_HOST_USER = os.environ.get("SMTP_USER", "")
     EMAIL_HOST_PASSWORD = os.environ.get("SMTP_PASSWORT", "")
     EMAIL_USE_TLS = os.environ.get("SMTP_TLS", "1") == "1"
     DEFAULT_FROM_EMAIL = os.environ.get("MAIL_ABSENDER", "inventar@beispiel.test")
+    EMAIL_TIMEOUT = 15
 
 # --- Siegel (F-138) ----------------------------------------------------------
 SIEGEL_P12 = os.environ.get("SIEGEL_P12", "").strip()

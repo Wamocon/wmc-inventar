@@ -179,7 +179,8 @@ class AustrittTests(TestCase):
         self.assertEqual(antwort.status_code, 302)
         self.person.refresh_from_db()
         self.assertEqual(self.person.austritt, datum)
-        self.assertFalse(self.person.aktiv)
+        # F-53: Die Person bleibt aktiv, bis der Austrittstag da ist.
+        self.assertEqual(self.person.aktiv, datum > date.today())
 
     def test_austritt_speichern_ohne_datum(self):
         self.client.login(username=self.admin.email, password="test-passwort-123")

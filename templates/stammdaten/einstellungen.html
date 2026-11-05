@@ -4,9 +4,17 @@
 <div class="page-head">
   <div>
     <h1>Einstellungen</h1>
-    <p class="muted lead">Firmendaten, Protokolltexte, SMTP und Mailtypen (F-122, F-90, F-96, F-130, N-02).</p>
+    <p class="muted lead">Firmendaten, Protokolltexte, SMTP und Mailarten (F-122, F-90, F-96, F-130, N-02).</p>
+  </div>
+  <div class="actions">
+    <a class="btn" href="/kategorien/" data-test="einstellungen-kategorien">Kategorien</a>
+    <a class="btn" href="/profile/" data-test="einstellungen-profile">Ausstattungsprofile</a>
+    <a class="btn" href="/konten/" data-test="einstellungen-konten">Konten</a>
   </div>
 </div>
+
+{# F-90: Eigenes Formular außerhalb des Hauptformulars. Feld und Knopf stehen in der Karte SMTP und hängen über form= daran. #}
+<form method="post" action="/einstellungen/testmail/" id="testmail-formular" novalidate data-test="testmail-formular">{% csrf_token %}</form>
 
 <form method="post" enctype="multipart/form-data" novalidate data-test="einstellungen-formular">
   {% csrf_token %}
@@ -20,20 +28,20 @@
     <div class="form-grid">
       <div class="field">
         <label for="id_firmenname" class="req">Firmenname</label>
-        <input type="text" id="id_firmenname" name="firmenname" value="{{ einstellungen.firmenname }}" required>
+        <input type="text" id="id_firmenname" name="firmenname" value="{{ form.firmenname.value|default_if_none:'' }}" required>
       </div>
       <div class="field">
         <label for="id_absenderzeile">Absenderzeile</label>
-        <input type="text" id="id_absenderzeile" name="absenderzeile" value="{{ einstellungen.absenderzeile }}" data-test="absenderzeile">
-        <small class="help">Standauf jeder Seite des Protokoll-PDFs und im Absender der E-Mails.</small>
+        <input type="text" id="id_absenderzeile" name="absenderzeile" value="{{ form.absenderzeile.value|default_if_none:'' }}" data-test="absenderzeile">
+        <small class="help">Steht auf dem Protokoll-PDF und als Schlusszeile in den E-Mails.</small>
       </div>
       <div class="field">
         <label for="id_telefon">Telefon der IT</label>
-        <input type="tel" id="id_telefon" name="telefon" value="{{ einstellungen.telefon }}">
+        <input type="tel" id="id_telefon" name="telefon" value="{{ form.telefon.value|default_if_none:'' }}">
       </div>
       <div class="field">
         <label for="id_email_it">E-Mail der IT</label>
-        <input type="email" id="id_email_it" name="email_it" value="{{ einstellungen.email_it }}">
+        <input type="email" id="id_email_it" name="email_it" value="{{ form.email_it.value|default_if_none:'' }}">
       </div>
     </div>
   </fieldset>
@@ -43,10 +51,10 @@
     <div class="form-grid">
       <div class="field">
         <label for="id_logo">Logo (PNG oder SVG)</label>
-        <input type="file" id="id_logo" name="logo" accept="image/png,image/svg+xml" data-test="logo">
-        <small class="help">SVG wird nur als Bild eingebunden, nie als Inline-SVG (N-02).</small>
+        <input type="file" id="id_logo" name="logo" accept=".png,.svg,image/png,image/svg+xml" data-test="logo">
+        <small class="help">Bis 10 MB. SVG wird nur als Bild eingebunden, nie als Inline-SVG (N-02).</small>
         {% if einstellungen.logo %}
-        <small class="help">Aktuell: <a href="/media/{{ einstellungen.logo.name }}">{{ einstellungen.logo.name }}</a></small>
+        <img class="logo-vorschau" src="/einstellungen/logo/" alt="Aktuelles Logo" data-test="logo-vorschau">
         {% endif %}
       </div>
     </div>
@@ -54,61 +62,61 @@
 
   <fieldset class="card">
     <legend class="card-head"><h2>Protokolltexte (F-130)</h2></legend>
-    <p class="muted small">Neue Version gilt nur für neue Protokolle. `{Firmenname}` im Text wird ersetzt.</p>
+    <p class="muted small">Neue Version gilt nur für neue Protokolle. <code>{Firmenname}</code> im Text wird ersetzt.</p>
 
     <div class="field">
       <label for="id_nutzungsbedingungen_ausgabe">Nutzungsbedingungen (Ausgabeprotokoll)</label>
-      <textarea id="id_nutzungsbedingungen_ausgabe" name="nutzungsbedingungen_ausgabe" rows="4" data-test="nutzungsbedingungen">{{ einstellungen.nutzungsbedingungen_ausgabe }}</textarea>
+      <textarea id="id_nutzungsbedingungen_ausgabe" name="nutzungsbedingungen_ausgabe" rows="4" data-test="nutzungsbedingungen">{{ form.nutzungsbedingungen_ausgabe.value|default_if_none:'' }}</textarea>
     </div>
     <div class="form-grid">
       <div class="field">
         <label for="id_nutzungsbedingungen_version">Version</label>
-        <input type="text" id="id_nutzungsbedingungen_version" name="nutzungsbedingungen_version" value="{{ einstellungen.nutzungsbedingungen_version }}" data-test="version-nutzung">
+        <input type="text" id="id_nutzungsbedingungen_version" name="nutzungsbedingungen_version" value="{{ form.nutzungsbedingungen_version.value|default_if_none:'' }}" data-test="version-nutzung">
       </div>
     </div>
 
     <div class="field">
       <label for="id_erklaerungen_ausgabe">Erklärungen (Ausgabeprotokoll)</label>
-      <textarea id="id_erklaerungen_ausgabe" name="erklaerungen_ausgabe" rows="3" data-test="erklaerungen">{{ einstellungen.erklaerungen_ausgabe }}</textarea>
+      <textarea id="id_erklaerungen_ausgabe" name="erklaerungen_ausgabe" rows="3" data-test="erklaerungen">{{ form.erklaerungen_ausgabe.value|default_if_none:'' }}</textarea>
     </div>
     <div class="form-grid">
       <div class="field">
         <label for="id_erklaerungen_version">Version</label>
-        <input type="text" id="id_erklaerungen_version" name="erklaerungen_version" value="{{ einstellungen.erklaerungen_version }}" data-test="version-erklaerungen">
+        <input type="text" id="id_erklaerungen_version" name="erklaerungen_version" value="{{ form.erklaerungen_version.value|default_if_none:'' }}" data-test="version-erklaerungen">
       </div>
     </div>
 
     <div class="field">
       <label for="id_unterzeichnung_ausgabe">Elektronische Unterzeichnung (Ausgabeprotokoll)</label>
-      <textarea id="id_unterzeichnung_ausgabe" name="unterzeichnung_ausgabe" rows="4" data-test="unterzeichnung">{{ einstellungen.unterzeichnung_ausgabe }}</textarea>
+      <textarea id="id_unterzeichnung_ausgabe" name="unterzeichnung_ausgabe" rows="4" data-test="unterzeichnung">{{ form.unterzeichnung_ausgabe.value|default_if_none:'' }}</textarea>
       <small class="help">Erster Absatz fett, Kasten mit hellroter Fläche im PDF.</small>
     </div>
     <div class="form-grid">
       <div class="field">
         <label for="id_unterzeichnung_version">Version</label>
-        <input type="text" id="id_unterzeichnung_version" name="unterzeichnung_version" value="{{ einstellungen.unterzeichnung_version }}" data-test="version-unterzeichnung">
+        <input type="text" id="id_unterzeichnung_version" name="unterzeichnung_version" value="{{ form.unterzeichnung_version.value|default_if_none:'' }}" data-test="version-unterzeichnung">
       </div>
     </div>
 
     <div class="field">
       <label for="id_erklaerungen_ruecknahme">Erklärungen (Rücknahmeprotokoll)</label>
-      <textarea id="id_erklaerungen_ruecknahme" name="erklaerungen_ruecknahme" rows="3">{{ einstellungen.erklaerungen_ruecknahme }}</textarea>
+      <textarea id="id_erklaerungen_ruecknahme" name="erklaerungen_ruecknahme" rows="3">{{ form.erklaerungen_ruecknahme.value|default_if_none:'' }}</textarea>
     </div>
     <div class="form-grid">
       <div class="field">
         <label for="id_erklaerungen_ruecknahme_version">Version</label>
-        <input type="text" id="id_erklaerungen_ruecknahme_version" name="erklaerungen_ruecknahme_version" value="{{ einstellungen.erklaerungen_ruecknahme_version }}">
+        <input type="text" id="id_erklaerungen_ruecknahme_version" name="erklaerungen_ruecknahme_version" value="{{ form.erklaerungen_ruecknahme_version.value|default_if_none:'' }}">
       </div>
     </div>
 
     <div class="field">
       <label for="id_unterzeichnung_ruecknahme">Elektronische Unterzeichnung (Rücknahmeprotokoll)</label>
-      <textarea id="id_unterzeichnung_ruecknahme" name="unterzeichnung_ruecknahme" rows="4">{{ einstellungen.unterzeichnung_ruecknahme }}</textarea>
+      <textarea id="id_unterzeichnung_ruecknahme" name="unterzeichnung_ruecknahme" rows="4">{{ form.unterzeichnung_ruecknahme.value|default_if_none:'' }}</textarea>
     </div>
     <div class="form-grid">
       <div class="field">
         <label for="id_unterzeichnung_ruecknahme_version">Version</label>
-        <input type="text" id="id_unterzeichnung_ruecknahme_version" name="unterzeichnung_ruecknahme_version" value="{{ einstellungen.unterzeichnung_ruecknahme_version }}">
+        <input type="text" id="id_unterzeichnung_ruecknahme_version" name="unterzeichnung_ruecknahme_version" value="{{ form.unterzeichnung_ruecknahme_version.value|default_if_none:'' }}">
       </div>
     </div>
   </fieldset>
@@ -119,13 +127,25 @@
       <div class="field">
         <label for="id_etikettenformat">Etikettenformat</label>
         <select id="id_etikettenformat" name="etikettenformat" data-test="etikettenformat">
-          <option value="a4" {% if einstellungen.etikettenformat == "a4" %}selected{% endif %}>A4, 10 Etiketten je Seite</option>
-          <option value="a5" {% if einstellungen.etikettenformat == "a5" %}selected{% endif %}>A5, 10 Etiketten je Seite</option>
+          <option value="a4" {% if form.etikettenformat.value == "a4" %}selected{% endif %}>A4, 10 Etiketten je Seite</option>
+          <option value="a5" {% if form.etikettenformat.value == "a5" %}selected{% endif %}>A5, 10 Etiketten je Seite</option>
         </select>
       </div>
       <div class="field">
-        <label for="id_erinnerungsfrist_tage">Erinnerungsfrist (Tage vor Fälligkeit)</label>
-        <input type="number" id="id_erinnerungsfrist_tage" name="erinnerungsfrist_tage" min="1" max="90" value="{{ einstellungen.erinnerungsfrist_tage }}" data-test="erinnerungsfrist">
+        <label for="id_frist_leihe_tage">Leihe endet: Erinnerung (Tage vorher)</label>
+        <input type="number" id="id_frist_leihe_tage" name="frist_leihe_tage" min="0" max="365" value="{{ form.frist_leihe_tage.value|default_if_none:'' }}" data-test="frist-leihe">
+      </div>
+      <div class="field">
+        <label for="id_frist_garantie_tage">Garantie endet: Sammelmail (Tage vorher)</label>
+        <input type="number" id="id_frist_garantie_tage" name="frist_garantie_tage" min="0" max="365" value="{{ form.frist_garantie_tage.value|default_if_none:'' }}" data-test="frist-garantie">
+      </div>
+      <div class="field">
+        <label for="id_frist_unterschrift_tage">Unterschrift offen: Sammelmail (mehr als Tage)</label>
+        <input type="number" id="id_frist_unterschrift_tage" name="frist_unterschrift_tage" min="0" max="365" value="{{ form.frist_unterschrift_tage.value|default_if_none:'' }}" data-test="frist-unterschrift">
+      </div>
+      <div class="field">
+        <label for="id_frist_gegenzeichnung_tage">Gegenzeichnung: Erinnerung (Tage nach dem Versand)</label>
+        <input type="number" id="id_frist_gegenzeichnung_tage" name="frist_gegenzeichnung_tage" min="0" max="365" value="{{ form.frist_gegenzeichnung_tage.value|default_if_none:'' }}" data-test="frist-gegenzeichnung">
       </div>
     </div>
   </fieldset>
@@ -135,22 +155,22 @@
     <div class="form-grid">
       <div class="field">
         <label for="id_smtp_server">SMTP-Server</label>
-        <input type="text" id="id_smtp_server" name="smtp_server" value="{{ einstellungen.smtp_server }}" data-test="smtp-server">
+        <input type="text" id="id_smtp_server" name="smtp_server" value="{{ form.smtp_server.value|default_if_none:'' }}" data-test="smtp-server">
       </div>
       <div class="field">
         <label for="id_smtp_port">Port</label>
-        <input type="number" id="id_smtp_port" name="smtp_port" min="1" max="65535" value="{{ einstellungen.smtp_port }}" data-test="smtp-port">
+        <input type="number" id="id_smtp_port" name="smtp_port" min="1" max="65535" value="{{ form.smtp_port.value|default_if_none:'' }}" data-test="smtp-port">
       </div>
       <div class="field">
-        <label class="check" for="id_smtp_tls"><input type="checkbox" id="id_smtp_tls" name="smtp_tls" {% if einstellungen.smtp_tls %}checked{% endif %} data-test="smtp-tls"> TLS</label>
+        <label class="check" for="id_smtp_tls"><input type="checkbox" id="id_smtp_tls" name="smtp_tls" {% if form.smtp_tls.value %}checked{% endif %} data-test="smtp-tls"> TLS</label>
       </div>
       <div class="field">
         <label for="id_smtp_absender">Absender</label>
-        <input type="email" id="id_smtp_absender" name="smtp_absender" value="{{ einstellungen.smtp_absender }}" data-test="smtp-absender">
+        <input type="email" id="id_smtp_absender" name="smtp_absender" value="{{ form.smtp_absender.value|default_if_none:'' }}" data-test="smtp-absender">
       </div>
       <div class="field">
         <label for="id_smtp_benutzer">Benutzer</label>
-        <input type="text" id="id_smtp_benutzer" name="smtp_benutzer" value="{{ einstellungen.smtp_benutzer }}" data-test="smtp-benutzer">
+        <input type="text" id="id_smtp_benutzer" name="smtp_benutzer" value="{{ form.smtp_benutzer.value|default_if_none:'' }}" data-test="smtp-benutzer">
       </div>
       <div class="field">
         <label for="id_smtp_passwort">Passwort (leer = unverändert)</label>
@@ -158,71 +178,30 @@
       </div>
     </div>
 
-    {% if testmail_meldung %}
-    <div class="meldung meldung-erfolg" data-test="testmail-meldung">
-      {{ testmail_meldung }}
-    </div>
-    {% endif %}
-    {% if testmail_fehler %}
-    <div class="meldung meldung-fehler" data-test="testmail-fehler" role="alert">
-      {{ testmail_fehler }}
-    </div>
-    {% endif %}
-
-    <form method="post" action="/einstellungen/testmail/" data-test="testmail-formular">
-      {% csrf_token %}
-      <div class="form-grid">
-        <div class="field">
-          <label for="testmail-adresse">Testmail an</label>
-          <input type="email" id="testmail-adresse" name="empfaenger" placeholder="empfaenger@beispiel.test" data-test="testmail-adresse" required>
-        </div>
-        <div class="field">
-          <button type="submit" class="btn" data-test="testmail">Testmail senden</button>
-        </div>
+    <div class="form-grid">
+      <div class="field">
+        <label for="testmail-adresse">Testmail an</label>
+        <input type="email" id="testmail-adresse" name="empfaenger" form="testmail-formular" value="{{ testmail_an }}" data-test="testmail-adresse">
+        <small class="help">Die Testmail nutzt die gespeicherten Werte. Vorher speichern, wenn Sie etwas geändert haben.</small>
       </div>
-    </form>
+      <div class="field">
+        <button type="submit" class="btn" form="testmail-formular" data-test="testmail">Testmail senden</button>
+      </div>
+    </div>
   </fieldset>
 
   <fieldset class="card">
-    <legend class="card-head"><h2>Mailtypen (F-96)</h2></legend>
-    <p class="muted small">Abgeschaltete Mailart erzeugt keine Mail.</p>
+    <legend class="card-head"><h2>Mailarten (F-96)</h2></legend>
+    <p class="muted small">Eine abgeschaltete Mailart erzeugt keine Mail. Einmalcode, Einladung und Link zum Zurücksetzen des Passworts gehen immer raus, weil sonst niemand mehr hineinkommt.</p>
     <div class="form-grid">
+      {% for art in form.mailarten %}
       <div class="field">
-        <label class="check" for="id_mail_verleih_anfrage">
-          <input type="checkbox" id="id_mail_verleih_anfrage" name="mail_verleih_anfrage" {% if einstellungen.mail_verleih_anfrage %}checked{% endif %} data-test="mail-verleih-anfrage">
-          Verleihanfrage
+        <label class="check" for="id_{{ art.name }}">
+          <input type="checkbox" id="id_{{ art.name }}" name="{{ art.name }}" {% if art.feld.value %}checked{% endif %} data-test="{{ art.marke }}">
+          <span>{{ art.text }}<small class="help mail-hilfe">{{ art.hilfe }}</small></span>
         </label>
       </div>
-      <div class="field">
-        <label class="check" for="id_mail_verleih_ablehnung">
-          <input type="checkbox" id="id_mail_verleih_ablehnung" name="mail_verleih_ablehnung" {% if einstellungen.mail_verleih_ablehnung %}checked{% endif %} data-test="mail-verleih-ablehnung">
-          Verleih-Ablehnung
-        </label>
-      </div>
-      <div class="field">
-        <label class="check" for="id_mail_verleih_genehmigung">
-          <input type="checkbox" id="id_mail_verleih_genehmigung" name="mail_verleih_genehmigung" {% if einstellungen.mail_verleih_genehmigung %}checked{% endif %} data-test="mail-verleih-genehmigung">
-          Verleih-Genehmigung
-        </label>
-      </div>
-      <div class="field">
-        <label class="check" for="id_mail_verleih_zuruecknahme">
-          <input type="checkbox" id="id_mail_verleih_zuruecknahme" name="mail_verleih_zuruecknahme" {% if einstellungen.mail_verleih_zuruecknahme %}checked{% endif %} data-test="mail-verleih-zuruecknahme">
-          Verleih-Zurücknahme
-        </label>
-      </div>
-      <div class="field">
-        <label class="check" for="id_mail_protokoll_gesendet">
-          <input type="checkbox" id="id_mail_protokoll_gesendet" name="mail_protokoll_gesendet" {% if einstellungen.mail_protokoll_gesendet %}checked{% endif %} data-test="mail-protokoll-gesendet">
-          Protokoll gesendet
-        </label>
-      </div>
-      <div class="field">
-        <label class="check" for="id_mail_protokoll_unterzeichnet">
-          <input type="checkbox" id="id_mail_protokoll_unterzeichnet" name="mail_protokoll_unterzeichnet" {% if einstellungen.mail_protokoll_unterzeichnet %}checked{% endif %} data-test="mail-protokoll-unterzeichnet">
-          Protokoll unterzeichnet
-        </label>
-      </div>
+      {% endfor %}
     </div>
   </fieldset>
 

@@ -8,10 +8,12 @@ urlpatterns = [
     # Einstellungen (F-122, F-90, F-96, F-130, N-02) — M7 Teil 1 (A-0905)
     path("einstellungen/", views.einstellungen_sehen, name="einstellungen"),
     path("einstellungen/testmail/", views.einstellungen_testmail, name="einstellungen-testmail"),
+    path("einstellungen/logo/", views.einstellungen_logo, name="einstellungen-logo"),
     # Kategorien (F-120)
     path("kategorien/", views.kategorien_liste, name="kategorien-liste"),
     path("kategorien/neu/", views.kategorien_anlegen, name="kategorien-anlegen"),
     path("kategorien/<int:pk>/aendern/", views.kategorien_aendern, name="kategorien-aendern"),
+    path("kategorien/<int:pk>/loeschen/", views.kategorien_loeschen, name="kategorien-loeschen"),
     # Personen (F-121)
     path("personen/", views.personen_liste, name="personen-liste"),
     path("personen/neu/", views.personen_anlegen, name="personen-anlegen"),
@@ -25,4 +27,8 @@ urlpatterns = [
     path("orte/", views.orte_liste, name="orte-liste"),
     path("orte/neu/", views.orte_anlegen, name="orte-anlegen"),
     path("orte/<int:pk>/aendern/", views.orte_aendern, name="orte-aendern"),
+    # Ausstattungsprofile (F-61)
+    path("profile/", views.profile_liste, name="profile-liste"),
+    path("profile/neu/", views.profil_anlegen, name="profil-anlegen"),
+    path("profile/<int:pk>/aendern/", views.profil_aendern, name="profil-aendern"),
 ]

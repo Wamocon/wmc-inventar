@@ -6,6 +6,7 @@
 </div>
 <form method="post" novalidate>
   {% csrf_token %}
+  <div class="meldungen">{% include "fragmente/fehler.html" %}</div>
   <div class="form-grid">
     {% for f in form %}
       <div class="field">

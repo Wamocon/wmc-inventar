@@ -4,11 +4,13 @@
 <div class="page-head">
   <div>
     <h1 data-test="ort-kennung">{{ ort.kennung }}</h1>
-    <p class="muted lead">Arbeitsplatz mit Soll-Ist-Abgleich (F-62, F-64).</p>
+    <p class="muted lead">{{ ort.raum|default:"Arbeitsplatz" }}{% if ort.standort %} · {{ ort.standort }}{% endif %}{% if ort.notiz %} · {{ ort.notiz }}{% endif %}</p>
   </div>
   <div class="actions">
     <a class="btn" href="/arbeitsplaetze/liste/" data-test="zurueck">Zur Liste</a>
-    <a class="btn" href="/arbeitsplaetze/?hervorheben={{ ort.standort|urlencode }}|{{ ort.kennung }}" data-test="im-raumplan">Im Raumplan zeigen</a>
+    {% if koennen_aendern and abgleich.fehlend %}<a class="btn primary" href="/arbeitsplaetze/{{ ort.kennung }}/ausgeben/" data-test="fehlendes-ausgeben">Fehlendes vom Lager ausgeben</a>{% endif %}
+    {% if koennen_aendern %}<a class="btn" href="/etiketten/?ort={{ ort.kennung|urlencode }}&amp;startposition=1" data-test="etiketten-platz">Etiketten für den Platz</a>{% endif %}
+    {% if ort.plan_id and ort.hat_position %}<a class="btn" href="/arbeitsplaetze/?hervorheben={{ ort.kennung|urlencode }}" data-test="im-raumplan">Im Raumplan zeigen</a>{% endif %}
     {% if user.ist_admin or user.ist_mitarbeiter %}
     <form method="post" action="/arbeitsplaetze/{{ ort.kennung }}/pruefen/" data-test="pruefen-formular">
       {% csrf_token %}
@@ -24,12 +26,12 @@
     {% if abgleich.ergebnis == "vollstaendig" %}
       <span class="chip-status in-benutzung">✓ vollständig</span>
     {% elif abgleich.ergebnis == "unvollstaendig" %}
-      <span class="chip-status ausgemustert">✗ unvollständig</span>
+      <span class="chip-status ausgemustert">− unvollständig</span>
     {% else %}
       <span class="chip-status in-reparatur">+ mehr als Soll</span>
     {% endif %}
     {% if ort.profil %} · Profil: {{ ort.profil.name }}{% endif %}
-    {% if ort.feste_person %} · Feste Person: {{ ort.feste_person.voller_name }}{% endif %}
+    {% if ort.feste_person %} · Feste Person: <a href="/personen/{{ ort.feste_person.pk }}/" data-test="feste-person">{{ ort.feste_person.voller_name }}</a>{% endif %}
   </p>
 </div>
 
@@ -38,10 +40,9 @@
   <h2>Fehlt</h2>
   <div class="liste" data-test="fehlliste">
     {% for kategorie, anzahl in abgleich.fehlend %}
-    <div class="zeile" data-test="bedarfsliste" data-id="{{ kategorie.name }}">
-      <span data-test="fehlend-kategorie">{{ kategorie.name }}</span>
-      <span data-test="fehlend-anzahl">{{ anzahl }} fehlt</span>
-      <a class="btn sm" href="/geraete/?kategorie={{ kategorie.pk }}&status=auf-lager" data-test="lager-link">Auf Lager suchen</a>
+    <div class="zeile" data-test="fehlend-zeile" data-id="{{ kategorie.name }}">
+      <span data-test="fehlend-anzahl">fehlt: {{ anzahl }} × {{ kategorie.name }}</span>
+      <a class="btn sm" href="/geraete/?kategorie={{ kategorie.name|urlencode }}&amp;status=auf-lager" data-test="lager-link">Auf Lager suchen</a>
     </div>
     {% endfor %}
   </div>
@@ -54,8 +55,7 @@
   <div class="liste" data-test="mehrliste">
     {% for kategorie, anzahl in abgleich.zuviel %}
     <div class="zeile">
-      <span data-test="zuviel-kategorie">{{ kategorie.name }}</span>
-      <span data-test="zuviel-anzahl">{{ anzahl }} zusätzlich</span>
+      <span data-test="zuviel-anzahl">mehr: {{ anzahl }} × {{ kategorie.name }}</span>
     </div>
     {% endfor %}
   </div>

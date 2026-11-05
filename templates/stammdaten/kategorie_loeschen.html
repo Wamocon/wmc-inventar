@@ -1,0 +1,17 @@
+{% extends "basis.html" %}
+{% block titel %}Kategorie löschen · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div><h1>Kategorie löschen</h1><p class="muted lead">{{ kategorie.name }} (F-120)</p></div>
+</div>
+<div data-test="dialog" data-name="loeschen">
+  <div class="meldung warning" data-test="warnung">Die Kategorie {{ kategorie.name }} wird dauerhaft gelöscht.</div>
+  <div class="actions">
+    <form method="post" novalidate data-test="loeschen-formular">
+      {% csrf_token %}
+      <button type="submit" class="btn primary" data-test="bestaetigen">Bestätigen</button>
+    </form>
+    <a class="btn link" href="/kategorien/" data-test="abbrechen">Abbrechen</a>
+  </div>
+</div>
+{% endblock %}

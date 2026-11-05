@@ -10,16 +10,36 @@
   </div>{% endif %}
 </div>
 <dl class="detail-grid" data-test="person-detail">
-  <dt>Anrede</dt><dd>{{ person.anrede|default:"—" }}</dd>
+  <dt>Anrede</dt><dd>{{ person.get_anrede_display|default:"—" }}</dd>
   <dt>Vorname</dt><dd>{{ person.vorname|default:"—" }}</dd>
   <dt>Nachname</dt><dd>{{ person.nachname|default:"—" }}</dd>
   <dt>E-Mail</dt><dd>{{ person.email|default:"—" }}</dd>
   <dt>Abteilung</dt><dd>{{ person.abteilung|default:"—" }}</dd>
-  <dt>Eintritt</dt><dd>{% if person.eintritt %}{{ person.eintritt }}{% else %}—{% endif %}</dd>
-  <dt>Austritt</dt><dd>{% if person.austritt %}{{ person.austritt }}{% else %}—{% endif %}</dd>
+  <dt>Eintritt</dt><dd>{% if person.eintritt %}{{ person.eintritt|date:"d.m.Y" }}{% else %}—{% endif %}</dd>
+  <dt>Austritt</dt><dd data-test="austritt">{% if person.austritt %}{{ person.austritt|date:"d.m.Y" }}{% else %}—{% endif %}</dd>
+  <dt>Arbeitsplatz</dt><dd data-test="arbeitsplatz">{% for o in plaetze %}<a href="/arbeitsplaetze/{{ o.kennung }}/">{{ o.kennung }}</a>{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}</dd>
   <dt>Anschrift</dt><dd>{{ person.anschrift|default:"—" }}</dd>
   <dt>Status</dt><dd>{% if person.aktiv %}aktiv{% else %}inaktiv{% endif %}</dd>
 </dl>
+{% if person.austritt and gerate %}
+<div class="meldung warning" data-test="austritt-hinweis">Austritt am {{ person.austritt|date:"d.m.Y" }}: {{ gerate|length }} Gerät(e) sind noch zugeordnet und müssen zurückkommen.</div>
+{% endif %}
+<div class="abschnitt">
+  <h2>Zugewiesene Geräte</h2>
+  {% if gerate %}
+  <div class="liste" data-test="person-geraete">
+    {% for g in gerate %}
+    <div class="zeile" data-test="zeile" data-id="{{ g.inventarnummer }}">
+      <a href="/geraete/{{ g.inventarnummer }}/" class="inv num">{{ g.inventarnummer }}</a>
+      <span>{{ g.kategorie.name }} · {{ g.hersteller }} {{ g.modell }}</span>
+      <span class="chip-status {{ g.status }}">{{ g.status_anzeige }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">Keine Geräte zugewiesen.</p>
+  {% endif %}
+</div>
 <div class="abschnitt">
   <h2>Protokolle</h2>
   {% if person.protokolle.exists %}

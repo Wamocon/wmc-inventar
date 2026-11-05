@@ -1445,8 +1445,8 @@ class M4ArbeitsplatzTests(TestCase):
         g = self._gerat(self.kat_monitor, ort=self.ort)
         self._an_ort(g, self.ort)
         services.ausmustern(
-            g, grund="defekt", datum=date(2026, 10, 1),
-            disposition="Recycling", ausgefuehrt_von=self.admin,
+            g, grund="verloren", datum=date(2026, 10, 1), disposition="unbekannt",
+            bestaetigt_gemeldt=True, ausgefuehrt_von=self.admin,
         )
         abgleich = services.soll_ist_abgleich(self.ort)
         self.assertEqual(abgleich["ergebnis"], "unvollstaendig")
@@ -1950,8 +1950,8 @@ class PlanPflegeTests(TestCase):
         self.assertEqual(antwort.status_code, 200)
         self.plan.refresh_from_db()
         self.assertTrue(self.plan.grundriss, "Grundriss ist leer")
-        self.assertTrue(self.plan.grundriss.name.endswith("grundriss.png"),
-                        f"Name ist '{self.plan.grundriss.name}', erwartet Ende mit 'grundriss.png'")
+        self.assertTrue(self.plan.grundriss.name.endswith(f"plan-{self.plan.id}.png"),
+                        f"Name ist '{self.plan.grundriss.name}', jeder Plan hat seine eigene Datei")
 
     def test_upload_einseitiges_pdf_wird_zum_bild(self):
         """Kapitel 1: Einseitiges PDF wird mit pypdfium2 zum Bild."""
@@ -1964,7 +1964,7 @@ class PlanPflegeTests(TestCase):
         self.assertEqual(antwort.status_code, 200)
         self.plan.refresh_from_db()
         self.assertTrue(self.plan.grundriss)
-        self.assertTrue(self.plan.grundriss.name.endswith("grundriss.png"))
+        self.assertTrue(self.plan.grundriss.name.endswith(f"plan-{self.plan.id}.png"))
 
     def test_position_erscheint_im_raumplan(self):
         """Kapitel 2 und 4: Gespeicherte Position steht als data-x/data-y am platz."""
