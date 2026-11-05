@@ -148,7 +148,7 @@ class ReservierungAufhebenTests(Grundlage):
         gerat = self._gerat(leihpool=True)
         heute = zeit.jetzt_wie_im_entwicklungsmodus().date()
         leihe = self._genehmigt(gerat, heute, heute + timedelta(days=5))
-        adresse = f"/verleih/{leihe.id}/ablehnen/"
+        adresse = f"/geraete/verleih/{leihe.id}/ablehnen/"
         seite = self.client.get(adresse)
         self.assertContains(seite, "Reservierung aufheben")
         self.assertNotContains(seite, "Leihanfrage ablehnen")
@@ -206,7 +206,7 @@ class MeldungenTests(Grundlage):
     def test_verlaengerung_abgelehnt_ohne_mail(self):
         leihe = self._verliehen()
         Einstellungen.objects.filter(pk=Einstellungen.aktuelles().pk).update(mail_verleih_ablehnung=False)
-        antwort = self.client.post(f"/verleih/{leihe.id}/verlaengern/", {"aktion": "ablehnen"}, follow=True)
+        antwort = self.client.post(f"/geraete/verleih/{leihe.id}/verlaengern/", {"aktion": "ablehnen"}, follow=True)
         self.assertContains(antwort, "Eine Mail geht nicht hinaus.")
         self.assertNotContains(antwort, "unterwegs")
         self.assertIn(f"Verlängerung der Leihe {leihe.nr} abgelehnt.",
@@ -324,6 +324,6 @@ class KleinigkeitenTests(Grundlage):
 
     def test_historie_grossgeschrieben(self):
         gerat = self._gerat("K-10")
-        services.gerat_bearbeiten(gerat, kaufdatum_nicht_ermittelbar=True, erzeugt_von=self.admin)
+        services.gerat_bearbeiten(gerat, werte={"kaufdatum_nicht_ermittelbar": True}, erzeugt_von=self.admin)
         vorgang = Vorgang.objects.filter(gerat=gerat, aenderung_feld="kaufdatum_nicht_ermittelbar").first()
         self.assertTrue(vorgang.aenderung_anzeige.startswith("Kaufdatum nicht ermittelbar"))
