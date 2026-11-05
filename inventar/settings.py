@@ -146,7 +146,8 @@ SESSION_EXPIRE_AT_BROWSER_CLOSE = False
 STATIC_URL = "static/"
 static_dir = ROOT_DIR / "static"
 STATICFILES_DIRS = [static_dir] if static_dir.exists() else []
-STATIC_ROOT = ROOT_DIR / "var" / "static"
+# Nicht unter var/: Das ist im Betrieb ein Volume und verdeckt, was der Bau gesammelt hat.
+STATIC_ROOT = ROOT_DIR / "staticfiles"
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
     "staticfiles": {"BACKEND": "whitenoise.storage.CompressedStaticFilesStorage"},

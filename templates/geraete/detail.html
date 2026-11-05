@@ -1,4 +1,4 @@
-{% extends "basis.html" %}
+{% extends "basis.html" %}{% load betraegeuro %}
 {% block titel %}{{ gerat.inventarnummer }} · WMC Inventar{% endblock %}
 {% block inhalt %}
 <a class="back" href="/geraete/"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>Geräte</a>
@@ -135,7 +135,7 @@
     <dt>Standardzubehör</dt><dd data-test="zubehoer">{{ gerat.standardzuehoer|default:"–" }}</dd>
     <dt>Technische Daten</dt><dd data-test="technische-daten">{{ gerat.technische_daten|default:"–" }}</dd>
     <dt>Kaufdatum</dt><dd data-test="kaufdatum">{{ gerat.kaufdatum|default:"–" }}</dd>
-    <dt>Kaufpreis netto</dt><dd data-test="kaufpreis">{% if gerat.kaufpreis_netto is not None %}{{ gerat.kaufpreis_netto }} EUR{% else %}–{% endif %}</dd>
+    <dt>Kaufpreis netto</dt><dd data-test="kaufpreis">{% if gerat.kaufpreis_netto is not None %}{{ gerat.kaufpreis_netto|betraegeuro }}{% else %}–{% endif %}</dd>
     <dt>Lieferant</dt><dd data-test="lieferant">{{ gerat.lieferant|default:"–" }}</dd>
     <dt>Rechnungsnummer</dt><dd data-test="rechnung">{{ gerat.rechnungsnummer|default:"–" }}</dd>
     <dt>Garantie bis</dt><dd data-test="garantie">{{ gerat.garantie_bis|default:"–" }}</dd>

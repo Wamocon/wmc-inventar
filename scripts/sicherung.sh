@@ -3,18 +3,19 @@
 # Datenbank-Dump und Kopie der Dateiablage in ein Verzeichnis, das UrBackup erfasst.
 # Aufruf: scripts/sicherung.sh [Zielverzeichnis]
 #
-# Scheitert ein Teil, endet das Skript mit einem Fehler und das Verzeichnis trägt die
-# Endung .unvollstaendig. Eine Sicherung ohne Dump darf nicht als Erfolg durchgehen.
+# Scheitert ein Teil, endet das Skript mit einem Fehler und der Ordner behält die Endung
+# .unvollstaendig. Eine Sicherung ohne Dump darf nicht als Erfolg durchgehen.
 
 set -euo pipefail
 
 ZIEL="${1:-/srv/inventar/sicherung}"
 STEMPEL=$(date +%Y%m%d-%H%M%S)
-ZIEL_VERZ="$ZIEL/$STEMPEL"
+# Der endgültige Name entsteht erst am Schluss; bis dahin heißt der Ordner .unvollstaendig.
+ZIEL_VERZ="$ZIEL/$STEMPEL-$$.unvollstaendig"
 AUFHEBEN_TAGE="${SICHERUNG_TAGE:-30}"
 
 mkdir -p "$ZIEL_VERZ"
-trap 'mv "$ZIEL_VERZ" "$ZIEL_VERZ.unvollstaendig"; echo "Sicherung gescheitert: $ZIEL_VERZ.unvollstaendig" >&2' ERR
+trap 'echo "Sicherung gescheitert: $ZIEL_VERZ" >&2' ERR
 
 # Datenbank
 if [ -n "${DATABASE_URL:-}" ]; then
@@ -39,7 +40,9 @@ else
     false
 fi
 
+mv -T "$ZIEL_VERZ" "$ZIEL/$STEMPEL"
+
 # Alte Stände aufräumen, nur die eigenen Stempelordner
 find "$ZIEL" -mindepth 1 -maxdepth 1 -type d -name '20*' -mtime "+$AUFHEBEN_TAGE" -exec rm -rf {} +
 
-echo "Sicherung abgeschlossen: $ZIEL_VERZ"
+echo "Sicherung abgeschlossen: $ZIEL/$STEMPEL"
