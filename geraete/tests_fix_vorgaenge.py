@@ -184,7 +184,7 @@ class LoeschenTests(Grundlage):
         gerat = self._gerat()
         services.gerat_ausgeben(gerat, self.anna, ausgefuehrt_von=self.admin, unterschrift="tool")
         self.assertNotContains(self.client.get(f"/geraete/{gerat.inventarnummer}/"), 'data-test="aktion-loeschen"')
-        self.client.post(f"/geraete/{gerat.inventarnummer}/loeschen/")
+        self.client.post(f"/geraete/{gerat.inventarnummer}/loeschen/bestaetigen/")
         self.assertTrue(Gerat.objects.filter(pk=gerat.pk).exists())
 
 

@@ -751,7 +751,7 @@ class Protokoll(models.Model):
         Die Checkliste Zugänge gehört nur zur Ausgabe, nicht zur Leihe und nicht
         zur Rücknahme (FRM-001 Varianten, FRM-002).
         """
-        if self.art != self.ART_AUSGABE or self.leihe_id:
+        if self.art != self.ART_AUSGABE or self.leihe_id or self.bearbeiter_signiert_am is not None:
             return []
         werte = self.checkliste or {}
         offene = []
@@ -769,8 +769,10 @@ class Protokoll(models.Model):
 
         Liefert die Textbezeichnung der offenen Punkte (F-133, F-130).
         A-0911: Ein Punkt ist beantwortet, wenn ein Wert (dict oder bool)
-        gesetzt ist.
+        gesetzt ist. Nach der Signatur ist die Liste abgeschlossen (F-135).
         """
+        if self.bearbeiter_signiert_am is not None:
+            return []
         werte = self.offboarding or {}
         offene = []
         for schluessel, text in self.OFFBOARDING_PUNKTE:

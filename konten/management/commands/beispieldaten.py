@@ -179,6 +179,9 @@ class Command(BaseCommand):
             raise CommandError("Die Datenbank enthält bereits Konten. Mit --neu neu beginnen.")
 
         with transaction.atomic():
+            # flush nimmt auch, was die Migration angelegt hat.
+            from stammdaten.checklisten import vorbelegen
+            vorbelegen()
             self._anlegen_kategorien()
             self._anlegen_profile()
             # Personen zuerst: Die Orte verweisen auf ihre feste Person.
@@ -196,9 +199,6 @@ class Command(BaseCommand):
         # flush leert alle Tabellen und kennt auch neue Modelle (TESTSCHNITTSTELLE:
         # --neu leert den Datenbankinhalt, auch während der Server läuft).
         call_command("flush", verbosity=0, interactive=False)
-        # flush nimmt auch, was die Migration angelegt hat.
-        from stammdaten.checklisten import vorbelegen
-        vorbelegen()
 
         for var in ("DATEIABLAGE", "MAIL_ABLAGE"):
             p = getattr(settings, var, "")

@@ -143,7 +143,7 @@ class InventarnummerTests(TestCase):
         erstes = services.gerat_anlegen(kategorie=kat, hersteller="A", modell="B", seriennummer="S1", erzeugt_von=admin)
         zweites = services.gerat_anlegen(kategorie=kat, hersteller="A", modell="B", seriennummer="S2", erzeugt_von=admin)
         nummer = zweites.inventarnummer
-        self.client.post(f"/geraete/{nummer}/loeschen/")
+        self.client.post(f"/geraete/{nummer}/loeschen/bestaetigen/")
         self.assertFalse(Gerat.objects.filter(inventarnummer=nummer).exists())
         drittes = services.gerat_anlegen(kategorie=kat, hersteller="A", modell="B", seriennummer="S3", erzeugt_von=admin)
         self.assertNotEqual(drittes.inventarnummer, nummer)
