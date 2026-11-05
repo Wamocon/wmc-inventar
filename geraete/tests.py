@@ -4160,6 +4160,7 @@ class M6Teil3SiegelTests(TestCase):
         )
         self.protokoll = services._protokoll_erstellen(
             person=self.person, gerat=self.g1, erzeugt_von=self.admin,
+            stand=Protokoll.STAND_BEARBEITER_OFFEN, unterschrift_art="tool",
         )
         # Checkliste beantworten (F-132), damit das PDF gebaut werden kann.
         for schluessel, _text in Protokoll.CHECKLISTE_PUNKTE:
@@ -4280,6 +4281,7 @@ class M6Teil3VersandTests(TestCase):
         )
         self.protokoll = services._protokoll_erstellen(
             person=self.person, gerat=self.g1, erzeugt_von=self.admin,
+            stand=Protokoll.STAND_BEARBEITER_OFFEN, unterschrift_art="tool",
         )
         for schluessel, _text in Protokoll.CHECKLISTE_PUNKTE:
             self.protokoll.checkliste[schluessel] = 1
@@ -4338,6 +4340,7 @@ class M6Teil3AblageTests(TestCase):
         )
         self.protokoll = services._protokoll_erstellen(
             person=self.person, gerat=self.g1, erzeugt_von=self.admin,
+            stand=Protokoll.STAND_BEARBEITER_OFFEN, unterschrift_art="tool",
         )
         for schluessel, _text in Protokoll.CHECKLISTE_PUNKTE:
             self.protokoll.checkliste[schluessel] = 1
@@ -4391,6 +4394,7 @@ class M6Teil3NeusendenTests(TestCase):
         )
         self.protokoll = services._protokoll_erstellen(
             person=self.person, gerat=self.g1, erzeugt_von=self.admin,
+            stand=Protokoll.STAND_BEARBEITER_OFFEN, unterschrift_art="tool",
         )
         for schluessel, _text in Protokoll.CHECKLISTE_PUNKTE:
             self.protokoll.checkliste[schluessel] = 1

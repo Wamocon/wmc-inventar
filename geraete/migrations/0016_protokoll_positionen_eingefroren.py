@@ -39,9 +39,9 @@ class Migration(migrations.Migration):
             name="stand",
             field=models.CharField(
                 choices=[
-                    ("scan-offen", "Scan offen"),
-                    ("bearbeiter-offen", "Bearbeiter offen"),
-                    ("gegenzeichnung-offen", "Gegenzeichnung offen"),
+                    ("scan-offen", "Unterschrift offen: Scan fehlt"),
+                    ("bearbeiter-offen", "Bearbeiter-Signatur offen (F-135)"),
+                    ("gegenzeichnung-offen", "Gegenzeichnung offen (F-136)"),
                     ("abgeschlossen", "Abgeschlossen"),
                     ("ersetzt", "Ersetzt durch eine neue Fassung"),
                 ],

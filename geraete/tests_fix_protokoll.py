@@ -30,6 +30,12 @@ def _pdf_text(inhalt: bytes) -> str:
     return "\n".join(seite.get_textpage().get_text_bounded() for seite in dokument)
 
 
+def _siegel_bereit() -> None:
+    from .siegel import SIEGEL_P12, testsiegel_anlegen
+    if not SIEGEL_P12.exists():
+        testsiegel_anlegen()
+
+
 def _jpeg(breite: int = 3000, hoehe: int = 2000) -> bytes:
     puffer = io.BytesIO()
     Image.new("RGB", (breite, hoehe), (200, 30, 30)).save(puffer, format="JPEG")
@@ -415,8 +421,7 @@ class GegenzeichnungTests(Grundlage):
         self.assertIn("privat@beispiel.test", aufzeichnung.identifikationsmerkmal)
 
     def test_abgeschlossen_mit_siegel_und_zwei_mails(self):
-        from django.core.management import call_command
-        call_command("testsiegel", verbosity=0)
+        _siegel_bereit()
         protokoll = self._signiert()
         mail.outbox.clear()
         self._gegenzeichnen(protokoll)
@@ -495,8 +500,7 @@ class GegenzeichnungTests(Grundlage):
         self.assertEqual(protokoll.korrekturen.count(), 1)
 
     def test_abgeschlossenes_pdf_ist_das_siegel(self):
-        from django.core.management import call_command
-        call_command("testsiegel", verbosity=0)
+        _siegel_bereit()
         protokoll = self._signiert()
         self._gegenzeichnen(protokoll)
         self.client.force_login(self.admin)
