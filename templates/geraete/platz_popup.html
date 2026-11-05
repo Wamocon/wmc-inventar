@@ -51,7 +51,7 @@
   {% endif %}
 
   <div class="popup-geraete">
-    <h3>Geräte am Platz</h3>
+    <h3>{% if ort.typ == "raum" %}Geräte im Raum{% else %}Geräte am Platz{% endif %}</h3>
     <div class="liste" data-test="popup-geraete-am-platz">
       {% for g in gerate %}
       <div class="zeile">
@@ -87,7 +87,7 @@
   {% endif %}
 
   <div class="popup-fuss">
-    <a class="btn sm" href="/arbeitsplaetze/{{ ort.kennung }}/" data-test="popup-arbeitsplatz-link">Zum Arbeitsplatz</a>
+    {% if ort.typ == "arbeitsplatz" %}<a class="btn sm" href="/arbeitsplaetze/{{ ort.kennung }}/" data-test="popup-arbeitsplatz-link">Zum Arbeitsplatz</a>{% endif %}
     <button type="button" class="btn sm" data-test="popup-schliessen">Schließen</button>
   </div>
 </div>

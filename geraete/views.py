@@ -461,7 +461,7 @@ def arbeitsplaetze(request):
                 standort, etage = param_plan.split("|", 1)
                 plan = services.plan_finde(standort, etage) or (plane[0] if plane else None)
             else:
-                plan = (plane[0] if plane else None)
+                plan = next((p for p in plane if str(p.id) == param_plan), plane[0] if plane else None)
         else:
             plan = plane[0] if plane else None
         hervorheben = ""

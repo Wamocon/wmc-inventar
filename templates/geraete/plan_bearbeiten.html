@@ -21,10 +21,10 @@
 {% endif %}
 
 <div class="plan-wrap pflegen" data-test="raumplan-pflegen" data-id="{{ plan.pk }}">
-  <div class="plan-svg" data-test="plan-flaeche">
+  <figure class="plan-fig" data-test="plan-flaeche">
     {% if grundriss_typ %}
-      <img class="grundriss"
-           src="/media/{{ grundriss_name }}"
+      <img class="plan-bild" draggable="false"
+           src="{% url 'plan-grundriss' plan.pk %}"
            alt="Grundriss {{ plan.standort }}, {{ plan.etage }}"
            data-test="grundriss-bild">
     {% else %}
@@ -46,7 +46,7 @@
         {% endif %}
       {% endfor %}
     </div>
-  </div>
+  </figure>
 
   <div class="abschnitt" data-test="ohne-position">
     <h2>Ohne Position</h2>

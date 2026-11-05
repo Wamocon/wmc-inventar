@@ -8,6 +8,7 @@ TESTSCHNITTSTELLE:
 """
 from __future__ import annotations
 
+import re
 from datetime import date
 
 from django.test import TestCase, Client
@@ -1682,8 +1683,8 @@ class RaumplanTests(TestCase):
         html = antwort.content.decode()
 
         # Jeder Platz muss data-x und data-y haben
-        self.assertIn('data-x="50,1"', html)
-        self.assertIn('data-y="55,6"', html)
+        self.assertIn('data-x="50.1"', html)
+        self.assertIn('data-y="55.6"', html)
 
     def test_raumplan_raume_haben_data_id(self):
         """F-68: Alle Räume haben data-id."""
@@ -1707,6 +1708,22 @@ class RaumplanTests(TestCase):
         self.client.login(username=self.admin.email, password="test-passwort-123")
         antwort = self.client.get("/arbeitsplaetze/", {"plan": "999"})
         self.assertEqual(antwort.status_code, 200)
+
+    def test_positionen_mit_punkt_und_auswahl_gefuellt(self):
+        """F-65: Positionen mit Punkt, Auswahl gefüllt, nichts Inline (N-02)."""
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        html = self.client.get("/arbeitsplaetze/").content.decode()
+        self.assertIn('data-x="50.1"', html)
+        self.assertNotRegex(html, r'data-[xy]="[^"]*,')
+        self.assertIn("Eschborn – 1. OG", html)
+        self.assertNotIn("onchange=", html)
+
+    def test_raum_oeffnet_popup(self):
+        """F-68: Ein Klick auf einen Raum zeigt dieselbe Geräteliste."""
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        html = self.client.get("/arbeitsplaetze/").content.decode()
+        pfad = re.search(r'data-test="raumort"[^>]*data-pfad="([^"]+)"', html).group(1)
+        self.assertEqual(self.client.get(pfad).status_code, 200)
 
 
 # --- A-0913: Grundriss (F-65, Teil 2) -----------------------------------------
@@ -1791,8 +1808,8 @@ class GrundrissTests(TestCase):
         antwort = self.client.get("/arbeitsplaetze/")
         self.assertEqual(antwort.status_code, 200)
         html = antwort.content.decode()
-        self.assertIn('data-x="50,0"', html)
-        self.assertIn('data-y="55,0"', html)
+        self.assertIn('data-x="50.0"', html)
+        self.assertIn('data-y="55.0"', html)
 
     def test_ansicht_liste_funktioniert(self):
         """F-65: Ansicht Liste funktioniert."""
@@ -1809,12 +1826,12 @@ class GrundrissTests(TestCase):
         self.assertIn('data-test="arbeitsplaetze-liste"', html)
 
     def test_htmx_konfiguration_in_seite(self):
-        """F-65: htmx-Konfiguration in der Seite."""
+        """N-02: Der Raumplan kommt ohne Inline-Skript aus."""
         self.client.login(username=self.admin.email, password="test-passwort-123")
         antwort = self.client.get("/arbeitsplaetze/")
         self.assertEqual(antwort.status_code, 200)
         html = antwort.content.decode()
-        self.assertIn('includeIndicatorStyles = false', html)
+        self.assertNotIn('<script data-test="htmx-konfiguration">', html)
 
 
 # --- A-0107: Raumplan pflegen (F-67, Teil 2) -----------------------------------
@@ -1929,8 +1946,8 @@ class PlanPflegeTests(TestCase):
         self.client.login(username=self.admin.email, password="test-passwort-123")
         antwort = self.client.get("/arbeitsplaetze/")
         html = antwort.content.decode()
-        self.assertIn('data-x="30,0"', html)
-        self.assertIn('data-y="40,0"', html)
+        self.assertIn('data-x="30.0"', html)
+        self.assertIn('data-y="40.0"', html)
 
     @staticmethod
     def _ohne_position_kennungen(html: str) -> list[str]:
@@ -1973,8 +1990,8 @@ class PlanPflegeTests(TestCase):
 
         antwort = self.client.get("/arbeitsplaetze/")
         html = antwort.content.decode()
-        self.assertIn('data-x="55,5"', html)
-        self.assertIn('data-y="25,0"', html)
+        self.assertIn('data-x="55.5"', html)
+        self.assertIn('data-y="25.0"', html)
         # Platz ohne Position verschwindet aus „ohne-position“,
         # sobald er eine Position hat.
         kennungen = self._ohne_position_kennungen(html)

@@ -157,7 +157,13 @@ form .actions{margin-top:8px}
 .plan-grid{display:grid;grid-template-columns:1fr 280px;gap:16px;align-items:start}
 @media (max-width:700px){.plan-grid{grid-template-columns:1fr}}
 .plan-fig{margin:0;position:relative;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--surface-2);min-height:200px}
-.plan-bild{display:block;width:100%;height:auto;max-height:600px;object-fit:contain;background:var(--paper)}
+.plan-bild{display:block;width:100%;height:auto;background:var(--paper)}
+.plan-orte .orte.platz{display:grid;grid-template-columns:auto auto;justify-items:start;align-items:center;gap:0 4px;padding:3px 8px;border-radius:8px;line-height:1.2}
+.plan-orte .orte.platz .platz-kennung{grid-column:1/-1}
+.pflegen .plan-fig{max-width:780px}
+.pflegen .plan-orte .orte{touch-action:none;cursor:grab}
+.popup-inhalt{padding-bottom:16px}
+.popup-inhalt>:not(.popup-kopf){margin:10px 20px 0}
 .plan-leer{padding:32px 20px;text-align:center;color:var(--fg-2);font-weight:500;min-height:200px;display:flex;align-items:center;justify-content:center}
 .plan-orte{position:absolute;inset:0;pointer-events:none}
 .plan-orte .orte{position:absolute;transform:translate(-50%,-50%);pointer-events:auto;z-index:2;display:flex;align-items:center;gap:4px;padding:4px 10px 4px 6px;border-radius:999px;border:1.5px solid var(--line);background:var(--paper);color:var(--ink);font-family:var(--font-cond);font-stretch:var(--narrow);font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap;box-shadow:0 2px 8px rgba(20,11,11,.12);min-height:28px}

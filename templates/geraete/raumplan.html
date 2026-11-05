@@ -1,4 +1,5 @@
 {% extends "basis.html" %}
+{% load l10n %}
 {% block inhalt %}
 <section data-test="arbeitsplaetze">
   <div class="page-head">
@@ -25,8 +26,8 @@
     <form method="get" class="filter-bar" data-test="auswahl">
       <div class="field">
         <label for="plan_id">Standort und Etage</label>
-        <select id="plan_id" name="plan" onchange="this.form.submit()">
-          {% for p in plaene %}
+        <select id="plan_id" name="plan">
+          {% for p in plane %}
           <option value="{{ p.id }}" {% if p == plan_auswahl %}selected{% endif %}>{{ p.standort }} – {{ p.etage }}</option>
           {% endfor %}
         </select>
@@ -41,7 +42,7 @@
       {% if anzeige_liste %}
       <div class="field">
         <label for="nur_unvollstaendig">Zeige</label>
-        <select id="nur_unvollstaendig" name="unvollstaendig" onchange="this.form.submit()">
+        <select id="nur_unvollstaendig" name="unvollstaendig">
           <option value="" {% if not nur_unvollstaendig %}selected{% endif %}>Alle ({{ plaetze|length }})</option>
           <option value="1" {% if nur_unvollstaendig %}selected{% endif %}>Unvollständig ({{ unvollstaendig|length }})</option>
         </select>
@@ -59,26 +60,26 @@
       <div class="plan-leer" data-test="plan-leer">Kein Grundriss hinterlegt. Plan bearbeiten, um einen zu laden.</div>
       {% endif %}
       <div class="plan-orte" data-test="plan-orte">
-        {% for o in plaetze %}
+        {% for o in plaetze %}{% if o.ort.position_x is not None and o.ort.position_y is not None %}
         <button type="button" class="orte platz {{ o.klasse }}"
                 data-test="platz" data-id="{{ o.ort.kennung }}" data-ort-id="{{ o.ort.id }}" data-pfad="/arbeitsplaetze/{{ o.ort.kennung }}/popup/"
-                {% if o.ort.position_x %}data-x="{{ o.ort.position_x }}"{% endif %}
-                {% if o.ort.position_y %}data-y="{{ o.ort.position_y }}"{% endif %}
+                data-x="{{ o.ort.position_x|unlocalize }}"
+                data-y="{{ o.ort.position_y|unlocalize }}"
                 aria-label="Arbeitsplatz {{ o.ort.kennung }}">
           <span class="platz-kennung" aria-hidden="true">{{ o.ort.kennung }}</span>
           <span class="platz-zeichen" aria-hidden="true">{{ o.zeichen }}</span>
           <span class="platz-text">{{ o.text }}</span>
         </button>
-        {% endfor %}
-        {% for r in raumorte %}
+        {% endif %}{% endfor %}
+        {% for r in raumorte %}{% if r.position_x is not None and r.position_y is not None %}
         <button type="button" class="orte raum"
-                data-test="raumort" data-id="{{ r.kennung }}" data-ort-id="{{ r.id }}"
-                {% if r.position_x %}data-x="{{ r.position_x }}"{% endif %}
-                {% if r.position_y %}data-y="{{ r.position_y }}"{% endif %}
+                data-test="raumort" data-id="{{ r.kennung }}" data-ort-id="{{ r.id }}" data-pfad="/arbeitsplaetze/raum/{{ r.kennung }}/popup/"
+                data-x="{{ r.position_x|unlocalize }}"
+                data-y="{{ r.position_y|unlocalize }}"
                 aria-label="Raum {{ r.name }}">
           <span class="raum-name" aria-hidden="true">{{ r.name }}</span>
         </button>
-        {% endfor %}
+        {% endif %}{% endfor %}
       </div>
     </figure>
     <aside class="plan-seite">
@@ -138,9 +139,5 @@
 </section>
 {% endblock %}
 {% block skripte %}
-<script src="/static/vendor/htmx.min.js"></script>
-<script data-test="htmx-konfiguration">
-htmx.config.includeIndicatorStyles = false;
-</script>
 <script src="/static/raumplan.js"></script>
 {% endblock %}

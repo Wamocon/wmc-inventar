@@ -3,6 +3,11 @@
    Ändert nichts an htmx; verwendet fetch für die Pop-up-Inhalte.
    (F-65 bis F-68, A-0913 Teil 2) */
 (function () {
+  // Auswahl Standort und Etage: ohne Inline-Handler (CSP script-src 'self')
+  document.querySelectorAll('[data-test="auswahl"] select').forEach(function (feld) {
+    feld.addEventListener('change', function () { feld.form.submit(); });
+  });
+
   var plan = document.querySelector('[data-test="raumplan"]');
   if (!plan) return;
 
@@ -44,20 +49,19 @@
         bereich.innerHTML = html;
         bereich.hidden = false;
         // Schließen-Knopf verbinden
-        var schliessen = bereich.querySelector('[data-test="popup-schliessen"]');
-        if (schliessen) {
+        bereich.querySelectorAll('[data-test="popup-schliessen"]').forEach(function (schliessen) {
           schliessen.addEventListener('click', function (ereignis) {
             ereignis.stopPropagation();
             schliessenPopu();
           });
-        }
+        });
         ziel.setAttribute('aria-expanded', 'true');
       })
       .catch(function () { schliessenPopu(); });
   }
 
   // Klick auf Platz öffnet Pop-up
-  plan.querySelectorAll('[data-test="platz"]').forEach(function (knopf) {
+  plan.querySelectorAll('[data-test="platz"],[data-test="raumort"]').forEach(function (knopf) {
     knopf.addEventListener('click', function () { popu(knopf); });
     knopf.addEventListener('keydown', function (ereignis) {
       if (ereignis.key === 'Enter') { popu(knopf); }
@@ -67,7 +71,7 @@
   // Klick außerhalb schließt Pop-up
   document.addEventListener('click', function (ereignis) {
     if (ereignis.target.closest('#platz-popup')) return;
-    if (ereignis.target.closest('[data-test="platz"]')) return;
+    if (ereignis.target.closest('[data-test="platz"],[data-test="raumort"]')) return;
     schliessenPopu();
   });
 
