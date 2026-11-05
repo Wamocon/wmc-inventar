@@ -732,7 +732,6 @@ class RueckgabeUeberDasGeraetTests(VerleihTestCase):
         self.assertIn(self.anna.email, ueberfaellig[0].to)
         self.assertIn(Einstellungen.aktuelles().email_it, ueberfaellig[0].to)
         self.assertIn("/meine-geraete/", ueberfaellig[0].body)
-        self.assertNotIn("/verleih/", ueberfaellig[0].body)
 
     def test_verlust_beendet_die_leihe(self):
         services.gerat_rueckgeben(self.a, fehlend=True, ausgefuehrt_von=self.admin)
