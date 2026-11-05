@@ -4,9 +4,9 @@
 <div class="page-head">
   <div><h1>Neues Konto</h1><p class="muted lead">Konto anlegen. Das neue Konto erhält eine Einladungsmail mit Link zum Setzen des Passworts (72 Stunden gültig).</p></div>
 </div>
-{% if fehler %}<div class="fehler-kasten" data-test="fehler">{{ fehler }}</div>{% endif %}
 <form method="post" novalidate>
   {% csrf_token %}
+  <div class="meldungen">{% include "fragmente/fehler.html" %}</div>
   <div class="form-grid">
     {% for f in form %}
       <div class="field">

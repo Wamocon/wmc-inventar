@@ -240,6 +240,7 @@ form .actions{margin-top:8px}
 .mail-hilfe{display:block}
 .liste .zeile.profil-position{grid-template-columns:minmax(0,1fr) 110px auto;align-items:end}
 .plan-unvollstaendig .muted{display:block}
+.pflegen .liste .zeile{grid-template-columns:minmax(0,1fr);gap:4px}
 .card > .check{display:flex;gap:8px;align-items:flex-start;margin:6px 0}
 
 /* Abschnitte im Inventarbuch: Kopflinie statt Kasten (Prototyp: card) */

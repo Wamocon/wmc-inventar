@@ -110,7 +110,6 @@ class KontoForm(forms.ModelForm):
             label="Passwort",
             widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}),
             required=False,
-            min_length=MIN_PASSWORT_LAENGE,
             validators=[_passwort_mind_12],
             help_text=(
                 "Leer lassen ändert nichts. Mindestens 12 Zeichen."
