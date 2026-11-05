@@ -78,7 +78,9 @@ def _mail_leihe_endet_morgen(stichtag: date) -> int:
         return 0
     if _bereits_gesendet(stichtag, Mailversand.MAILTYP_F91):
         return 0
-    morgen = stichtag + timedelta(days=einstellungen.frist_leihe_tage)
+    frist = einstellungen.frist_leihe_tage
+    wann = {0: "heute", 1: "morgen"}.get(frist, f"in {frist} Tagen")
+    morgen = stichtag + timedelta(days=frist)
     leihen = (
         Leihe.objects.filter(
             rueckgabe_bis=morgen,
@@ -95,9 +97,9 @@ def _mail_leihe_endet_morgen(stichtag: date) -> int:
             continue
         gerat_name = leihe.gerat.inventarnummer if leihe.gerat else ""
         send_mail(
-            subject=f"Leihe endet morgen – {gerat_name}",
+            subject=f"Leihe endet {wann} – {gerat_name}",
             message=(
-                f"Ihre Leihe {gerat_name} endet morgen ({_datums_text(morgen)}). "
+                f"Ihre Leihe {gerat_name} endet {wann} ({_datums_text(morgen)}). "
                 f"Bitte geben Sie das Gerät bis dahin zurück.\n\n"
                 f"Details: {link_ins_tool('/meine-geraete/')}\n\n"
                 f"{mail_signatur()}"
@@ -133,7 +135,8 @@ def _mail_leihe_ueberfaellig(stichtag: date) -> int:
         gerat_name = leihe.gerat.inventarnummer if leihe.gerat else ""
         frist = _datums_text(leihe.rueckgabe_bis)
         text = (
-            f"Ihre Leihe {gerat_name} ist überfällig.\n"
+            f"Die Leihe {gerat_name} ist überfällig.\n"
+            f"Person: {leihe.person.voller_name() if leihe.person else '–'}\n"
             f"Die Rückgabefrist ({frist}) ist überschritten.\n"
             f"Bitte geben Sie das Gerät unverzüglich zurück.\n\n"
             # F-96: Der Mitarbeiter darf /verleih/ nicht öffnen, die IT braucht es.
