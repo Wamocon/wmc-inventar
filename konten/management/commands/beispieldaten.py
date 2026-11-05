@@ -21,18 +21,20 @@ from geraete import services
 from geraete.models import Gerat
 
 
-# Kategorien nach Kapitel 3.2 der Anforderungen (TESTSCHNITTSTELLE 2)
+# Kategorien nach Kapitel 3.2 der Anforderungen (TESTSCHNITTSTELLE 2): Name, hat
+# Datenträger, Seriennummer Pflicht. Ohne Pflicht nur Tastatur, Maus, Headset,
+# Notebook-Ständer, Powerbank, USB-Hub und Sonstiges (O-11, O-18).
 KATEGORIEN = [
     ("Notebook", True, True),
     ("Desktop-PC", True, True),
-    ("Monitor", False, False),
-    ("Dockingstation", False, False),
+    ("Monitor", False, True),
+    ("Dockingstation", False, True),
     ("Notebook-Ständer", False, False),
     ("Tastatur", False, False),
     ("Maus", False, False),
     ("Headset", False, False),
-    ("Webcam", False, False),
-    ("Konferenzsystem", False, False),
+    ("Webcam", False, True),
+    ("Konferenzsystem", False, True),
     ("Smartphone", True, True),
     ("Tablet", True, True),
     ("Smartwatch", True, True),
@@ -41,8 +43,8 @@ KATEGORIEN = [
     ("USB-Hub", False, False),
     ("NAS", True, True),
     ("Drucker", True, True),
-    ("Netzwerkgerät", False, False),
-    ("Fernseher", False, False),
+    ("Netzwerkgerät", False, True),
+    ("Fernseher", False, True),
     ("Sonstiges", False, False),
 ]
 
