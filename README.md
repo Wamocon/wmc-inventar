@@ -150,12 +150,20 @@ rm -rf var/dateien && cp -a /srv/inventar/sicherung/<Stempel>/dateien var/dateie
 #### Docker
 
 ```bash
-# 1. Dump einspielen; er löscht vorhandene Tabellen und legt sie neu an
-gunzip -c /pfad/zum/<Stempel>/inventar.sql.gz | docker compose exec -T db psql -U inventar -d inventar
+# 1. Nur die Datenbank starten, damit beim Einspielen niemand schreibt
+docker compose up -d db
 
-# 2. Dateien zurückkopieren
+# 2. Dump einspielen; er löscht vorhandene Tabellen und legt sie neu an
+gunzip -c /pfad/zum/<Stempel>/inventar.sql.gz | docker compose exec -T db psql -q -U inventar -d inventar
+
+# 3. Alle Dienste starten und die Dateien zurückkopieren
+docker compose up -d
 docker compose cp -a /pfad/zum/<Stempel>/dateien/. web:/srv/inventar/var/dateien
 ```
+
+Das Image bringt `pg_dump` 17 mit, die Datenbank ist PostgreSQL 16. Deshalb meldet Schritt 2 einmal `unrecognized configuration parameter "transaction_timeout"`. Das ist harmlos; andere Fehler sind es nicht.
+
+Am 05.11.2026 auf der DGX so gelaufen: Totalverlust mit `docker compose down -v`, Rücksicherung, Eckwerte gleich, ein signiertes Protokoll danach gegengezeichnet und versiegelt.
 
 `SICHERUNG_ZIEL` muss für den Nutzer der Anwendung (UID 1000) schreibbar sein. Vor dem Go-live einmal testen (N-06).
 
