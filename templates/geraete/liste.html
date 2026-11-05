@@ -1,20 +1,22 @@
 {% extends "basis.html" %}
 {% block titel %}Geräte · WMC Inventar{% endblock %}
+{% block stile %}<link rel="stylesheet" href="/static/listen.css">{% endblock %}
 {% block inhalt %}
 <div class="page-head">
   <div><h1>Geräte</h1><p class="muted lead" data-test="anzahl">{{ anzahl }} {% if anzahl == 1 %}Gerät{% else %}Geräte{% endif %}</p></div>
   <div class="actions">
     {% if koennen_aendern %}<a class="btn primary" href="/geraete/neu/" data-test="geraet-anlegen"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Gerät erfassen</a>{% endif %}
-    <a class="btn" href="?format=xlsx{% if suche %}&amp;q={{ suche }}{% endif %}{% if status_filter %}&amp;status={{ status_filter }}{% endif %}{% if ort_filter %}&amp;ort={{ ort_filter }}{% endif %}{% if kategorie_filter %}&amp;kategorie={{ kategorie_filter }}{% endif %}{% if person_filter %}&amp;person={{ person_filter }}{% endif %}{% if unvollstaendig %}&amp;unvollstaendig=1{% endif %}" data-test="export-xlsx"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v12M7 11l5 5 5-5M4 20h16"/></svg>Export .xlsx</a>
-    <a class="btn" href="?format=csv{% if suche %}&amp;q={{ suche }}{% endif %}{% if status_filter %}&amp;status={{ status_filter }}{% endif %}{% if ort_filter %}&amp;ort={{ ort_filter }}{% endif %}{% if kategorie_filter %}&amp;kategorie={{ kategorie_filter }}{% endif %}{% if person_filter %}&amp;person={{ person_filter }}{% endif %}{% if unvollstaendig %}&amp;unvollstaendig=1{% endif %}" data-test="export-csv">Export .csv</a>
+    <a class="btn" href="?format=xlsx{% if filter_query %}&amp;{{ filter_query }}{% endif %}" data-test="export-xlsx"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v12M7 11l5 5 5-5M4 20h16"/></svg>Export .xlsx</a>
+    <a class="btn" href="?format=csv{% if filter_query %}&amp;{{ filter_query }}{% endif %}" data-test="export-csv">Export .csv</a>
   </div>
 </div>
 
 <div class="chips" data-test="status-chips">
-  <a class="chip" href="/geraete/"{% if not status_filter %} aria-current="true"{% endif %}>Alle <span class="n">{{ status_gesamt }}</span></a>
+  <a class="chip" href="/geraete/"{% if not status_filter and not archiv %} aria-current="true"{% endif %}>Alle aktiven <span class="n">{{ status_gesamt }}</span></a>
   {% for s in status_chips %}
   <a class="chip" href="/geraete/?status={{ s.code }}"{% if status_filter == s.code %} aria-current="true"{% endif %}>{{ s.label }} <span class="n">{{ s.zahl }}</span></a>
   {% endfor %}
+  <a class="chip" href="/geraete/?archiv=1" data-test="filter-archiv-link"{% if archiv %} aria-current="true"{% endif %}>Archiv <span class="n">{{ archiv_zahl }}</span></a>
 </div>
 
 <form class="toolbar" method="get" action="/geraete/" data-test="suche-formular">
@@ -27,13 +29,13 @@
   <select name="kategorie" data-test="filter-kategorie" aria-label="Kategorie">
     <option value="">Alle Kategorien</option>
     {% for k in kategorien %}
-    <option value="{{ k.pk }}" {% if kategorie_filter == k.pk|stringformat:"s" %}selected{% endif %}>{{ k.name }}</option>
+    <option value="{{ k.name }}" {% if kategorie_filter == k.name %}selected{% endif %}>{{ k.name }}</option>
     {% endfor %}
   </select>
   <select name="ort" data-test="filter-ort" aria-label="Ort">
     <option value="">Alle Orte</option>
     {% for o in orte %}
-    <option value="{{ o.pk }}" {% if ort_filter == o.pk|stringformat:"s" %}selected{% endif %}>{{ o.kennung }}</option>
+    <option value="{{ o.kennung }}" {% if ort_filter == o.kennung %}selected{% endif %}>{{ o.kennung }}</option>
     {% endfor %}
   </select>
   <select name="person" data-test="filter-person" aria-label="Person">
@@ -43,6 +45,7 @@
     {% endfor %}
   </select>
   <label class="check"><input type="checkbox" name="unvollstaendig" value="1" {% if unvollstaendig %}checked{% endif %} data-test="filter-unvollstaendig"> nur unvollständige</label>
+  <label class="check"><input type="checkbox" name="archiv" value="1" {% if archiv %}checked{% endif %} data-test="filter-archiv"> Archiv</label>
   <input type="search" name="q" value="{{ suche }}" placeholder="In der Liste filtern" data-test="liste-filter" aria-label="In der Liste filtern">
   <button type="submit" class="btn" data-test="filter-anwenden">Anwenden</button>
 </form>
@@ -58,27 +61,34 @@
 </div>
 {% endif %}
 
+{% if archiv_treffer %}
+<p class="meldung info" data-test="archiv-treffer">{{ archiv_treffer }} {% if archiv_treffer == 1 %}Treffer{% else %}Treffer{% endif %} im Archiv: <a href="/geraete/?archiv=1&amp;q={{ suche|urlencode }}">ausgemusterte Geräte zeigen</a></p>
+{% endif %}
+
+{% if koennen_aendern %}
 <form method="post" action="/etiketten/auswahl/" data-test="etiketten-formular">
   {% csrf_token %}
   <div class="bulk leer">
     <span data-test="auswahl-anzahl">0 ausgewählt</span>
-    <label>Startposition <input type="number" name="startposition" value="1" min="1" max="24" data-test="startposition" title="Startposition auf dem Bogen (F-73)"></label>
+    <label>Startposition <input type="number" name="startposition" value="1" min="1" max="{{ etikett_pro_bogen }}" data-test="startposition" title="Startposition auf dem Bogen (F-73)"></label>
     <button type="submit" class="btn sm" data-test="etiketten-drucken" disabled>Etiketten drucken</button>
+    <button type="submit" class="btn sm" name="vorschau" value="1" data-test="etiketten-vorschau" disabled>Vorschau</button>
   </div>
+{% endif %}
   <div class="tbl-wrap" data-test="liste">
     <table>
       <thead>
         <tr>
-          <th><input type="checkbox" data-test="auswahl-alle" aria-label="Alle auswählen"></th>
+          {% if koennen_aendern %}<th><input type="checkbox" data-test="auswahl-alle" aria-label="Alle auswählen"></th>{% endif %}
           <th>Inventarnr.</th><th>Gerät</th><th>Gerätename</th><th>Seriennr.</th><th>Status</th><th>Zuordnung</th><th>Garantie bis</th>
         </tr>
       </thead>
       <tbody>
         {% for g in geraete %}
         <tr data-test="zeile" data-id="{{ g.inventarnummer }}">
-          <td><input type="checkbox" name="auswahl" value="{{ g.inventarnummer }}" class="auswahl-box" data-test="auswahl" data-inventarnummer="{{ g.inventarnummer }}" aria-label="{{ g.inventarnummer }} auswählen"></td>
+          {% if koennen_aendern %}<td><input type="checkbox" name="auswahl" value="{{ g.inventarnummer }}" class="auswahl-box" data-test="auswahl" data-inventarnummer="{{ g.inventarnummer }}" aria-label="{{ g.inventarnummer }} auswählen"></td>{% endif %}
           <td class="nowrap"><a class="inv" href="/geraete/{{ g.inventarnummer }}/" data-test="detail-link"><span data-test="inventarnummer">{% if suche %}<span data-test="suchtreffer">{{ g.inventarnummer }} · {{ g.geraetename|default:g.modell }}{% if g.person %} · {{ g.person.voller_name }}{% endif %}</span>{% else %}{{ g.inventarnummer }}{% endif %}</span></a></td>
-          <td data-test="zeile-name">{{ g.kategorie.name }}<span class="sub">{{ g.hersteller }} {{ g.modell }}</span></td>
+          <td data-test="zeile-name">{{ g.kategorie.name }}<span class="sub">{{ g.hersteller }} {{ g.modell }}</span>{% if unvollstaendig %}<span class="sub" data-test="fehlende-felder">fehlt: {{ g.datenluecken_text|join:", " }}</span>{% endif %}</td>
           <td class="nowrap mono">{{ g.geraetename|default:"–" }}</td>
           <td class="nowrap mono">{{ g.seriennummer|default:"–" }}</td>
           <td class="nowrap"><span class="chip-status {{ g.status }}" data-test="status">{{ g.status_anzeige }}</span>{% if g.reserviert %} <span class="chip-status warn" data-test="zusatz-reserviert">reserviert</span>{% endif %}</td>
@@ -91,7 +101,7 @@
       </tbody>
     </table>
   </div>
-</form>
+{% if koennen_aendern %}</form>{% endif %}
 {% endblock %}
 {% block skripte %}
 <script src="/static/liste.js"></script>

@@ -37,6 +37,9 @@ urlpatterns = [
     # Import (A-0113, F-80 bis F-84, F-86): Folge von Schritten, keine Ablage
     path("import/", import_views.import_seite, name="import"),
     path("import/datei/", import_views.import_datei, name="import-datei"),
+    path("import/blatt/", import_views.import_blatt, name="import-blatt"),
+    path("import/zurueck/", import_views.import_zurueck, name="import-zurueck"),
+    path("import/abbrechen/", import_views.import_abbrechen, name="import-abbrechen"),
     path("import/spalten/", import_views.import_spalten, name="import-spalten"),
     path("import/werte/", import_views.import_werte, name="import-werte"),
     path("import/vorschau.csv/", import_views.import_vorschau_csv, name="import-vorschau-csv"),

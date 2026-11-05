@@ -21,7 +21,7 @@ from konten.models import Konto
 from stammdaten.models import Ausstattungsprofil, Kategorie, Ort, Person, Einstellungen
 
 from .models import Gerat, GeratKonflikt, Importlauf, Leihe, Protokoll, Vorgang
-from konten.zeit import jetzt_wie_im_entwicklungsmodus
+from konten.zeit import jetzt_aware, jetzt_wie_im_entwicklungsmodus
 
 
 class GeratFehler(ValueError):
@@ -716,8 +716,11 @@ def gerat_umziehen(
     """
     if gerat.status == Gerat.STATUS_AUSGEMUSTERT:
         raise GeratFehler("Ausgemusterte Geräte können nicht umgezogen werden.")
-    if gerat.status not in (Gerat.STATUS_IN_BENUTZUNG, Gerat.STATUS_AUF_LAGER):
-        raise GeratFehler("Nur Geräte in Benutzung oder auf Lager können umgezogen werden.")
+    # Kapitel 4: Nur „In Benutzung“ kennt den Umzug; ins Lager führt die Rückgabe.
+    if gerat.status != Gerat.STATUS_IN_BENUTZUNG:
+        raise GeratFehler("Nur Geräte in Benutzung können umgezogen werden.")
+    if ziel_ort.typ == Ort.TYP_LAGER:
+        raise GeratFehler("Ziel eines Umzugs ist ein Arbeitsplatz oder Raum; ins Lager führt die Rückgabe.")
 
     alter_ort = gerat.ort
     gerat.ort = ziel_ort
@@ -725,7 +728,7 @@ def gerat_umziehen(
     Vorgang.objects.create(
         gerat=gerat,
         typ=Vorgang.TYP_UMZUG,
-        zeitpunkt=timezone.now(),
+        zeitpunkt=jetzt_aware(),
         erzeugt_von=ausgefuehrt_von,
         umzug_ziel_ort=ziel_ort,
         notiz=f"Umzug von {alter_ort.kennung if alter_ort else 'Lager'} zu {ziel_ort.kennung}",
@@ -832,7 +835,7 @@ def gerat_bearbeiten(
         raise GeratFehler("Ausgemusterte Geräte sind nicht mehr änderbar.")
     zulassig = {
         "kategorie", "hersteller", "modell", "seriennummer", "zustand",
-        "leihpool", "geraetename", "standardzuehoer",
+        "leihpool", "ort", "geraetename", "standardzuehoer",
         "technische_daten", "kaufdatum", "kaufpreis_netto", "lieferant",
         "rechnungsnummer", "garantie_bis", "notiz",
         "kaufdatum_nicht_ermittelbar", "garantie_nicht_ermittelbar",
@@ -870,6 +873,9 @@ def gerat_bearbeiten(
                 aenderung_neuer_wert=neuer,
                 abschliesst=True,
             )
+    # F-88: Wer den Zustand einträgt, hat ihn gesehen; der Vermerk „ungeprüft“ endet.
+    if "zustand" in werte and _wert_anzeigen_wert(werte["zustand"]) != _wert_anzeigen(gerat, "zustand"):
+        gerat.zustand_ungeprueft = False
     for name, wert in werte.items():
         setattr(gerat, name, wert)
     gerat.save()
@@ -934,18 +940,54 @@ def gerat_pruefen(gerat: Gerat, geprueft_von: Konto) -> Gerat:
     """
     if gerat.status == Gerat.STATUS_AUSGEMUSTERT:
         raise GeratFehler("Ausgemusterte Geräte sind nicht mehr änderbar.")
-    gerat.zuletzt_geprueft_am = timezone.now()
+    jetzt = jetzt_aware()
+    gerat.zuletzt_geprueft_am = jetzt
     gerat.zuletzt_geprueft_von = geprueft_von
+    # F-88: Wer das Gerät in der Hand hatte, hat den Zustand gesehen.
+    gerat.zustand_ungeprueft = False
     gerat.save()
     Vorgang.objects.create(
         gerat=gerat,
         typ=Vorgang.TYP_AENDERUNG,
-        zeitpunkt=timezone.now(),
+        zeitpunkt=jetzt,
         erzeugt_von=geprueft_von,
         notiz="Geprüft bei der Erstinventur (F-89).",
         abschliesst=True,
     )
     return gerat
+
+
+@transaction.atomic
+def erstinventur_bestaetigen(
+    gerat: Gerat, *, werte: dict, ziel_ort: Ort | None, geprueft_von: Konto,
+) -> Gerat:
+    """Erstinventur am Gerät (F-89): Lücken nachtragen, Verbleib bestätigen, „Geprüft“.
+
+    ``werte`` trägt nur, was im Dialog geändert wurde. ``ziel_ort`` ist der Ort,
+    an dem das Gerät tatsächlich steht, wenn es nicht der eingetragene ist.
+    """
+    from . import import_parser
+
+    if gerat.status == Gerat.STATUS_AUSGEMUSTERT:
+        raise GeratFehler("Ausgemusterte Geräte sind nicht mehr änderbar.")
+    if werte:
+        gerat_bearbeiten(gerat, werte=werte, erzeugt_von=geprueft_von)
+    if ziel_ort is not None and ziel_ort.pk != gerat.ort_id:
+        if gerat.status == Gerat.STATUS_IN_BENUTZUNG:
+            gerat_umziehen(gerat, ziel_ort, ausgefuehrt_von=geprueft_von)
+        elif gerat.status == Gerat.STATUS_AUF_LAGER and ziel_ort.typ == Ort.TYP_LAGER:
+            gerat_bearbeiten(gerat, werte={"ort": ziel_ort}, erzeugt_von=geprueft_von)
+        elif gerat.status == Gerat.STATUS_AUF_LAGER and import_parser.ist_importiert_unbewegt(gerat):
+            # F-85: Auch vor Ort festgestellt gilt: Arbeitsplatz heißt In Benutzung, Altbestand.
+            gerat.status = Gerat.STATUS_IN_BENUTZUNG
+            gerat.altbestand_ohne_protokoll = True
+            gerat.save(update_fields=["status", "altbestand_ohne_protokoll"])
+            gerat_bearbeiten(gerat, werte={"ort": ziel_ort}, erzeugt_von=geprueft_von)
+        else:
+            raise GeratFehler(
+                "Dieses Gerät kommt nur über eine Ausgabe an einen Arbeitsplatz oder Raum."
+            )
+    return gerat_pruefen(gerat, geprueft_von)
 
 
 # --- Importkonflikte (F-84, F-86, F-88) ---------------------------------------
@@ -962,6 +1004,54 @@ def konflikt_anlegen(
     )
 
 
+def _konfliktwert_uebernehmen(konflikt: GeratKonflikt, ausgefuehrt_von: Konto | None) -> None:
+    """Den neuen Wert ans Gerät schreiben, je Feld in seinem Typ (F-84), mit Historie (F-43)."""
+    from decimal import Decimal, InvalidOperation
+
+    from . import import_parser
+
+    gerat = konflikt.gerat
+    feld = konflikt.feld
+    wert: object = konflikt.neuer_wert
+    if feld in ("kaufdatum", "garantie_bis"):
+        wert = import_parser.datum_aus_text(konflikt.neuer_wert)
+    elif feld == "kaufpreis_netto":
+        try:
+            wert = Decimal(konflikt.neuer_wert)
+        except InvalidOperation as e:
+            raise GeratFehler("Der neue Kaufpreis ist keine Zahl.") from e
+    elif feld in ("person", "ort"):
+        # Kapitel 4: Personenwechsel und Umzug sind Vorgänge. Beim Altbestand
+        # gab es noch keinen; dort berichtigt der Konflikt nur die alte Liste.
+        if not gerat.altbestand_ohne_protokoll:
+            raise GeratFehler(
+                "Dieses Gerät wurde schon bewegt: Person und Ort ändern sich nur über Rückgabe, "
+                "Ausgabe oder Umzug."
+            )
+        if feld == "person":
+            wert = _person_aus_ziel(konflikt.neuer_wert)
+        else:
+            wert = Ort.objects.filter(kennung=konflikt.neuer_wert).first()
+            if wert is None:
+                wert, _ = Ort.objects.get_or_create(
+                    kennung=import_parser.neue_kennung(konflikt.neuer_wert),
+                    defaults={"typ": Ort.TYP_ARBEITSPLATZ},
+                )
+    setattr(gerat, feld, wert)
+    gerat.save()
+    Vorgang.objects.create(
+        gerat=gerat,
+        typ=Vorgang.TYP_AENDERUNG,
+        zeitpunkt=jetzt_aware(),
+        erzeugt_von=ausgefuehrt_von,
+        aenderung_feld=feld,
+        aenderung_alter_wert=konflikt.alter_wert,
+        aenderung_neuer_wert=konflikt.neuer_wert,
+        notiz="Importkonflikt gelöst.",
+        abschliesst=True,
+    )
+
+
 @transaction.atomic
 def konflikt_loesen(
     konflikt: GeratKonflikt, nehmen: str, ausgefuehrt_von: Konto | None = None
@@ -969,9 +1059,10 @@ def konflikt_loesen(
     """Konflikt lösen: „alten Wert behalten" oder „neuen Wert übernehmen" (F-86)."""
     if nehmen not in ("alt", "neu"):
         raise GeratFehler("Ein Konflikt wird gelöst, indem der alte Wert behalten oder der neue Wert übernommen wird.")
+    if konflikt.gerat.status == Gerat.STATUS_AUSGEMUSTERT:
+        raise GeratFehler("Ausgemusterte Geräte sind nicht mehr änderbar.")
     if nehmen == "neu":
-        setattr(konflikt.gerat, konflikt.feld, konflikt.neuer_wert)
-        konflikt.gerat.save()
+        _konfliktwert_uebernehmen(konflikt, ausgefuehrt_von)
     konflikt.offen = False
     konflikt.save()
     return konflikt
@@ -1151,9 +1242,8 @@ def fortschritt_je_ort(orte: list[Ort] | None = None) -> list[dict]:
     (nicht ausgemustert, nicht in Reparatur).
     """
     if orte is None:
-        orte = list(
-            Ort.objects.filter(typ=Ort.TYP_ARBEITSPLATZ).order_by("kennung")
-        )
+        # F-89: „auch je Ort“: Arbeitsplätze, Räume und Lager, nicht nur Arbeitsplätze.
+        orte = list(Ort.objects.order_by("kennung"))
     zeilen: list[dict] = []
     for ort in orte:
         alle = list(Gerat.objects.filter(ort=ort, status__in=_ERFASST))
@@ -1248,28 +1338,125 @@ def _eintrag_fuer_zeile(vorlage, zeile_nr: int) -> dict | None:
     return None
 
 
-def _person_auflösen(person_wert: str, wert_zu_person: dict) -> Person | None:
-    """Person über die Wertezuordnung auflösen; neue Person ohne Konto anlegen (O-18)."""
-    if not person_wert:
-        return None
-    person_ziel = wert_zu_person.get(person_wert, "")
+def _person_aus_ziel(person_ziel: str) -> Person | None:
+    """Person zur Zuordnung aus Schritt 3; fehlt sie, entsteht sie ohne Konto (F-82, O-18).
+
+    Der Nachname ist das letzte Wort, alles davor bleibt Vorname: „Anna Maria
+    Schmidt“ wird nicht zu „Anna Schmidt“.
+    """
+    from . import import_parser
+    person_ziel = (person_ziel or "").strip()
     if not person_ziel:
         return None
-    from . import import_parser
     person = import_parser._person_finden(person_ziel)
-    if person is not None:
+    if person is not None or "@" in person_ziel:
         return person
-    # Neue Person ohne Konto (O-18)
-    if "@" in person_ziel:
-        return None
     teile = person_ziel.split()
-    if not teile:
-        return None
     return Person.objects.create(
-        vorname=teile[0],
+        vorname=" ".join(teile[:-1]) if len(teile) > 1 else teile[0],
         nachname=teile[-1] if len(teile) > 1 else "",
         aktiv=True,
     )
+
+
+def _ort_aus_ziel(w) -> Ort | None:
+    """Ort zur Zuordnung aus Schritt 3; ein fehlender Arbeitsplatz entsteht hier (F-82)."""
+    if w.ort is not None:
+        return w.ort
+    if not w.ort_neu:
+        return None
+    ort, _ = Ort.objects.get_or_create(
+        kennung=w.ort_neu, defaults={"typ": Ort.TYP_ARBEITSPLATZ},
+    )
+    return ort
+
+
+def _import_vorgang(gerat: Gerat, herkunft: str, konto) -> None:
+    """F-87: Vorgang „Import“ mit Dateiname, Blatt und Zeile, je Zeile einmal."""
+    if Vorgang.objects.filter(gerat=gerat, typ=Vorgang.TYP_IMPORT, notiz=herkunft).exists():
+        return
+    Vorgang.objects.create(
+        gerat=gerat,
+        typ=Vorgang.TYP_IMPORT,
+        zeitpunkt=jetzt_aware(),
+        erzeugt_von=konto,
+        notiz=herkunft,
+        abschliesst=True,
+    )
+
+
+def _import_neu(w, kategorie, vz, herkunft: str, konto) -> Gerat:
+    """Zeile „neu“: Gerät anlegen, Status und Verbleib ableiten (F-85)."""
+    from . import import_parser
+
+    person = _person_aus_ziel(w.person_ziel)
+    ort = _ort_aus_ziel(w)
+    arbeitsplatz = ort if ort is not None and ort.typ != Ort.TYP_LAGER else None
+    in_benutzung = person is not None or arbeitsplatz is not None
+    if not in_benutzung and ort is None:
+        ort = import_parser._lagerort_finden()
+
+    notiz = w.notiz
+    if w.defekt:
+        notiz = f"{notiz}; {import_parser.HINWEIS_DEFEKT}" if notiz else import_parser.HINWEIS_DEFEKT
+    # F-84: die zweite Zeile mit derselben Nummer entsteht ohne sie, die Notiz nennt sie.
+    seriennummer = w.seriennummer
+    if "seriennummer-doppelt" in vz.hinweise and seriennummer:
+        vermerk = f"Seriennummer {seriennummer} doppelt im Blatt"
+        notiz = f"{notiz}; {vermerk}" if notiz else vermerk
+        seriennummer = ""
+
+    gerat = Gerat.objects.create(
+        inventarnummer=naechste_inventarnummer(),
+        kategorie=kategorie,
+        hersteller=w.hersteller,
+        modell=w.modell,
+        seriennummer=seriennummer,
+        geraetename=w.geraetename,
+        status=Gerat.STATUS_IN_BENUTZUNG if in_benutzung else Gerat.STATUS_AUF_LAGER,
+        zustand=Gerat.ZUSTAND_EINGESCHRAENKT if w.defekt else Gerat.ZUSTAND_GUT,
+        person=person,
+        ort=arbeitsplatz if in_benutzung else ort,
+        kaufdatum=w.kaufdatum,
+        kaufpreis_netto=w.kaufpreis,
+        lieferant=w.lieferant,
+        rechnungsnummer=w.rechnungsnummer,
+        garantie_bis=w.garantie_bis,
+        notiz=notiz,
+        altbestand_ohne_protokoll=in_benutzung,
+        zustand_ungeprueft=not w.defekt,
+        erstellt_von=konto,
+        erstellt_am=jetzt_aware(),
+    )
+    _import_vorgang(gerat, herkunft, konto)
+    return gerat
+
+
+def _import_ergaenzen(gerat: Gerat, w, herkunft: str, konto) -> None:
+    """Zeile „ergänzt“ oder „Konflikt“: leere Felder füllen, Verbleib nach F-85."""
+    from . import import_parser
+
+    plan = import_parser.ergaenzungen(gerat, w)
+    verbleib = import_parser.verbleib_plan(gerat, w)
+    for feld, wert in plan.items():
+        setattr(gerat, feld, wert)
+    geaendert = list(plan)
+    if verbleib["person"]:
+        gerat.person = _person_aus_ziel(w.person_ziel)
+        geaendert.append("person")
+    if verbleib["ort"]:
+        gerat.ort = _ort_aus_ziel(w)
+        geaendert.append("ort")
+    if verbleib["lager_raeumen"]:
+        gerat.ort = None
+        geaendert.append("ort")
+    if verbleib["in_benutzung"]:
+        gerat.status = Gerat.STATUS_IN_BENUTZUNG
+        gerat.altbestand_ohne_protokoll = True
+        geaendert += ["status", "altbestand_ohne_protokoll"]
+    if geaendert:
+        gerat.save(update_fields=sorted(set(geaendert)))
+    _import_vorgang(gerat, herkunft, konto)
 
 
 def import_speichern(
@@ -1282,303 +1469,84 @@ def import_speichern(
     dateiname: str,
     blatt: str,
     konto,
+    kategorie_standard: str = "",
+    neuer_person_name: str = "",
 ) -> dict:
     """Speichert die Vorschau-Zeilen (F-84 bis F-87).
 
     Je Zeile:
-    - „neu": Gerät anlegen mit allen Feldern aus der Zeile.
-    - „ergaenzt": vorhandenes Gerät (VorschauZeile.gerat), leere Felder füllen.
-    - „konflikt": vorhandenes Gerät, widersprüchliche Werte → GeratKonflikt.
-    - „uebersprungen": nichts tun.
+    - „neu“: Gerät anlegen mit allen Feldern aus der Zeile.
+    - „ergaenzt“: vorhandenes Gerät (VorschauZeile.gerat), leere Felder füllen.
+    - „konflikt“: ebenso, dazu je abweichendem Wert ein offener GeratKonflikt.
+    - „uebersprungen“: nichts tun.
 
-    F-85: Status und Verbleib ableiten.
-    F-87: Vorgang „Import" mit Dateiname, Blatt, Zeile.
-    Neue Personen aus der Wertezuordnung werden ohne Konto angelegt (O-18).
+    Das Ergebnis jeder Zeile steht in der Vorschau; hier wird es nur ausgeführt,
+    damit die Zahlen nach dem Speichern dieselben sind wie davor (F-86).
+    F-85: Status und Verbleib ableiten. F-87: Vorgang „Import“ mit Dateiname,
+    Blatt, Zeile. Neue Personen und Arbeitsplätze entstehen erst hier (F-82, O-18).
 
-    Rückgabe: {„neu": int, „ergaenzt": int, „konflikt": int, „uebersprungen": int}
+    Rückgabe: {„neu“: int, „ergaenzt“: int, „konflikt“: int, „uebersprungen“: int}
     """
     from . import import_parser
-    from datetime import datetime as _datetime
 
-    def datum_aus_datei(text):
-        # import_parser._text_wert schreibt Datumswerte als TT.MM.JJJJ.
-        for muster in ("%d.%m.%Y", "%Y-%m-%d"):
-            try:
-                return _datetime.strptime(text, muster).date()
-            except ValueError:
-                pass
-        return None
-
-    neu = ergaenzt = konflikt = ubersprungen = 0
-    lauf: Importlauf | None = None
+    zahl = {"neu": 0, "ergaenzt": 0, "konflikt": 0, "uebersprungen": 0}
+    standard = import_parser._kategorie_finden(kategorie_standard) if kategorie_standard else None
 
     with transaction.atomic():
         lauf = Importlauf.objects.create(
-            dateiname=dateiname, blatt=blatt, erzeugt_von=konto,
+            dateiname=dateiname, blatt=blatt, erzeugt_von=konto, erzeugt_am=jetzt_aware(),
         )
+        if neuer_person_name:
+            _person_aus_ziel(neuer_person_name)
 
         # A-0912: Geräte dieses Laufs, damit die Garantiezeile sie findet.
-        neu_nach_sn = {}
+        neu_nach_sn: dict[str, Gerat] = {}
 
         for vz in vorschau:
-            ergebnis = vz.ergebnis
-            if ergebnis == "uebersprungen":
-                ubersprungen += 1
-                continue
-
             eintrag = _eintrag_fuer_zeile(vorlage, vz.zeile)
-            if eintrag is None:
-                ubersprungen += 1
+            if vz.ergebnis == "uebersprungen" or eintrag is None:
+                zahl["uebersprungen"] += 1
                 continue
 
-            # Werte der Zeile holen
-            seriennummer = import_parser._wert_von(vorlage, eintrag, "Seriennummer", spalten_ziel)
-            geraetename = import_parser._wert_von(vorlage, eintrag, "Gerätename", spalten_ziel)
-            hersteller = import_parser._wert_von(vorlage, eintrag, "Hersteller", spalten_ziel)
-            modell = import_parser._wert_von(vorlage, eintrag, "Modell", spalten_ziel)
-            kaufdatum_s = import_parser._wert_von(vorlage, eintrag, "Kaufdatum", spalten_ziel)
-            garantie_s = import_parser._wert_von(vorlage, eintrag, "Garantie bis", spalten_ziel)
-            preis_s = import_parser._wert_von(vorlage, eintrag, "Kaufpreis netto", spalten_ziel)
-            lieferant = import_parser._wert_von(vorlage, eintrag, "Lieferant", spalten_ziel)
-            rechnung = import_parser._wert_von(vorlage, eintrag, "Rechnungsnummer", spalten_ziel)
-            notiz_s = import_parser._wert_von(vorlage, eintrag, "Notiz", spalten_ziel)
+            w = import_parser.zeile_lesen(
+                vorlage, eintrag, spalten_ziel, wert_zu_kategorie,
+                wert_zu_person, wert_zu_arbeitsplatz, standard,
+            )
+            herkunft = import_parser.herkunft_text(dateiname, blatt, vz.zeile)
 
-            # Kategorie über Wertezuordnung auflösen
-            # A-0912 Nr. 2: zählt auch die Wahl „Kategorie/Modell“.
-            kategorie = None
-            kategorie_name = ""
-            for spalte in vorlage.spalten:
-                if spalten_ziel.get(spalte.name, import_parser.IGNORIEREN) not in ("Kategorie", import_parser.ZIEL_WAHL_KAT_MOD):
-                    continue
-                roh = (eintrag["werte"].get(spalte.name) or "").strip()
-                if not import_parser._leer(roh):
-                    kategorie_name = roh
-                break
-            if kategorie_name:
-                if wert_zu_kategorie.get(kategorie_name):
-                    kategorie = import_parser._kategorie_finden(wert_zu_kategorie[kategorie_name])
-                elif ergebnis != "ergaenzt":
-                    # „nicht übernommen“ (F-82, A-0912 Nr. 4): übersprungen.
-                    ubersprungen += 1
-                    continue
+            if vz.ergebnis == "neu":
+                gerat = _import_neu(w, vz.kategorie, vz, herkunft, konto)
+                if gerat.seriennummer:
+                    neu_nach_sn[gerat.seriennummer.lower()] = gerat
+                zahl["neu"] += 1
+                continue
 
-            # Person über Wertezuordnung auflösen, neu anlegen wenn nötig (O-18)
-            person_wert = import_parser._wert_von(vorlage, eintrag, "Person", spalten_ziel)
-            person = _person_auflösen(person_wert, wert_zu_person)
-
-            # Ort über Wertezuordnung auflösen
-            arbp_wert = import_parser._wert_von(vorlage, eintrag, "Arbeitsplatz", spalten_ziel)
-            ort = None
-            if arbp_wert:
-                arbp_ziel = wert_zu_arbeitsplatz.get(arbp_wert, "")
-                if arbp_ziel:
-                    ort = import_parser._ort_finden(arbp_ziel)
-
-            # F-85: Geräte ohne Person und Arbeitsplatz → Lagerort
-            if person is None and ort is None:
-                ort = import_parser._lagerort_finden()
-
-            kaufdatum = datum_aus_datei(kaufdatum_s) if kaufdatum_s else None
-            garantie_bis = datum_aus_datei(garantie_s) if garantie_s else None
-            preis_wert = None
-            if preis_s:
-                try:
-                    preis_wert = float(preis_s.replace(",", "."))
-                except ValueError:
-                    preis_wert = None
-
-            # F-85: Defekt-Vermerk in der Notiz → Zustand Stufe 4.
-            # A-0912 Nr. 6: Zeile 5 (Kommentar „Defect") hat Zustand 4.
-            notiz_klein = notiz_s.lower() if notiz_s else ""
-            defekt = "defekt" in notiz_klein or "defect" in notiz_klein
-            if defekt:
-                zustand_val = Gerat.ZUSTAND_EINGESCHRAENKT
-            else:
-                zustand_val = Gerat.ZUSTAND_GUT
-
-            herkunft = f"{dateiname} / {blatt or '-'} / Zeile {vz.zeile}"
-
-            if ergebnis == "neu":
-                if kategorie is None:
-                    ubersprungen += 1
-                    continue
-                # F-85: Status und Verbleib
-                if person is not None:
-                    ger_status = Gerat.STATUS_IN_BENUTZUNG
-                    altbestand = True
-                else:
-                    ger_status = Gerat.STATUS_AUF_LAGER
-                    altbestand = False
-
-                notiz_final = notiz_s
-                if defekt:
-                    hinweis_defekt = "laut Altliste defekt: reparieren oder ausmustern"
-                    notiz_final = (notiz_final + "; " + hinweis_defekt) if notiz_final else hinweis_defekt
-
-                # F-84: die zweite Zeile mit derselben Nummer entsteht ohne sie,
-                # die Notiz nennt sie.
-                if "seriennummer-doppelt" in vz.hinweise and seriennummer:
-                    vermerk = f"Seriennummer {seriennummer} doppelt im Blatt"
-                    notiz_final = f"{notiz_final}; {vermerk}" if notiz_final else vermerk
-                    seriennummer = ""
-
-                gerat = Gerat.objects.create(
-                    inventarnummer=naechste_inventarnummer(),
-                    kategorie=kategorie,
-                    hersteller=hersteller,
-                    modell=modell,
-                    seriennummer=seriennummer,
-                    geraetename=geraetename,
-                    status=ger_status,
-                    zustand=zustand_val,
-                    person=person,
-                    ort=ort,
-                    kaufdatum=kaufdatum,
-                    kaufpreis_netto=preis_wert,
-                    lieferant=lieferant,
-                    rechnungsnummer=rechnung,
-                    garantie_bis=garantie_bis,
-                    notiz=notiz_final,
-                    altbestand_ohne_protokoll=altbestand,
-                    zustand_ungeprueft=not defekt,
-                    erstellt_von=konto,
-                    erstellt_am=timezone.now(),
-                )
-                if seriennummer:
-                    neu_nach_sn[seriennummer.lower()] = gerat
-                # F-87: Vorgang „Import"
-                Vorgang.objects.create(
-                    gerat=gerat,
-                    typ=Vorgang.TYP_IMPORT,
-                    erzeugt_von=konto,
-                    notiz=herkunft,
-                    abschliesst=True,
-                )
-                neu += 1
-
-            elif ergebnis == "ergaenzt":
-                gerat = vz.gerat or neu_nach_sn.get((seriennummer or "").lower())
-                if gerat is None:
-                    ubersprungen += 1
-                    continue
-                geaendert = []
-                if not gerat.seriennummer and seriennummer:
-                    gerat.seriennummer = seriennummer
-                    geaendert.append("seriennummer")
-                if not gerat.geraetename and geraetename:
-                    gerat.geraetename = geraetename
-                    geaendert.append("geraetename")
-                if not gerat.hersteller and hersteller:
-                    gerat.hersteller = hersteller
-                    geaendert.append("hersteller")
-                if not gerat.modell and modell:
-                    gerat.modell = modell
-                    geaendert.append("modell")
-                if gerat.person is None and person is not None:
-                    gerat.person = person
-                    geaendert.append("person")
-                if gerat.ort is None and ort is not None:
-                    gerat.ort = ort
-                    geaendert.append("ort")
-                if gerat.kaufdatum is None and kaufdatum is not None:
-                    gerat.kaufdatum = kaufdatum
-                    geaendert.append("kaufdatum")
-                if gerat.garantie_bis is None and garantie_bis is not None:
-                    gerat.garantie_bis = garantie_bis
-                    geaendert.append("garantie_bis")
-                if gerat.kaufpreis_netto is None and preis_wert is not None:
-                    gerat.kaufpreis_netto = preis_wert
-                    geaendert.append("kaufpreis_netto")
-                if not gerat.notiz and notiz_s:
-                    gerat.notiz = notiz_s
-                    geaendert.append("notiz")
-                elif (notiz_s and kategorie_name.strip().lower() == import_parser.GARANZIE_TYPOBER
-                        and notiz_s not in gerat.notiz):
-                    # F-84: die Garantiezeile ergänzt auch die Notiz.
-                    gerat.notiz = f"{gerat.notiz}; {notiz_s}"
-                    geaendert.append("notiz")
-                if not gerat.lieferant and lieferant:
-                    gerat.lieferant = lieferant
-                    geaendert.append("lieferant")
-                if not gerat.rechnungsnummer and rechnung:
-                    gerat.rechnungsnummer = rechnung
-                    geaendert.append("rechnungsnummer")
-                # F-85: Status ableiten
-                if person is not None and gerat.status == Gerat.STATUS_AUF_LAGER:
-                    gerat.status = Gerat.STATUS_IN_BENUTZUNG
-                    gerat.altbestand_ohne_protokoll = True
-                    geaendert += ["status", "altbestand_ohne_protokoll"]
-                if gerat.zustand is None:
-                    gerat.zustand = zustand_val
-                    geaendert.append("zustand")
-                if not gerat.zustand_ungeprueft and not defekt:
-                    gerat.zustand_ungeprueft = True
-                    geaendert.append("zustand_ungeprueft")
-                if geaendert:
-                    gerat.save(update_fields=geaendert)
-                # F-87: Vorgang „Import"
-                Vorgang.objects.create(
-                    gerat=gerat,
-                    typ=Vorgang.TYP_IMPORT,
-                    erzeugt_von=konto,
-                    notiz=herkunft,
-                    abschliesst=True,
-                )
-                ergaenzt += 1
-
-            elif ergebnis == "konflikt":
-                gerat = vz.gerat
-                if gerat is None:
-                    ubersprungen += 1
-                    continue
-                # Widersprüchliche Werte: GeratKonflikt anlegen (F-84)
-                if seriennummer and gerat.seriennummer \
-                        and seriennummer.lower() != gerat.seriennummer.lower():
+            gerat = vz.gerat or neu_nach_sn.get(w.seriennummer.lower())
+            if gerat is None:
+                zahl["uebersprungen"] += 1
+                continue
+            abweichend = import_parser.abweichungen(gerat, w) if vz.ergebnis == "konflikt" else []
+            _import_ergaenzen(gerat, w, herkunft, konto)
+            # F-84: Abweichende Werte überschreibt der Import nicht, er meldet sie,
+            # und derselbe Konflikt steht nur einmal offen.
+            for feld, alt, neu in abweichend:
+                if not GeratKonflikt.objects.filter(
+                    gerat=gerat, feld=feld, neuer_wert=neu, offen=True,
+                ).exists():
                     GeratKonflikt.objects.create(
-                        gerat=gerat, feld="seriennummer",
-                        alter_wert=gerat.seriennummer, neuer_wert=seriennummer,
-                        herkunft=herkunft,
+                        gerat=gerat, feld=feld, alter_wert=alt, neuer_wert=neu,
+                        herkunft=herkunft, erzeugt_am=jetzt_aware(),
                     )
-                if geraetename and gerat.geraetename \
-                        and geraetename.lower() != gerat.geraetename.lower():
-                    GeratKonflikt.objects.create(
-                        gerat=gerat, feld="geraetename",
-                        alter_wert=gerat.geraetename, neuer_wert=geraetename,
-                        herkunft=herkunft,
-                    )
-                if hersteller and gerat.hersteller \
-                        and hersteller.lower() != gerat.hersteller.lower():
-                    GeratKonflikt.objects.create(
-                        gerat=gerat, feld="hersteller",
-                        alter_wert=gerat.hersteller, neuer_wert=hersteller,
-                        herkunft=herkunft,
-                    )
-                if modell and gerat.modell \
-                        and modell.lower() != gerat.modell.lower():
-                    GeratKonflikt.objects.create(
-                        gerat=gerat, feld="modell",
-                        alter_wert=gerat.modell, neuer_wert=modell,
-                        herkunft=herkunft,
-                    )
-                # F-87: Vorgang „Import"
-                Vorgang.objects.create(
-                    gerat=gerat,
-                    typ=Vorgang.TYP_IMPORT,
-                    erzeugt_von=konto,
-                    notiz=herkunft,
-                    abschliesst=True,
-                )
-                konflikt += 1
+            zahl[vz.ergebnis] += 1
 
         # Zählungen im Importlauf festhalten
-        assert lauf is not None
-        lauf.anzahl_neu = neu
-        lauf.anzahl_ergaenzt = ergaenzt
-        lauf.anzahl_konflikt = konflikt
-        lauf.anzahl_uebersprungen = ubersprungen
+        lauf.anzahl_neu = zahl["neu"]
+        lauf.anzahl_ergaenzt = zahl["ergaenzt"]
+        lauf.anzahl_konflikt = zahl["konflikt"]
+        lauf.anzahl_uebersprungen = zahl["uebersprungen"]
         lauf.save()
 
-    return {"neu": neu, "ergaenzt": ergaenzt, "konflikt": konflikt, "uebersprungen": ubersprungen}
+    return zahl
 
 
 # --- M5 Verleih (F-30, F-36, F-133, F-20) ------------------------------------

@@ -17,7 +17,7 @@
         <span class="brand-tag" aria-hidden="true">WMC</span>
         <span>Inventar</span>
       </a>
-      {% if user.is_authenticated %}
+      {% if user.ist_admin or user.ist_leser %}
       <form class="search" role="search" method="get" action="/geraete/" data-test="kopf-suche" aria-label="Suche">
         <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
         <input type="search" name="q" value="{{ suche }}" placeholder="Inventarnummer, Seriennr., Modell, Hostname, Person" autocomplete="off" aria-label="Suche" data-test="suche">

@@ -23,6 +23,7 @@ from django.conf import settings
 from django.core.mail import send_mail
 from django.core.management.base import BaseCommand, CommandError
 
+from geraete.kennzahlen import _ueberfaellige_leihen, arbeitsplaetze_vollstaendig_zahl
 from konten.zeit import jetzt_aware
 from stammdaten.models import Einstellungen, Mailversand, Ort, Zaehlerstand
 from geraete.models import Gerat, Leihe, Protokoll
@@ -355,10 +356,8 @@ def _zaehlerstand_anlegen(stichtag: date) -> dict:
     verliehen = aktive.filter(status=Gerat.STATUS_VERLIEHEN).count()
     leihpool_gesamt = aktive.filter(leihpool=True).count()
 
-    ueberfaellig = Leihe.objects.filter(
-        rueckgabe_bis__lt=stichtag,
-        status=Leihe.STATUS_AUSGEGEBEN,
-    ).count()
+    # F-100: dieselben Zählungen wie die Übersicht, sonst stimmt das Delta nicht.
+    ueberfaellig = _ueberfaellige_leihen(stichtag).count()
 
     anfragen_offen = Leihe.objects.filter(status=Leihe.STATUS_ANGEFRAGT).count()
 
@@ -378,7 +377,7 @@ def _zaehlerstand_anlegen(stichtag: date) -> dict:
 
     arbeitsplaetze = Ort.objects.filter(typ=Ort.TYP_ARBEITSPLATZ)
     ap_gesamt = arbeitsplaetze.count()
-    ap_vollstaendig = arbeitsplaetze.filter(feste_person__isnull=False).count()
+    ap_vollstaendig = arbeitsplaetze_vollstaendig_zahl()
 
     geprueft = aktive.filter(zuletzt_geprueft_am__isnull=False).count()
 

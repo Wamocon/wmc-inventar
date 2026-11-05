@@ -7,6 +7,7 @@ F-84 bis F-88 (Konflikte, Datenlücken).
 from __future__ import annotations
 
 from datetime import date, timedelta
+from urllib.parse import urlencode
 
 from django.contrib.auth.decorators import login_required
 from django.contrib.messages import error as meldung_error
@@ -27,6 +28,7 @@ from stammdaten.models import Kategorie, Ort, Person
 
 from . import services
 from .forms import (
+    ErstinventurForm,
     GeratAusgabeForm,
     GeratAusmusterungForm,
     GeratBearbeitungsForm,
@@ -37,6 +39,7 @@ from .forms import (
     GeratRueckgabeForm,
     GeratUmzugForm,
 )
+from .etiketten import format_aus_einstellungen
 from .models import Gerat, GeratKonflikt, Leihe, Protokoll, Vorgang
 
 
@@ -121,8 +124,8 @@ def _geraete_export(request, geraete: list, format_export: str):
     """F-103: Liste der Geräte mit aktuellem Filter als .csv oder .xlsx."""
     from . import export as _export
     kopfzeile = [
-        "Inventarnummer", "Status", "Hersteller", "Modell", "Person",
-        "Ort", "Kategorie", "Kaufdatum", "Garantie bis",
+        "Inventarnummer", "Status", "Hersteller", "Modell", "Gerätename", "Seriennummer",
+        "Person", "Ort", "Kategorie", "Kaufdatum", "Garantie bis", "Fehlende Angaben",
     ]
     daten = []
     for gerat in geraete:
@@ -131,6 +134,9 @@ def _geraete_export(request, geraete: list, format_export: str):
             "Status": gerat.status_anzeige,
             "Hersteller": gerat.hersteller,
             "Modell": gerat.modell,
+            "Gerätename": gerat.geraetename,
+            "Seriennummer": gerat.seriennummer,
+            "Fehlende Angaben": gerat.datenluecken_text(),
             "Person": (
                 f"{gerat.person.vorname} {gerat.person.nachname}".strip()
                 if gerat.person
@@ -144,6 +150,24 @@ def _geraete_export(request, geraete: list, format_export: str):
     if format_export == "csv":
         return _export.antwort_csv(kopfzeile, daten, "geraete")
     return _export.antwort_xlsx(kopfzeile, daten, "geraete")
+
+
+def _suche(q: str) -> Q:
+    """F-44: Treffer nach Inventarnummer, Seriennummer, Modell, Hostname und Person.
+
+    Bei der Person muss jedes Wort im Vor- oder Nachnamen stehen: „Anna Becker“
+    trifft Vorname und Nachname, auch in anderer Reihenfolge.
+    """
+    person = Q()
+    for wort in q.split():
+        person &= Q(person__vorname__icontains=wort) | Q(person__nachname__icontains=wort)
+    return (
+        Q(inventarnummer__icontains=q)
+        | Q(geraetename__icontains=q)
+        | Q(seriennummer__icontains=q)
+        | Q(modell__icontains=q)
+        | person
+    )
 
 
 @login_required
@@ -163,32 +187,36 @@ def liste(request):
     kategorie_id = request.GET.get("kategorie") or ""
     person_id = request.GET.get("person") or ""
     unvollstaendig = request.GET.get("unvollstaendig") == "1"
+    archiv = request.GET.get("archiv") == "1"
 
-    qs = Gerat.objects.select_related("person", "ort", "zuletzt_geprueft_von")
+    # Kapitel 3: Filter kombinierbar. Ausgemusterte Geräte nur mit archiv=1 (F-58).
+    alle = Gerat.objects.select_related("person", "ort", "kategorie", "zuletzt_geprueft_von")
+    qs = alle.filter(status=Gerat.STATUS_AUSGEMUSTERT) if archiv \
+        else alle.exclude(status=Gerat.STATUS_AUSGEMUSTERT)
     if status:
         qs = qs.filter(status=status)
     if ort_id:
-        # Ort-Filter: Datenbanknummer (bestehend) oder Kennung (F-89, Kapitel 4).
+        # Ort-Filter: Kennung (Kapitel 3) oder Datenbanknummer (ältere Links).
         if ort_id.isdigit():
             qs = qs.filter(ort_id=ort_id)
         else:
             qs = qs.filter(ort__kennung=ort_id)
     if kategorie_id:
-        qs = qs.filter(kategorie_id=kategorie_id)
+        # Kategorie-Filter: Name (Kapitel 3) oder Datenbanknummer (ältere Links).
+        if kategorie_id.isdigit():
+            qs = qs.filter(kategorie_id=kategorie_id)
+        else:
+            qs = qs.filter(kategorie__name__iexact=kategorie_id)
     if person_id:
-        qs = qs.filter(person_id=person_id)
+        qs = qs.filter(person_id=person_id) if person_id.isdigit() else qs.none()
 
+    archiv_treffer = 0
     if q:
-        # F-44 (A-0098): Suche nach Inventarnummer, Seriennummer, Modell,
-        # Hostname (Gerätename) und Person (Vor- und Nachname).
-        qs = qs.filter(
-            Q(inventarnummer__icontains=q)
-            | Q(geraetename__icontains=q)
-            | Q(seriennummer__icontains=q)
-            | Q(modell__icontains=q)
-            | Q(person__vorname__icontains=q)
-            | Q(person__nachname__icontains=q)
-        )
+        treffer = _suche(q)
+        # Ohne archiv=1 erscheint das ausgemusterte Gerät nicht; die Zahl führt hin.
+        if not archiv:
+            archiv_treffer = alle.filter(treffer, status=Gerat.STATUS_AUSGEMUSTERT).distinct().count()
+        qs = qs.filter(treffer).distinct()
 
     aufsteigend = request.GET.get("sort") != "absteigend"
     qs = qs.order_by("inventarnummer" if aufsteigend else "-inventarnummer")
@@ -200,9 +228,8 @@ def liste(request):
     anzahl = len(qs)
     # Prototyp: Status mit ihren Zahlen über der Liste; nur Links auf den Filter.
     status_chips = [
-        {"code": code, "label": "Archiv" if code == Gerat.STATUS_AUSGEMUSTERT else label,
-         "zahl": Gerat.objects.filter(status=code).count()}
-        for code, label in Gerat.STATUSES
+        {"code": code, "label": label, "zahl": Gerat.objects.filter(status=code).count()}
+        for code, label in Gerat.STATUSES if code != Gerat.STATUS_AUSGEMUSTERT
     ]
 
     # F-103 (A-0907, M7 Teil 3): Export der Liste mit aktuellem Filter.
@@ -213,10 +240,22 @@ def liste(request):
     # Erstinventur-Fortschritt je Ort, sobald nach ort gefiltert (F-89, Kap. 4):
     # Markierung ``inventur-fortschritt`` mit ``ist`` und ``gesamt``.
     fortschritt = None
-    if ort_id and not ort_id.isdigit():
-        ort = Ort.objects.filter(kennung=ort_id).first()
-        if ort:
-            fortschritt = services.fortschritt_des_orts(ort)
+    ort = None
+    if ort_id:
+        ort = Ort.objects.filter(pk=ort_id).first() if ort_id.isdigit() \
+            else Ort.objects.filter(kennung=ort_id).first()
+    if ort:
+        fortschritt = services.fortschritt_des_orts(ort)
+    kategorie = None
+    if kategorie_id:
+        kategorie = Kategorie.objects.filter(pk=kategorie_id).first() if kategorie_id.isdigit() \
+            else Kategorie.objects.filter(name__iexact=kategorie_id).first()
+
+    # Export und Filter bleiben beieinander (F-103).
+    filter_werte = {
+        "q": q, "status": status, "ort": ort_id, "kategorie": kategorie_id, "person": person_id,
+        "unvollstaendig": "1" if unvollstaendig else "", "archiv": "1" if archiv else "",
+    }
 
     return render(
         request,
@@ -226,12 +265,16 @@ def liste(request):
             "anzahl": anzahl,
             "suche": q,
             "status_filter": status,
-            "ort_filter": ort_id,
-            "kategorie_filter": kategorie_id,
+            "ort_filter": ort.kennung if ort else "",
+            "kategorie_filter": kategorie.name if kategorie else "",
             "person_filter": person_id,
             "unvollstaendig": unvollstaendig,
+            "archiv": archiv,
+            "archiv_treffer": archiv_treffer,
+            "archiv_zahl": Gerat.objects.filter(status=Gerat.STATUS_AUSGEMUSTERT).count(),
+            "filter_query": urlencode({k: v for k, v in filter_werte.items() if v}),
             "aufsteigend": aufsteigend,
-            "statuser": [c for c in Gerat.STATUSES],
+            "statuser": [c for c in Gerat.STATUSES if c[0] != Gerat.STATUS_AUSGEMUSTERT],
             "status_chips": status_chips,
             "status_gesamt": sum(c["zahl"] for c in status_chips),
             "orte": Ort.objects.all(),
@@ -239,6 +282,7 @@ def liste(request):
             "personen": Person.objects.all(),
             "koennen_aendern": _darf_ändern(request.user),
             "fortschritt": fortschritt,
+            "etikett_pro_bogen": format_aus_einstellungen().pro_bogen,
         },
     )
 
@@ -259,7 +303,7 @@ def detail(request, inventarnummer: str):
     )
     offene_konflikte = list(GeratKonflikt.objects.filter(gerat=gerat, offen=True))
     doppelte_namen = gerat.doppelte_namen()
-    doppelte_serien = gerat.doppelte_seriennummern()
+    doppelte_serien = gerat.seriennummer_auch_bei()
     # F-14 (A-0099): Löschen ist nur für Admin, solange außer Aufnahme
     # kein Vorgang existiert; sonst fehlt die Aktion im HTML.
     kann_loeschen = (
@@ -276,14 +320,16 @@ def detail(request, inventarnummer: str):
             "offene_konflikte": offene_konflikte,
             "doppelte_namen": doppelte_namen,
             "doppelte_serien": doppelte_serien,
-            "datenluecken": gerat.datenluecken(),
+            "datenluecken": gerat.datenluecken_text(),
             "koennen_aendern": _darf_ändern(request.user),
             "ist_admin": request.user.ist_admin,
             "kann_loeschen": kann_loeschen,
+            "inventur": _inventur(request, gerat),
             # F-70: QR-Code im Gerätedetail
             "qr_inhalt": f"{settings.BASIS_URL}/g/{gerat.inventarnummer}",
             "qr_svg": _qr_svg(gerat),
-            "kann_etikett_sehen": request.user.ist_admin or request.user.ist_leser,
+            # F-72, Kapitel 6: Etiketten sind ein Bildschirm des Admins, der Leser ändert nichts.
+            "kann_etikett_sehen": request.user.ist_admin,
             "protokolle": gerat.alle_protokolle(),
             "reparatur_offen": gerat.vorgaenge.filter(typ=Vorgang.TYP_REPARATUR, abschliesst=False).order_by("-id").first()
             if gerat.status == Gerat.STATUS_IN_REPARATUR else None,
@@ -292,6 +338,32 @@ def detail(request, inventarnummer: str):
             "loeschung_arten": services.LOESCHUNG_ARTEN,
         },
     )
+
+
+def _inventur(request, gerat: Gerat) -> dict | None:
+    """Was die mobile Detailseite nach dem Scan für die Erstinventur braucht (F-89)."""
+    if not request.user.ist_admin or gerat.status == Gerat.STATUS_AUSGEMUSTERT:
+        return None
+    fortschritt = services.fortschritt_des_orts(gerat.ort) if gerat.ort_id else None
+    naechstes = None
+    if gerat.ort_id:
+        offene = Gerat.objects.filter(
+            ort_id=gerat.ort_id, zuletzt_geprueft_am__isnull=True,
+        ).exclude(pk=gerat.pk).exclude(status=Gerat.STATUS_AUSGEMUSTERT)
+        naechstes = min(
+            offene,
+            key=lambda g: (not g.geraetename, g.geraetename.lower(), g.inventarnummer),
+            default=None,
+        )
+    return {
+        "fortschritt": fortschritt,
+        "naechstes": naechstes,
+        "orte": Ort.objects.order_by("kennung"),
+        "zustaende": Gerat.ZUSTAENDE,
+        "seriennummer_fehlt": not gerat.seriennummer,
+        "kaufdatum_fehlt": not gerat.kaufdatum and not gerat.kaufdatum_nicht_ermittelbar,
+        "garantie_fehlt": not gerat.garantie_bis and not gerat.garantie_nicht_ermittelbar,
+    }
 
 
 # --- Neu anlegen (F-11 bis F-14) -------------------------------------------------
@@ -554,6 +626,27 @@ def arbeitsplaetze_liste(request):
     for ort in orte:
         abgleich = services.soll_ist_abgleich(ort)
         zeilen.append({"ort": ort, "abgleich": abgleich})
+
+    # F-103: Export der Liste, dieselbe Adresse mit format= (Kapitel 3).
+    format_export = (request.GET.get("format") or "").strip().lower()
+    if format_export in ("csv", "xlsx"):
+        from . import export as _export
+        kopfzeile = ["Kennung", "Raum", "Feste Person", "Profil", "Soll-Ist", "Fehlt", "Mehr"]
+        ergebnis_text = {"vollstaendig": "vollständig", "unvollstaendig": "unvollständig",
+                         "mehr-als-soll": "mehr als Soll"}
+        daten = [{
+            "Kennung": z["ort"].kennung,
+            "Raum": z["ort"].raum,
+            "Feste Person": z["ort"].feste_person.voller_name() if z["ort"].feste_person else "",
+            "Profil": z["ort"].profil.name if z["ort"].profil else "",
+            "Soll-Ist": ergebnis_text.get(z["abgleich"]["ergebnis"], ""),
+            "Fehlt": [f"{a} × {k.name}" for k, a in z["abgleich"]["fehlend"]],
+            "Mehr": [f"{a} × {k.name}" for k, a in z["abgleich"]["zuviel"]],
+        } for z in zeilen]
+        if format_export == "csv":
+            return _export.antwort_csv(kopfzeile, daten, "arbeitsplaetze")
+        return _export.antwort_xlsx(kopfzeile, daten, "arbeitsplaetze")
+
     return render(
         request,
         "geraete/arbeitsplaetze_liste.html",
@@ -656,6 +749,21 @@ def bedarf(request):
     if not _darf_sehen_raumplan(request.user):
         _keine_berechtigung(request, "/arbeitsplaetze/bedarf/")
     uebersicht = services.bedarf_uebersicht()
+
+    # F-103: Export der Liste, dieselbe Adresse mit format= (Kapitel 3).
+    format_export = (request.GET.get("format") or "").strip().lower()
+    if format_export in ("csv", "xlsx"):
+        from . import export as _export
+        kopfzeile = ["Kategorie", "Fehlt", "Auf Lager"]
+        daten = [{
+            "Kategorie": kategorie.name,
+            "Fehlt": anzahl,
+            "Auf Lager": uebersicht["lagerbestand"].get(kategorie, 0),
+        } for kategorie, anzahl in uebersicht["summe"].items()]
+        if format_export == "csv":
+            return _export.antwort_csv(kopfzeile, daten, "bedarf")
+        return _export.antwort_xlsx(kopfzeile, daten, "bedarf")
+
     return render(
         request,
         "geraete/bedarf.html",
@@ -672,8 +780,10 @@ def erstinventur(request):
     if not _darf_sehen_raumplan(request.user):
         _keine_berechtigung(request, "/arbeitsplaetze/pruefen/")
     zeilen = services.fortschritt_je_ort()
-    total_geprueft = sum(z["geprueft"] for z in zeilen)
-    total_alle = sum(z["alle"] for z in zeilen)
+    # F-89: Gesamt heißt alle Geräte, auch die ohne Ort (nur bei einer Person).
+    aktive = Gerat.objects.exclude(status=Gerat.STATUS_AUSGEMUSTERT)
+    total_geprueft = aktive.filter(zuletzt_geprueft_am__isnull=False).count()
+    total_alle = aktive.count()
     return render(
         request,
         "geraete/erstinventur.html",
@@ -744,6 +854,7 @@ def notiz_zeigen(request, inventarnummer: str):
     gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
     if not _darf_ändern(request.user):
         raise PermissionDenied("Zugriff verweigert: Vorgänge macht die IT.")
+    # F-58: Ausgemusterte Geräte sind nicht mehr änderbar.
     if gerat.status == Gerat.STATUS_AUSGEMUSTERT:
         meldung_error(request, "Ausgemusterte Geräte sind nicht mehr änderbar.")
         return redirect("/geraete/" + gerat.inventarnummer + "/")
@@ -769,8 +880,29 @@ def pruefen(request, inventarnummer: str):
     gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
     if not _darf_ändern(request.user):
         raise PermissionDenied("Zugriff verweigert: Vorgänge macht die IT.")
+    # F-89: Der Dialog auf der Detailseite trägt nach, was fehlt; ohne Felder nur „Geprüft“.
+    form = ErstinventurForm(request.POST)
+    if not form.is_valid():
+        for fehler_liste in form.errors.values():
+            for fehler in fehler_liste:
+                meldung_error(request, fehler)
+        return redirect("/geraete/" + gerat.inventarnummer + "/")
+    daten = form.cleaned_data
+    werte = {}
+    if daten["seriennummer"] and not gerat.seriennummer:
+        werte["seriennummer"] = daten["seriennummer"].strip()
+    if daten["zustand"] and daten["zustand"] != gerat.zustand:
+        werte["zustand"] = daten["zustand"]
+    for feld in ("kaufdatum", "garantie_bis"):
+        if daten[feld] and not getattr(gerat, feld):
+            werte[feld] = daten[feld]
+    for feld in ("kaufdatum_nicht_ermittelbar", "garantie_nicht_ermittelbar"):
+        if daten[feld]:
+            werte[feld] = True
     try:
-        services.gerat_pruefen(gerat, request.user)
+        services.erstinventur_bestaetigen(
+            gerat, werte=werte, ziel_ort=daten["ziel_ort"], geprueft_von=request.user,
+        )
     except services.GeratFehler as fehler:
         meldung_error(request, str(fehler))
         return redirect("/geraete/" + gerat.inventarnummer + "/")
@@ -794,7 +926,7 @@ def konflikt_loesen(request, inventarnummer: str, konflikt_id: int):
     except services.GeratFehler as fehler:
         meldung_error(request, str(fehler))
         return redirect("/geraete/" + gerat.inventarnummer + "/")
-    meldung_success(request, f"Konflikt zu „{konflikt.feld}“ gelöst.")
+    meldung_success(request, f"Konflikt zu „{konflikt.feld_anzeige}“ gelöst.")
     return redirect("/geraete/" + gerat.inventarnummer + "/")
 
 
@@ -956,6 +1088,10 @@ def umziehen(request, inventarnummer: str):
     if not _darf_ändern(request.user):
         raise PermissionDenied("Zugriff verweigert: Vorgänge macht die IT.")
     gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
+    # Kapitel 4: Den Umzug kennt nur „In Benutzung“.
+    if gerat.status != Gerat.STATUS_IN_BENUTZUNG:
+        meldung_error(request, "Nur Geräte in Benutzung können umgezogen werden.")
+        return redirect("/geraete/" + gerat.inventarnummer + "/")
     if request.method == "POST":
         form = GeratUmzugForm(request.POST)
         if form.is_valid():
@@ -1139,9 +1275,9 @@ def gerat_kurz(request, inventarnummer: str):
 def etikett_drucken(request, inventarnummer: str):
     """/geraete/<Inventarnummer>/etikett/: Einzelnes Etikett als PDF (F-72).
 
-    Für Admin und Leser.
+    Für den Admin (Kapitel 6: Bildschirm Etiketten; Testschnittstelle 3: /etiketten/).
     """
-    if not (request.user.ist_admin or request.user.ist_leser):
+    if not request.user.ist_admin:
         _keine_berechtigung(request, f"/geraete/{inventarnummer}/etikett/")
     gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
     from .etiketten import etikett_pdf
@@ -1155,7 +1291,8 @@ def etikett_drucken(request, inventarnummer: str):
 def etiketten_auswahl(request):
     """Etikettenbogen für eine Auswahl aus der Geräteliste (F-72, F-73).
 
-    POST mit auswahl=Inventarnummern (kommagetrennt) und startposition.
+    POST mit einem Feld auswahl je Kästchen (auch kommagetrennt) und startposition.
+    Mit vorschau=1 die Druckvorschau (Kapitel 6) statt des PDF.
     Für Admin (Kapitel 6 der Anforderungen: Bildschirm Etiketten nur für den Admin).
     """
     if not request.user.ist_admin:
@@ -1166,10 +1303,13 @@ def etiketten_auswahl(request):
         meldung_error(request, "Bitte die Auswahl mit POST an /etiketten/auswahl/ übermitteln.")
         return redirect("/geraete/")
 
-    auswahl = (request.POST.get("auswahl") or "").strip()
-    start = request.POST.get("startposition") or "1"
-
-    inventarnummern = [nr.strip() for nr in auswahl.split(",") if nr.strip()]
+    # Jedes Kästchen schickt ein eigenes Feld; alle zählen, je Nummer einmal.
+    inventarnummern = list(dict.fromkeys(
+        nr.strip()
+        for auswahl in request.POST.getlist("auswahl")
+        for nr in auswahl.split(",")
+        if nr.strip()
+    ))
     if not inventarnummern:
         meldung_error(request, "Keine Geräte ausgewählt.")
         return redirect("/geraete/")
@@ -1186,13 +1326,24 @@ def etiketten_auswahl(request):
         meldung_error(request, "Die ausgewählten Geräte wurden nicht gefunden.")
         return redirect("/geraete/")
 
+    from .etiketten import bogen_pdf, startposition_lesen, vorschau_seiten
+    fmt = format_aus_einstellungen()
     try:
-        start_int = max(1, min(24, int(start)))
-    except (ValueError, TypeError):
-        start_int = 1
+        start_int = startposition_lesen(request.POST.get("startposition"), fmt)
+    except ValueError as fehler:
+        meldung_error(request, str(fehler))
+        return redirect("/geraete/")
 
-    from .etiketten import bogen_pdf
-    pdf = bogen_pdf(geraete, startposition=start_int)
+    if request.POST.get("vorschau"):
+        return render(request, "geraete/etiketten.html", {
+            "format": fmt,
+            "startposition": start_int,
+            "auswahl_nummern": [g.inventarnummer for g in geraete],
+            "anzahl_etiketten": len(geraete),
+            "seiten": vorschau_seiten(geraete, start_int, fmt),
+        })
+
+    pdf = bogen_pdf(geraete, startposition=start_int, fmt=fmt)
     response = HttpResponse(pdf, content_type="application/pdf")
     response["Content-Disposition"] = f'inline; filename="etiketten-bogen-{len(geraete)}.pdf"'
     return response
@@ -1207,12 +1358,26 @@ def etiketten_ort(request):
 
     Ohne Parameter: Auswahlseite mit den Arbeitsplätzen und Lagerorten,
     wählbarer Startposition (F-73) und „Bogen drucken“.
-    Mit ?ort=<Kennung>: der Bogen für diesen Ort als application/pdf.
+    Mit ?ort=<Kennung>: der Bogen für diesen Ort als application/pdf,
+    mit zusätzlich vorschau=1 die Druckvorschau (Kapitel 6).
     """
     if not request.user.ist_admin:
         meldung_error(request, "Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
         return render(request, "konten/keine_berechtigung.html", status=403)
 
+    from .etiketten import bogen_pdf, etiketten_fuer_ort, startposition_lesen, vorschau_seiten
+
+    fmt = format_aus_einstellungen()
+    orte = list(
+        Ort.objects.filter(typ__in=(Ort.TYP_ARBEITSPLATZ, Ort.TYP_LAGER)).order_by("kennung")
+    )
+    kontext = {
+        "orte": orte,
+        "anzahl_orte": len(orte),
+        "ausgewaehlt": request.GET.get("ort", ""),
+        "format": fmt,
+        "startposition": 1,
+    }
     ort_kennung = (request.GET.get("ort") or "").strip()
     if ort_kennung:
         ort = Ort.objects.filter(kennung=ort_kennung).first()
@@ -1220,34 +1385,31 @@ def etiketten_ort(request):
             meldung_error(request, f"Ort {ort_kennung} wurde nicht gefunden.")
             return redirect("/geraete/")
 
-        from .etiketten import etiketten_fuer_ort, bogen_pdf
         geraete = etiketten_fuer_ort(ort)
         if not geraete:
             meldung_error(request, f"Keine Geräte am Ort {ort.kennung}.")
             return redirect("/etiketten/")
 
         try:
-            start_int = max(1, min(24, int(request.GET.get("startposition") or "1")))
-        except (ValueError, TypeError):
-            start_int = 1
+            start_int = startposition_lesen(request.GET.get("startposition"), fmt)
+        except ValueError as fehler:
+            meldung_error(request, str(fehler))
+            return redirect("/etiketten/")
 
-        pdf = bogen_pdf(geraete, startposition=start_int)
+        if request.GET.get("vorschau"):
+            kontext.update(
+                startposition=start_int,
+                anzahl_etiketten=len(geraete),
+                seiten=vorschau_seiten(geraete, start_int, fmt),
+            )
+            return render(request, "geraete/etiketten.html", kontext)
+
+        pdf = bogen_pdf(geraete, startposition=start_int, fmt=fmt)
         response = HttpResponse(pdf, content_type="application/pdf")
         response["Content-Disposition"] = f'inline; filename="etiketten-{ort.kennung}.pdf"'
         return response
 
-    orte = list(
-        Ort.objects.filter(typ__in=(Ort.TYP_ARBEITSPLATZ, Ort.TYP_LAGER)).order_by("kennung")
-    )
-    return render(
-        request,
-        "geraete/etiketten.html",
-        {
-            "orte": orte,
-            "anzahl_orte": len(orte),
-            "ausgewaehlt": request.GET.get("ort", ""),
-        },
-    )
+    return render(request, "geraete/etiketten.html", kontext)
 
 
 # --- M5 Verleih (F-30, F-36) ---------------------------------------------------

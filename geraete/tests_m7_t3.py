@@ -9,7 +9,7 @@ TESTSCHNITTSTELLE 5: Delta mit U+2212; Beträge.
 from __future__ import annotations
 
 import io
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.core.management import call_command
@@ -18,6 +18,7 @@ from unittest.mock import patch
 
 from konten.models import Konto
 from stammdaten.models import Einstellungen, Kategorie, Person, Ort
+from geraete import kennzahlen as _kz
 from geraete import services
 from geraete.models import Gerat
 
@@ -166,8 +167,8 @@ class UebersichtDeltaTests(TestCase):
         )
         antwort = self.client.get("/")
         self.assertEqual(antwort.status_code, 200)
-        # Ohne Zählerstand: delta fehlt (– im HTML)
-        self.assertContains(antwort, "data-test=\"delta\"")
+        # Ohne Zählerstand: delta fehlt im HTML (Testschnittstelle 4)
+        self.assertNotContains(antwort, "data-test=\"delta\"")
 
     def test_delta_zum_vortag(self):
         """Nach einem Tageslauf mit Stichtag am Vortag zeigt das Delta."""
@@ -177,8 +178,8 @@ class UebersichtDeltaTests(TestCase):
             modell="EliteBook 840",
             person=self.person,
         )
-        vortag = date(2026, 11, 2)
-        heute = date(2026, 11, 3)
+        heute = _kz._heute()
+        vortag = heute - timedelta(days=1)
         call_command("tageslauf", stichtag=vortag.isoformat())
         services.gerat_anlegen(
             kategorie=self.kategorie,
@@ -357,8 +358,8 @@ class DeltaFormatTests(TestCase):
             modell="EliteBook 840",
             person=self.person,
         )
-        vortag = date(2026, 11, 2)
-        heute = date(2026, 11, 3)
+        heute = _kz._heute()
+        vortag = heute - timedelta(days=1)
         call_command("tageslauf", stichtag=vortag.isoformat())
         # Gerät ausmustern, damit der Wert sinkt
         gerat.status = Gerat.STATUS_AUSGEMUSTERT
