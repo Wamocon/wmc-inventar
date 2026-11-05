@@ -44,6 +44,7 @@ TIME_ZONE = "Europe/Berlin"
 USE_I18N = True
 LANGUAGE_CODE = "de"
 USE_TZ = True
+FORMAT_MODULE_PATH = ["inventar.formate"]
 DATE_FORMAT = "d.m.Y"
 DATETIME_FORMAT = "d.m.Y H:i"
 SHORT_DATE_FORMAT = "d.m.Y"
@@ -209,6 +210,8 @@ if not DEBUG:
     CSRF_COOKIE_SECURE = True
     SECURE_SSL_REDIRECT = True
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SECURE_HSTS_SECONDS = int(os.environ.get("INVENTAR_HSTS_SEKUNDEN", str(60 * 60 * 24 * 365)))
+    CSRF_TRUSTED_ORIGINS = [BASIS_URL] if BASIS_URL.startswith("https://") else []
 
 CSP = (
     "default-src 'self'; "

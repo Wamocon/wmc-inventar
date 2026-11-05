@@ -28,7 +28,11 @@ RUN if [ -n "${WHEELHOUSE}" ]; then \
 
 COPY . /srv/inventar/
 
-RUN python manage.py collectstatic --noinput || true
+# Statische Dateien entstehen beim Bau; der Schlüssel des Entwicklungsmodus gilt nur für diesen Schritt.
+RUN INVENTAR_DEBUG=1 python manage.py collectstatic --noinput
+
+RUN useradd --system --uid 1000 inventar && mkdir -p var && chown -R inventar:inventar var
+USER inventar
 
 EXPOSE 8000
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+CMD ["gunicorn", "inventar.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3"]

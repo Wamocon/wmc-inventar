@@ -1,7 +1,42 @@
-# WMC Inventar – Betrieb (N-01)
-# web: die Anwendung (Django + WhiteNoise)
-# db:  PostgreSQL 16
-# cron: ruft tageslauf auf (TESTSCHNITTSTELLE 1)
+# WMC Inventar, Betrieb (N-01, N-06)
+# proxy:     HTTPS mit internem Zertifikat, einziger offener Port
+# web:       Anwendung unter gunicorn, nur aus dem Compose-Netz erreichbar
+# db:        PostgreSQL 16
+# cron:      tageslauf einmal am Tag (TESTSCHNITTSTELLE 1)
+# sicherung: täglicher Dump und Kopie der Dateiablage in ein Verzeichnis, das UrBackup erfasst
+#
+# Werte kommen aus .env, Vorlage in .env.example. Ohne die Pflichtwerte startet Compose nicht.
+
+x-anwendung: &anwendung
+  build:
+    context: .
+    args:
+      BASIS: python:3.12-slim
+  environment: &umgebung
+    INVENTAR_DEBUG: "0"
+    INVENTAR_SECRET_KEY: ${INVENTAR_SECRET_KEY:?INVENTAR_SECRET_KEY fehlt in .env}
+    INVENTAR_HOSTS: ${INVENTAR_HOSTS:-}
+    INVENTAR_PROXY: "1"
+    DATABASE_URL: postgres://inventar:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD fehlt in .env}@db:5432/inventar
+    BASIS_URL: ${BASIS_URL:?BASIS_URL fehlt in .env}
+    DATEIABLAGE: /srv/inventar/var/dateien
+    MAIL_ABLAGE: ${MAIL_ABLAGE:-}
+    MAIL_ABSENDER: ${MAIL_ABSENDER:?MAIL_ABSENDER fehlt in .env}
+    SMTP_HOST: ${SMTP_HOST:-}
+    SMTP_PORT: ${SMTP_PORT:-587}
+    SMTP_USER: ${SMTP_USER:-}
+    SMTP_PASSWORT: ${SMTP_PASSWORT:-}
+    SMTP_TLS: ${SMTP_TLS:-1}
+    SIEGEL_P12: /run/inventar/siegel.p12
+    SIEGEL_PASSWORT: ${SIEGEL_PASSWORT:?SIEGEL_PASSWORT fehlt in .env}
+    KENNZAHLEN_TOKEN: ${KENNZAHLEN_TOKEN:-}
+  volumes:
+    - var-data:/srv/inventar/var
+    - ${SIEGEL_DATEI:?SIEGEL_DATEI fehlt in .env}:/run/inventar/siegel.p12:ro
+  depends_on:
+    db:
+      condition: service_healthy
+  restart: unless-stopped
 
 services:
   db:
@@ -9,62 +44,54 @@ services:
     environment:
       POSTGRES_DB: inventar
       POSTGRES_USER: inventar
-      POSTGRES_PASSWORD: inventar
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD fehlt in .env}
     volumes:
       - db-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -d inventar"]
+      test: ["CMD-SHELL", "pg_isready -U inventar -d inventar"]
       interval: 5s
       timeout: 3s
       retries: 10
+    restart: unless-stopped
 
   web:
-    build:
-      context: .
-      args:
-        BASIS: python:3.12-slim
-    environment:
-      INVENTAR_DEBUG: "0"
-      INVENTAR_SECRET_KEY: ${INVENTAR_SECRET_KEY:?}
-      DATABASE_URL: postgres://inventar:inventar@db:5432/inventar
-      BASIS_URL: ${BASIS_URL:-http://127.0.0.1:8000}
-      MAIL_ABLAGE: /srv/inventar/var/mails
-      DATEIABLAGE: /srv/inventar/var/dateien
-      KENNZAHLEN_TOKEN: ${KENNZAHLEN_TOKEN:-}
-      BEISPIEL_PASSWORT: ${BEISPIEL_PASSWORT:-Beispiel-Passwort-2026}
-    volumes:
-      - var-data:/srv/inventar/var
-    depends_on:
-      db:
-        condition: service_healthy
-    ports:
-      - "8000:8000"
+    <<: *anwendung
+    expose:
+      - "8000"
     command: >
       sh -c "python manage.py migrate --noinput &&
-             python manage.py collectstatic --noinput &&
-             python manage.py runserver 0.0.0.0:8000"
+             gunicorn inventar.wsgi:application --bind 0.0.0.0:8000 --workers 3 --access-logfile -"
+
+  proxy:
+    image: nginx:1.27-alpine
+    depends_on:
+      - web
+    ports:
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTP_PORT:-80}:80"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ${TLS_ZERTIFIKAT:?TLS_ZERTIFIKAT fehlt in .env}:/etc/nginx/tls/zertifikat.pem:ro
+      - ${TLS_SCHLUESSEL:?TLS_SCHLUESSEL fehlt in .env}:/etc/nginx/tls/schluessel.pem:ro
+    restart: unless-stopped
 
   cron:
-    build:
-      context: .
-      args:
-        BASIS: python:3.12-slim
-    environment:
-      INVENTAR_DEBUG: "0"
-      INVENTAR_SECRET_KEY: ${INVENTAR_SECRET_KEY:?}
-      DATABASE_URL: postgres://inventar:inventar@db:5432/inventar
-      BASIS_URL: ${BASIS_URL:-http://127.0.0.1:8000}
-      MAIL_ABLAGE: /srv/inventar/var/mails
-      DATEIABLAGE: /srv/inventar/var/dateien
-    volumes:
-      - var-data:/srv/inventar/var
-    depends_on:
-      db:
-        condition: service_healthy
+    <<: *anwendung
     command: >
       sh -c "while true; do
                python manage.py tageslauf;
-               sleep 3600;
+               sleep 86400;
+             done"
+
+  sicherung:
+    <<: *anwendung
+    volumes:
+      - var-data:/srv/inventar/var
+      - ${SICHERUNG_ZIEL:?SICHERUNG_ZIEL fehlt in .env}:/sicherung
+    command: >
+      sh -c "while true; do
+               scripts/sicherung.sh /sicherung;
+               sleep 86400;
              done"
 
 volumes:

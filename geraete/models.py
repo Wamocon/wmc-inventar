@@ -365,9 +365,15 @@ class Vorgang(models.Model):
         return not self.abschliesst
 
     def save(self, *args, **kwargs):
-        if self._state.adding and not self.status_nachher:
+        # N-03: Ein Vorgang wird nur angelegt, nie geändert.
+        if not self._state.adding:
+            raise ValueError("Vorgänge werden nur angelegt, nie geändert (N-03).")
+        if not self.status_nachher:
             self._stand_festhalten()
         super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValueError("Vorgänge werden nie gelöscht (N-03).")
 
     def _stand_festhalten(self) -> None:
         """Kapitel 3.2: „vorher“ ist das „nachher“ des letzten Vorgangs am Gerät."""

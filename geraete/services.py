@@ -2492,6 +2492,9 @@ def protokoll_code_senden(
     if not empfaenger:
         return False, "Für diese Person ist keine E-Mail-Adresse hinterlegt. Bitte eine Adresse eintragen."
 
+    # N-05: Höchstens 5 Codes je Stunde, sonst wären die 5 Versuche je Code wertlos.
+    if SignaturCode.objects.filter(protokoll=protokoll, erstellt_am__gt=now - timedelta(hours=1)).count() >= 5:
+        return False, "Zu viele Codes angefordert. Bitte versuchen Sie es in einer Stunde erneut."
     SignaturCode.objects.filter(protokoll=protokoll, gueltig=True).update(gueltig=False)
     code = f"{secrets.randbelow(10**6):06d}"
     SignaturCode.objects.create(
