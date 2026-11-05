@@ -13,7 +13,7 @@
     </div>
   </div>
   <div class="detail-meta">
-    <div class="pills"><span class="chip-status {{ gerat.status }}" data-test="status" data-wert="{{ gerat.status_wert }}">{{ gerat.status_anzeige }}</span>{% if gerat.leihpool %}<span class="chip-status verliehen">Leihpool</span>{% endif %}</div>
+    <div class="pills"><span class="chip-status {{ gerat.status }}" data-test="status" data-wert="{{ gerat.status_wert }}">{{ gerat.status_anzeige }}</span>{% if gerat.leihpool %}<span class="chip-status verliehen">Leihpool</span>{% endif %}{% if gerat.reserviert %}<span class="chip-status warn" data-test="zusatz-reserviert">reserviert</span>{% endif %}</div>
     <p class="small">QR-Code öffnet <span data-test="qr-inhalt">{{ qr_inhalt }}</span></p>
   </div>
 </div>
