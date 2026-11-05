@@ -10,10 +10,9 @@ from __future__ import annotations
 
 import os
 
-from django.contrib.auth.password_validation import validate_password
-from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand, CommandError
 
+from konten.forms import MIN_PASSWORT_LAENGE
 from konten.models import Konto
 from stammdaten.models import Kategorie, Ort
 
@@ -47,11 +46,9 @@ class Command(BaseCommand):
         passwort = os.environ.get("ADMIN_PASSWORT", "")
         if not email or not passwort:
             raise CommandError("Für das erste Admin-Konto fehlen ADMIN_EMAIL und ADMIN_PASSWORT.")
+        if len(passwort) < MIN_PASSWORT_LAENGE:
+            raise CommandError(f"Das Passwort muss mindestens {MIN_PASSWORT_LAENGE} Zeichen lang sein.")
         konto = Konto(email=email, rolle=Konto.ROLLE_ADMIN)
-        try:
-            validate_password(passwort, konto)
-        except ValidationError as fehler:
-            raise CommandError("Das Passwort reicht nicht: " + " ".join(fehler.messages)) from fehler
         konto.set_password(passwort)
         konto.save()
         self.stdout.write(f"Admin-Konto {email} angelegt")

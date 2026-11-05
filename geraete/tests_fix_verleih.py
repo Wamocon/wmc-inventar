@@ -223,7 +223,7 @@ class AnfrageTests(VerleihTestCase):
         d = self._pool("SN-D")
         services.gerat_in_reparatur_geschickt(d, dienstleister="X", vorgangsnummer="1", notiz="", ausgefuehrt_von=self.admin)
         e = self._pool("SN-E")
-        services.ausmustern(e, grund="verloren", datum=HEUTE, bestaetigt_gemeldt=True, ausgefuehrt_von=self.admin)
+        services.ausmustern(e, grund="verloren", datum=HEUTE, disposition="unbekannt", bestaetigt_gemeldt=True, ausgefuehrt_von=self.admin)
         stand = self._frei()
         self.assertEqual(stand["frei"], 2)
         self.assertEqual(stand["gesamt"], 4)
@@ -291,7 +291,7 @@ class AnfrageTests(VerleihTestCase):
 
     def test_auswahl_nur_kategorie_und_lesbar(self):
         n = self._pool("SN-N", kategorie=self.notebook)
-        services.ausmustern(self.b, grund="verloren", datum=HEUTE, bestaetigt_gemeldt=True, ausgefuehrt_von=self.admin)
+        services.ausmustern(self.b, grund="verloren", datum=HEUTE, disposition="unbekannt", bestaetigt_gemeldt=True, ausgefuehrt_von=self.admin)
         stand = self._frei()
         texte = [g["text"] for g in stand["geraete"]]
         self.assertIn(f"{self.a.inventarnummer}, Samsung Galaxy", texte)
@@ -383,7 +383,7 @@ class EntscheidungTests(VerleihTestCase):
         self.assertNotIn("/verleih/", mail.outbox[-1].body)
 
     def test_ausgemustert_und_reparatur_nicht_waehl_und_nicht_genehmigbar(self):
-        services.ausmustern(self.b, grund="verloren", datum=HEUTE, bestaetigt_gemeldt=True, ausgefuehrt_von=self.admin)
+        services.ausmustern(self.b, grund="verloren", datum=HEUTE, disposition="unbekannt", bestaetigt_gemeldt=True, ausgefuehrt_von=self.admin)
         services.gerat_in_reparatur_geschickt(self.c, dienstleister="X", vorgangsnummer="1", notiz="", ausgefuehrt_von=self.admin)
         leihe = self.anfragen(self.VON, self.BIS)
         c = self.client_fuer(self.admin)
@@ -734,7 +734,10 @@ class RueckgabeUeberDasGeraetTests(VerleihTestCase):
         self.assertIn("/meine-geraete/", ueberfaellig[0].body)
 
     def test_verlust_beendet_die_leihe(self):
-        services.gerat_rueckgeben(self.a, fehlend=True, ausgefuehrt_von=self.admin)
+        services.ausmustern(
+            self.a, grund="verloren", datum=HEUTE, disposition="unbekannt",
+            bestaetigt_gemeldt=True, ausgefuehrt_von=self.admin,
+        )
         self.leihe.refresh_from_db()
         self.a.refresh_from_db()
         self.assertEqual(self.a.status, Gerat.STATUS_AUSGEMUSTERT)
