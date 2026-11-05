@@ -347,6 +347,11 @@ class GeratReparaturFertigForm(forms.Form):
 
     ZIEL = [("zuordnung", "Bisherige Zuordnung"), ("lager", "Ins Lager")]
 
+    def __init__(self, *args, gerat: Gerat | None = None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if gerat is not None:
+            self.fields["zustand"].initial = gerat.zustand
+
     zustand = forms.ChoiceField(
         choices=Gerat.ZUSTAENDE,
         required=True,
@@ -408,6 +413,10 @@ class GeratAusmusterungForm(forms.Form):
     def __init__(self, *args, gerat: Gerat | None = None, **kwargs):
         super().__init__(*args, **kwargs)
         self._datentraeger = bool(gerat and gerat.kategorie and gerat.kategorie.hat_datentraeger)
+        self.datentraeger = self._datentraeger
+        heute = jetzt_wie_im_entwicklungsmodus().date()
+        self.fields["datum"].initial = heute
+        self.fields["datum"].widget.attrs["max"] = heute.isoformat()
         self._verloren = False
         # Kapitel 4: Aus „In Benutzung“ und „Verliehen“ nur verloren oder gestohlen.
         if gerat is not None and gerat.status not in (Gerat.STATUS_AUF_LAGER, Gerat.STATUS_IN_REPARATUR):
@@ -459,6 +468,8 @@ class GeratAusmusterungForm(forms.Form):
         daten = super().clean()
         grund = daten.get("grund") or ""
         daten["grund"] = grund
+        if daten.get("datum") and daten["datum"] > jetzt_wie_im_entwicklungsmodus().date():
+            self.add_error("datum", "Das Datum darf nicht in der Zukunft liegen.")
         verloren = grund in self.VERLOREN
         self._verloren = verloren
         # F-55: Verbleib ist immer Pflicht, auch bei verloren und gestohlen.

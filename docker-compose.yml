@@ -90,7 +90,7 @@ services:
       - ${SICHERUNG_ZIEL:?SICHERUNG_ZIEL fehlt in .env}:/sicherung
     command: >
       sh -c "while true; do
-               scripts/sicherung.sh /sicherung;
+               scripts/sicherung.sh /sicherung || exit 1;
                sleep 86400;
              done"
 

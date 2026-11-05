@@ -1,0 +1,22 @@
+{% extends "basis.html" %}
+{% block titel %}Anhang · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div>
+    <h1>Anhang hinzufügen</h1>
+    <p class="muted lead">{{ gerat.inventarnummer }} · {{ gerat.geraetename|default:gerat.modell }}</p>
+  </div>
+</div>
+<div data-test="dialog" data-name="anhang">
+  <form method="post" enctype="multipart/form-data" novalidate data-test="anhang-formular">
+    {% csrf_token %}
+    <div class="form-grid">
+      <div class="field full"><label for="id_datei" class="req">Datei (PDF, JPG oder PNG bis 10 MB)</label><input type="file" name="datei" id="id_datei" accept="application/pdf,image/jpeg,image/png" data-test="anhang-datei"></div>
+    </div>
+    <div class="actions">
+      <button type="submit" class="btn primary" data-test="speichern">Speichern</button>
+      <a class="btn link" href="/geraete/{{ gerat.inventarnummer }}/" data-test="abbrechen">Abbrechen</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

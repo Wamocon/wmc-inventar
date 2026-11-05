@@ -13,6 +13,7 @@
     <div class="meldungen">
       {% include "fragmente/fehler.html" %}
     </div>
+    <p data-test="bisherige-zuordnung">Bisherige Zuordnung: <strong>{% if gerat.person %}{{ gerat.person.voller_name }}{% if gerat.ort %}, {{ gerat.ort.kennung }}{% endif %}{% elif gerat.ort %}{{ gerat.ort.kennung }}{% else %}keine{% endif %}</strong></p>
     <div class="form-grid">
       <div class="field"><label for="id_zustand">Zustand jetzt</label>{{ form.zustand }}{% if form.zustand.errors %}<div class="meldung error">{% for e in form.zustand.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
       <div class="field full"><label>Ziel</label>

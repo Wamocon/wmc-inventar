@@ -464,6 +464,29 @@ class Vorgang(models.Model):
         self.ort_nachher = gerat.ort.kennung if gerat.ort_id else ""
 
     @property
+    def aenderung_anzeige(self) -> str:
+        """F-40: „Garantie bis: 01.02.2028 → 03.03.2029“ statt der Rohwerte."""
+        try:
+            titel = str(Gerat._meta.get_field(self.aenderung_feld).verbose_name)
+        except Exception:
+            titel = self.aenderung_feld
+        return f"{titel}: {self._wert_lesbar(self.aenderung_alter_wert)} → {self._wert_lesbar(self.aenderung_neuer_wert)}"
+
+    def _wert_lesbar(self, wert: str) -> str:
+        import re
+        if not wert:
+            return "(leer)"
+        if self.aenderung_feld == "zustand":
+            return dict(Gerat.ZUSTAENDE).get(int(wert), wert) if wert.isdigit() else wert
+        if self.aenderung_feld == "kaufpreis_netto":
+            from .templatetags.betraegeuro import betraegeuro
+            return betraegeuro(wert)
+        treffer = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", wert)
+        if treffer:
+            return f"{treffer.group(3)}.{treffer.group(2)}.{treffer.group(1)}"
+        return wert
+
+    @property
     def wechsel_anzeige(self) -> list[str]:
         """Für die Historie (F-43): was sich an Status, Person und Ort geändert hat."""
         namen = dict(Gerat.STATUSES)
@@ -480,6 +503,27 @@ class Vorgang(models.Model):
 
 
 # --- M5 Verleih (Kapitel 3.2, F-30, F-36, F-133) ------------------------------
+
+class GeratAnhang(models.Model):
+    """Datei am Gerät, etwa Rechnung oder Löschnachweis (Kapitel 3.1)."""
+
+    gerat = models.ForeignKey(Gerat, on_delete=models.CASCADE, related_name="anhaenge")
+    name = models.CharField("Name", max_length=200)
+    datei = models.FileField("Datei", upload_to="anhaenge/")
+    hochgeladen_am = models.DateTimeField("Hochgeladen am", default=timezone.now)
+    hochgeladen_von = models.ForeignKey(
+        "konten.Konto", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="+", verbose_name="Hochgeladen von",
+    )
+
+    class Meta:
+        verbose_name = "Anhang"
+        verbose_name_plural = "Anhänge"
+        ordering = ["-id"]
+
+    def __str__(self):
+        return self.name
+
 
 class Protokoll(models.Model):
     """Ein Ausgabeprotokoll (F-21, F-22, F-130, F-133).
@@ -554,6 +598,10 @@ class Protokoll(models.Model):
     # F-20, F-52: Alle Geräte des Protokolls mit Zustand, Zubehör und Bemerkung
     # aus dem Dialog. ``geraet`` bleibt das erste Gerät.
     positionen = models.JSONField("Geräte des Protokolls", default=list, blank=True)
+    # F-130: Texte und ihre Version aus den Einstellungen, Stand der Anlage des Protokolls.
+    texte = models.JSONField("Protokolltexte", default=dict, blank=True)
+    # F-139: Der Versand des fertigen PDF ist gescheitert, die IT sendet erneut.
+    pdf_versand_offen = models.BooleanField("Versand des PDF offen", default=False)
     weitere_geraete = models.ManyToManyField(
         Gerat, blank=True, related_name="weitere_protokolle", verbose_name="Weitere Geräte",
     )

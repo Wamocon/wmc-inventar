@@ -14,14 +14,15 @@
     {% csrf_token %}
     <div class="tbl-wrap" data-test="offboarding-geraete">
       <table data-test="liste" data-liste="offboarding-geraete">
-        <thead><tr><th>Wahl</th><th>Gerät</th><th>Status</th><th>Zustand bei Ausgabe</th><th>Zustand bei Rückgabe</th><th>Zubehör komplett</th><th>Bemerkung, Mängel</th><th>Danach</th><th></th></tr></thead>
+        <thead><tr>{% if user.ist_admin %}<th>Wahl</th>{% endif %}<th>Gerät</th><th>Status</th><th>Zustand bei Ausgabe</th>{% if user.ist_admin %}<th>Zustand bei Rückgabe</th><th>Zubehör komplett</th><th>Bemerkung, Mängel</th><th>Danach</th><th></th>{% endif %}</tr></thead>
         <tbody>
           {% for g in gerate %}
           <tr data-test="zeile" data-id="{{ g.inventarnummer }}" data-offboarding-geraet="1">
-            <td><input type="checkbox" name="auswahl" value="{{ g.inventarnummer }}" data-test="auswahl" aria-label="{{ g.inventarnummer }} wählen"></td>
+            {% if user.ist_admin %}<td><input type="checkbox" name="auswahl" value="{{ g.inventarnummer }}" data-test="auswahl" aria-label="{{ g.inventarnummer }} wählen"></td>{% endif %}
             <td><a class="inv" href="/geraete/{{ g.inventarnummer }}/" data-test="offboarding-inventarnummer">{{ g.inventarnummer }}</a> <span data-test="offboarding-modell">{{ g.geraetename|default:g.modell }}</span></td>
             <td data-test="offboarding-status">{{ g.status_anzeige }}</td>
             <td data-test="zustand-ausgabe">{{ g.zustand_damals|default:"–" }}</td>
+            {% if user.ist_admin %}
             <td><select name="zustand-{{ g.inventarnummer }}" aria-label="Zustand bei Rückgabe">
               {% for wert, text in zustaende %}<option value="{{ wert }}"{% if wert == g.zustand %} selected{% endif %}>{{ text }}</option>{% endfor %}
             </select></td>
@@ -29,6 +30,7 @@
             <td><input type="text" name="maengel-{{ g.inventarnummer }}" aria-label="Bemerkung, Mängel"></td>
             <td>{% if g.status == "in-reparatur" %}<span class="muted">bleibt in Reparatur</span>{% else %}<select name="ziel-{{ g.inventarnummer }}" aria-label="Danach"><option value="lager">ins Lager</option><option value="reparatur">in Reparatur</option></select>{% endif %}</td>
             <td>{% if user.ist_admin %}<a class="btn sm" href="/geraete/{{ g.inventarnummer }}/ausmustern/?grund=verloren" data-test="aktion-fehlt">Fehlt</a>{% endif %}</td>
+            {% endif %}
           </tr>
           {% endfor %}
         </tbody>

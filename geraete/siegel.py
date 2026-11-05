@@ -111,7 +111,7 @@ def siegel_anwenden(pdf_bytes: bytes):
         field_name="Signatur",
         md_algorithm="sha256",
         subfilter=SigSeedSubFilter.PADES,
-        reason="WMC Inventar Prüfprotokoll (F-138)",
+        reason="WMC Inventar Prüfprotokoll",
     )
 
     ausgang = io.BytesIO()

@@ -42,7 +42,7 @@ _KOPF = """
 <table class="briefkopf"><tr>
   <td class="links">
     {% if absenderzeile %}<div class="absender">{{ absenderzeile }}</div>{% endif %}
-    <div class="empfaenger">{{ anrede_zeile }}<br>{{ person.vorname }} {{ person.nachname }}{% if anschrift %}<br>{{ anschrift|linebreaksbr }}{% endif %}</div>
+    <div class="empfaenger">{% if anrede_zeile %}{{ anrede_zeile }}<br>{% endif %}{{ person.vorname }} {{ person.nachname }}{% if anschrift %}<br>{{ anschrift|linebreaksbr }}{% endif %}</div>
   </td>
   <td class="rechts">
     <table class="kopf-tabelle">
@@ -72,19 +72,21 @@ _UNTERSCHRIFT = """
 """
 
 _ANLAGEN = """
+{% if anhaenge %}<div class="anlagen"><h2>Anlagen</h2>{% endif %}
 {% for anhang in anhaenge %}
 <div class="anhang">
   {% if anhang.url %}<img src="{{ anhang.url }}" alt="{{ anhang.name }}">{% else %}<p class="hinweis">{{ anhang.name }}: Für dieses Bildformat gibt es keine Vorschau.</p>{% endif %}
   <div class="unterschrift-bild">{{ anhang.geraet_name|default:geraetename_kurz }} · {{ anlass }} · {{ protokoll.datum|date:"d.m.Y" }}</div>
 </div>
 {% endfor %}
+{% if anhaenge %}</div>{% endif %}
 """
 
 
 _HTML_AUSGABE = _KOPF + """
 <h1 class="titel">{{ titel }}</h1>
 <p>{{ anrede_satz }},</p>
-<p>hiermit bestätigen wir die Ausgabe der nachfolgend aufgeführten Hardware{% if not leihe %} und Zugangsmittel{% endif %} an Sie.</p>
+<p>hiermit bestätigen wir die Ausgabe der nachfolgend aufgeführten Hardware und Zugangsmittel an Sie.</p>
 
 <h2>1. Angaben zur Ausgabe</h2>
 <table class="daten">
@@ -186,7 +188,7 @@ _HTML_RUECKNAHME = _KOPF + """
     <td>{{ p.zustand_ausgabe|default:"–" }}</td>
     <td>{{ p.zustand_rueckgabe|default:"–" }}</td>
     <td>{{ p.zubehoer_text }}</td>
-    <td>{{ p.bemerkung|default:"keine Mängel" }}</td>
+    <td>{{ p.maengel_text|default:"keine Mängel" }}</td>
   </tr>
   {% endfor %}
   </tbody>
@@ -270,6 +272,7 @@ table.unterschrift .feld { width: 50%; padding: 0 10pt 0 0; vertical-align: bott
 table.unterschrift .datum { min-height: 14pt; font-size: 8.5pt; }
 table.unterschrift .zeile { border-bottom: 0.5pt solid #000; height: 4pt; }
 table.unterschrift .rolle { color: #333; font-size: 8pt; margin-top: 2pt; }
+.anlagen { page-break-before: always; }
 .anhang { margin: 8pt 0; page-break-inside: avoid; }
 .anhang img { max-width: 100%; max-height: 230mm; }
 .unterschrift-bild { font-size: 8pt; color: #333; margin-top: 2pt; }
@@ -303,6 +306,19 @@ def _absaetze(text: str, firmenname: str) -> list[str]:
     return [teil.strip() for teil in text.split("\n\n") if teil.strip()]
 
 
+def _maengel_der_position(p: dict) -> list[str]:
+    """Was an diesem Gerät festgestellt wurde (FRM-002, Abschnitte 2 und 4)."""
+    teile = []
+    if p.get("bemerkung"):
+        teile.append(p["bemerkung"])
+    if p.get("zustand_rueckgabe") is not None and p.get("zubehoer_komplett") is False:
+        teile.append("Zubehör nicht komplett")
+    ausgabe, rueckgabe = p.get("zustand_ausgabe"), p.get("zustand_rueckgabe")
+    if ausgabe and rueckgabe and int(rueckgabe) > int(ausgabe):
+        teile.append(f"Zustand schlechter als bei Ausgabe ({ausgabe} → {rueckgabe})")
+    return teile
+
+
 def _positionen(protokoll: Protokoll) -> list[dict]:
     """Die Geräte des Protokolls; alte Datensätze ohne Positionen zeigen ihr Gerät."""
     from .services import position_aus_gerat
@@ -315,6 +331,7 @@ def _positionen(protokoll: Protokoll) -> list[dict]:
             **p,
             "zubehoer_text": "–" if zubehoer is None else ("Ja" if zubehoer else "Nein"),
             "ausgabe_text": ", ".join(teile),
+            "maengel_text": ", ".join(_maengel_der_position(p)),
         })
     return ergebnis
 
@@ -372,8 +389,8 @@ def _anhaenge(protokoll: Protokoll) -> list[dict]:
 
 
 def _anrede(person) -> str:
-    """„h“ oder „f“; ältere Daten können das ausgeschriebene Wort tragen."""
-    return "f" if str(getattr(person, "anrede", "") or "").lower().startswith("f") else "h"
+    """„h“, „f“ oder leer; ältere Daten können das ausgeschriebene Wort tragen."""
+    return str(getattr(person, "anrede", "") or "").lower()[:1]
 
 
 def _bezug_rueckgabe(protokoll: Protokoll) -> tuple[list[str], str]:
@@ -403,10 +420,8 @@ def _maengel_liste(positionen: list[dict], offboarding: list[dict]) -> list[str]
     liste = []
     for p in positionen:
         name = p.get("geraetename") or p.get("bezeichnung", "")
-        if p.get("bemerkung"):
-            liste.append(f"{name}: {p['bemerkung']}")
-        if p.get("zubehoer_komplett") is False and not p.get("bemerkung"):
-            liste.append(f"{name}: Zubehör nicht komplett")
+        for mangel in _maengel_der_position(p):
+            liste.append(f"{name}: {mangel}")
     for punkt in offboarding:
         if punkt["status"] == "in_klaerung":
             zusatz = punkt["bemerkung"] if punkt["bemerkung"] != "in Klärung" else ""
@@ -427,6 +442,7 @@ def _render_inhalt(protokoll: Protokoll) -> str:
     """Das HTML des Protokolls aus dem aktuellen Stand (noch nicht eingefroren)."""
     firma = _firma()
     e = firma["einstellungen"]
+    texte = protokoll.texte or {}
     ausgabe = protokoll.art == Protokoll.ART_AUSGABE
     person = protokoll.person
     anrede = _anrede(person)
@@ -442,8 +458,11 @@ def _render_inhalt(protokoll: Protokoll) -> str:
         "protokoll": protokoll,
         "person": person,
         "bearbeiter": protokoll.bearbeiter,
-        "anrede_zeile": "Herrn" if anrede == "h" else "Frau",
-        "anrede_satz": f"Sehr geehrter Herr {person.nachname}" if anrede == "h" else f"Sehr geehrte Frau {person.nachname}",
+        "anrede_zeile": {"h": "Herrn", "f": "Frau"}.get(anrede, ""),
+        "anrede_satz": {
+            "h": f"Sehr geehrter Herr {person.nachname}",
+            "f": f"Sehr geehrte Frau {person.nachname}",
+        }.get(anrede, f"Guten Tag {person.vorname} {person.nachname}".strip()),
         "anschrift": protokoll.empfaenger_anschrift,
         "dokument": "WMC-IT-FRM-001" if ausgabe else "WMC-IT-FRM-002",
         "titel": _titel(protokoll),
@@ -459,9 +478,9 @@ def _render_inhalt(protokoll: Protokoll) -> str:
         "geraetename_kurz": erstes.get("geraetename") or erstes.get("bezeichnung", ""),
         "anlass": "Ausgabe" if ausgabe else "Rückgabe",
         "rolle_links": "Empfängers" if ausgabe else "Rückgebenden",
-        "nutzung": _absaetze(e.nutzungsbedingungen_ausgabe, name),
-        "erklaerung": _absaetze(e.erklaerungen_ausgabe if ausgabe else e.erklaerungen_ruecknahme, name),
-        "unterzeichnung": _absaetze(e.unterzeichnung_ausgabe if ausgabe else e.unterzeichnung_ruecknahme, name),
+        "nutzung": _absaetze(texte.get("nutzung", e.nutzungsbedingungen_ausgabe), name),
+        "erklaerung": _absaetze(texte.get("erklaerung", e.erklaerungen_ausgabe if ausgabe else e.erklaerungen_ruecknahme), name),
+        "unterzeichnung": _absaetze(texte.get("unterzeichnung", e.unterzeichnung_ausgabe if ausgabe else e.unterzeichnung_ruecknahme), name),
         **{k: firma[k] for k in ("firmenname", "absenderzeile", "telefon", "email_it", "logo")},
     }
     return Template(_HTML_AUSGABE if ausgabe else _HTML_RUECKNAHME).render(Context(kontext))
@@ -532,8 +551,7 @@ def _pruefprotokoll_seite(protokoll: Protokoll) -> str:
         zeilen.append("<p>Noch keine Signatur.</p>")
     return (
         '<div class="pruefprotokoll"><h1>Prüfprotokoll</h1>'
-        f"<p>Protokoll {e(protokoll.nr)}, {e(_titel(protokoll))}, "
-        f"{e(protokoll.person.vorname)} {e(protokoll.person.nachname)}.</p>"
+        f"<p>Protokoll {e(protokoll.nr)}, {e(_titel(protokoll))}.</p>"
         + "".join(zeilen)
         + '<p class="hinweis">Der Hashwert bezieht sich auf den Inhalt des Protokolls ohne diese Seite. '
         "Das Siegel (PAdES) macht jede spätere Änderung der Datei erkennbar.</p></div>"
@@ -588,12 +606,14 @@ def pdf_fertig_bauen(protokoll: Protokoll, *, versiegeln: bool | None = None) ->
     return versiegelt
 
 
-def dateiname_protokoll(protokoll: Protokoll) -> str:
+def dateiname_protokoll(protokoll: Protokoll, typ: str = "application/pdf") -> str:
     """F-139: ``WMC_<Ausgabeprotokoll oder Ruecknahmeprotokoll>_<Nachname>_<Vorname>_<TT.MM.JJJJ>.pdf``."""
     person = protokoll.person
     name = (person.nachname or "").replace(" ", "_")
     vorname = (person.vorname or "").replace(" ", "_")
     datum = protokoll.datum.strftime("%d.%m.%Y")
+    # Beim Papierweg kann der Scan auch ein Bild sein (F-22).
+    endung = {"image/jpeg": ".jpg", "image/png": ".png", "image/heic": ".heic"}.get(typ, ".pdf")
     if protokoll.art == Protokoll.ART_AUSGABE:
-        return f"WMC_Ausgabeprotokoll_{name}_{vorname}_{datum}.pdf"
-    return f"WMC_Ruecknahmeprotokoll_{name}_{vorname}_{datum}.pdf"
+        return f"WMC_Ausgabeprotokoll_{name}_{vorname}_{datum}{endung}"
+    return f"WMC_Ruecknahmeprotokoll_{name}_{vorname}_{datum}{endung}"

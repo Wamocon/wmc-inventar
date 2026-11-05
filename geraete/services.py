@@ -366,6 +366,24 @@ def position_aus_gerat(
     }
 
 
+def protokolltexte(art: str) -> dict:
+    """Die Texte aus den Einstellungen, die für ein neues Protokoll gelten (F-130)."""
+    e = Einstellungen.aktuelles()
+    if art == Protokoll.ART_RUECKNAHME:
+        return {
+            "nutzung": "",
+            "erklaerung": e.erklaerungen_ruecknahme,
+            "unterzeichnung": e.unterzeichnung_ruecknahme,
+            "version": f"{e.erklaerungen_ruecknahme_version} / {e.unterzeichnung_ruecknahme_version}",
+        }
+    return {
+        "nutzung": e.nutzungsbedingungen_ausgabe,
+        "erklaerung": e.erklaerungen_ausgabe,
+        "unterzeichnung": e.unterzeichnung_ausgabe,
+        "version": f"{e.nutzungsbedingungen_ausgabe_version} / {e.erklaerungen_ausgabe_version} / {e.unterzeichnung_ausgabe_version}",
+    }
+
+
 def _absenderzeile() -> str:
     from stammdaten.models import Einstellungen
     return Einstellungen.aktuelles().absenderzeile
@@ -415,6 +433,7 @@ def _protokoll_erstellen(
         ),
         absenderzeile=_absenderzeile(),
         positionen=positionen if positionen is not None else [position_aus_gerat(gerat)],
+        texte=protokolltexte(art),
         empfaenger_anschrift=str(person.anschrift).strip()
         if getattr(person, "anschrift", None)
         else "",
@@ -453,6 +472,12 @@ def ausmustern(
     if gerat.status == Gerat.STATUS_AUSGEMUSTERT:
         raise GeratFehler("Gerät ist bereits ausgemustert.")
     _ohne_ausgabe_entwurf(gerat)
+    reservierungen = list(Leihe.objects.filter(gerat=gerat, status=Leihe.STATUS_GENEHMIGT))
+    if reservierungen and grund not in AUSMUSTERUNG_VERLOREN:
+        raise GeratFehler(
+            f"Das Gerät ist für die Leihe {reservierungen[0].nr} reserviert. "
+            "Bitte zuerst die Reservierung aufheben."
+        )
     if not grund:
         raise GeratFehler("Grund der Ausmusterung muss angegeben werden.")
     if not datum:
@@ -482,6 +507,11 @@ def ausmustern(
         teile.append("Vorfall an Datenschutz bzw. Informationssicherheit gemeldet")
 
     _leihen_beenden(gerat)
+    # Verloren oder gestohlen: Die reservierte Leihe kann nicht stattfinden, die Person erfährt es.
+    for leihe in reservierungen:
+        leihe_ablehnen(leihe, f"Das Gerät wurde als {grund} gemeldet.", ausgefuehrt_von)
+    gerat.reserviert = False
+    gerat.reserviert_bis = None
     gerat.status = Gerat.STATUS_AUSGEMUSTERT
     gerat.person = None
     gerat.ort = None
@@ -527,6 +557,26 @@ def _nachweis_pruefen(datei) -> tuple:
     if endung is None:
         raise GeratFehler("Nachweis nicht erlaubt: PDF, JPG oder PNG bis 10 MB.")
     return f"nachweis-{jetzt_aware():%Y%m%d-%H%M%S}{endung}", ContentFile(roh)
+
+
+def anhang_hinzufuegen(gerat: Gerat, datei, ausgefuehrt_von: Konto | None = None):
+    """Kapitel 3.1: PDF, JPG oder PNG bis 10 MB am Gerät, mit Eintrag in der Historie."""
+    from .models import GeratAnhang
+
+    if gerat.status == Gerat.STATUS_AUSGEMUSTERT:
+        raise GeratFehler("Ausgemusterte Geräte sind nicht mehr änderbar.")
+    if datei is None:
+        raise GeratFehler("Bitte eine Datei wählen.")
+    name = (getattr(datei, "name", "") or "Anhang")[:200]
+    pfad, inhalt = _nachweis_pruefen(datei)
+    anhang = GeratAnhang(gerat=gerat, name=name, hochgeladen_am=jetzt_aware(), hochgeladen_von=ausgefuehrt_von)
+    anhang.datei.save(pfad.replace("nachweis-", "anhang-"), inhalt, save=False)
+    anhang.save()
+    Vorgang.objects.create(
+        gerat=gerat, typ=Vorgang.TYP_AENDERUNG, zeitpunkt=jetzt_aware(), erzeugt_von=ausgefuehrt_von,
+        notiz=f"Anhang hinzugefügt: {name}", abschliesst=True,
+    )
+    return anhang
 
 
 def standard_lager() -> Ort | None:
@@ -632,6 +682,7 @@ def geraete_zuruecknehmen(
         else:
             gerat.status = Gerat.STATUS_AUF_LAGER
             gerat.ort = eintrag.get("lagerort") or standard_lager()
+        in_reparatur = gerat.status == Gerat.STATUS_IN_REPARATUR
         gerat.person = None
         gerat.altbestand_ohne_protokoll = False
         teile = [f"Protokoll {protokoll.nr}"] if protokoll is not None else []
@@ -649,6 +700,16 @@ def geraete_zuruecknehmen(
             protokoll=protokoll,
             abschliesst=True,
         )
+        if in_reparatur and eintrag.get("ziel") == "reparatur":
+            # F-42: Die Reparatur läuft, Dienstleister und Vorgangsnummer trägt die IT nach.
+            Vorgang.objects.create(
+                gerat=gerat,
+                typ=Vorgang.TYP_REPARATUR,
+                zeitpunkt=jetzt_aware(),
+                erzeugt_von=ausgefuehrt_von,
+                reperatur_anleitung="Aus der Rückgabe. Dienstleister und Vorgangsnummer noch nicht erfasst.",
+                abschliesst=False,
+            )
         gerat.save()
     return protokoll
 
@@ -745,6 +806,8 @@ def gerat_umziehen(
     # Kapitel 4: Nur „In Benutzung“ kennt den Umzug; ins Lager führt die Rückgabe.
     if gerat.status != Gerat.STATUS_IN_BENUTZUNG:
         raise GeratFehler("Nur Geräte in Benutzung können umgezogen werden.")
+    if gerat.ort_id == ziel_ort.pk:
+        raise GeratFehler("Das Gerät steht schon an diesem Ort.")
     if ziel_ort.typ == Ort.TYP_LAGER:
         raise GeratFehler("Ziel eines Umzugs ist ein Arbeitsplatz oder Raum; ins Lager führt die Rückgabe.")
 
@@ -773,14 +836,19 @@ def gerat_in_reparatur_geschickt(
     vorgangsnummer: str,
     notiz: str,
     ausgefuehrt_von: Konto | None = None,
+    nachtragen: bool = False,
 ) -> Gerat:
     """Reparatur starten (F-42, M3).
 
-    Start mit Dienstleister, Vorgangsnummer und Notiz.
+    Start mit Dienstleister, Vorgangsnummer und Notiz. ``nachtragen``: Das Gerät kam
+    aus einer Rückgabe in Reparatur, die Angaben folgen jetzt (F-50).
     """
     if gerat.status == Gerat.STATUS_AUSGEMUSTERT:
         raise GeratFehler("Ausgemusterte Geräte können nicht repariert werden.")
-    if gerat.status not in (Gerat.STATUS_AUF_LAGER, Gerat.STATUS_IN_BENUTZUNG):
+    erlaubt = (Gerat.STATUS_AUF_LAGER, Gerat.STATUS_IN_BENUTZUNG)
+    if nachtragen:
+        erlaubt += (Gerat.STATUS_IN_REPARATUR,)
+    if gerat.status not in erlaubt:
         raise GeratFehler("Nur Geräte auf Lager oder in Benutzung können repariert werden.")
     _ohne_ausgabe_entwurf(gerat)
 
@@ -1475,6 +1543,8 @@ def _person_aus_ziel(person_ziel: str) -> Person | None:
     return Person.objects.create(
         vorname=" ".join(teile[:-1]) if len(teile) > 1 else teile[0],
         nachname=teile[-1] if len(teile) > 1 else "",
+        # Die Bestandsliste nennt keine Anrede; raten wäre im Protokoll falsch.
+        anrede="",
         aktiv=True,
     )
 
@@ -2012,6 +2082,11 @@ def leihe_mail_empfaenger(person: Person | None) -> str:
     if konten and not any(konto.aktiv for konto in konten):
         return ""
     return person.email or ""
+
+
+def bekommt_mail(person: Person | None, schalter: bool) -> bool:
+    """F-96: Geht eine Mail zur Leihe an diese Person hinaus?"""
+    return bool(schalter and leihe_mail_empfaenger(person))
 
 
 def _mail_anfrage_an_it(leihe: Leihe) -> None:
@@ -2700,13 +2775,13 @@ def protokoll_bearbeiter_signieren(
         return protokoll, False
 
     # F-135: Inhalt einfrieren; der Hash steht im Prüfprotokoll (F-137).
+    protokoll.bearbeiter = konto.bezeichnung()
     html, pdf_hash = pdf_modul.inhalt_einfrieren(protokoll)
     protokoll.html_eingefroren = html
     protokoll.bearbeiter_signiert_am = now
     protokoll.bearbeiter_signiert_von = konto
     protokoll.bearbeiter_ip = ip
     protokoll.pdf_hash_bearbeiter = pdf_hash
-    protokoll.bearbeiter = konto.bezeichnung()
 
     SignaturAufzeichnung.objects.create(
         protokoll=protokoll,
@@ -2773,7 +2848,9 @@ def _anrede_mail(person) -> str:
     anrede = str(getattr(person, "anrede", "") or "").lower()
     if anrede.startswith("f"):
         return f"Sehr geehrte Frau {person.nachname}"
-    return f"Sehr geehrter Herr {person.nachname}"
+    if anrede.startswith("h"):
+        return f"Sehr geehrter Herr {person.nachname}"
+    return f"Guten Tag {person.vorname} {person.nachname}".strip()
 
 
 def _mail_gegenzeichnen_link(
@@ -2781,6 +2858,7 @@ def _mail_gegenzeichnen_link(
     token: str,
     empfaenger: str,
     bearbeiter_name: str = "",
+    erzwingen: bool = False,
 ) -> bool:
     """Mail mit persönlichem Link (F-136), 14 Tage gültig. Liefert, ob der Versand klappte."""
     from django.core.mail import send_mail
@@ -2788,9 +2866,9 @@ def _mail_gegenzeichnen_link(
 
     if not empfaenger:
         return True
-    # F-96: Mailart abschaltbar.
-    if not Einstellungen.aktuelles().mail_protokoll_gesendet:
-        return True
+    # F-96: Mailart abschaltbar; „Link neu senden“ ist ein ausdrücklicher Auftrag und geht immer.
+    if not erzwingen and not Einstellungen.aktuelles().mail_protokoll_gesendet:
+        return False
     inhalt = (
         f"{_anrede_mail(protokoll.person)},\n\n"
         f"das Protokoll {protokoll.nr} steht zur Gegenzeichnung bereit.\n"
@@ -2841,6 +2919,7 @@ def protokoll_code_senden(
         f"Ihr Einmalcode für die Gegenzeichnung des Protokolls {protokoll.nr}:\n\n"
         f"Einmalcode: {code}\n\n"
         "Der Code ist 10 Minuten gültig, Sie haben höchstens 5 Versuche.\n\n"
+        f"Zur Gegenzeichnung: {_link_gegenzeichnung(protokoll.gegenzeichnung_token)}\n\n"
         f"Mit freundlichen Grüßen\n{mail_signatur()}"
     )
     if not _senden(f"Einmalcode für Protokoll {protokoll.nr}", inhalt, [empfaenger]):
@@ -2852,19 +2931,22 @@ def _ablage_mit_anhang(
     protokoll: Protokoll,
     pdf_bytes: bytes,
     dateiname: str,
-) -> None:
+    typ: str = "application/pdf",
+) -> bool:
     """F-139: Das fertige PDF geht an Person und Bearbeiter, je eine Ausfertigung.
 
-    Abgelegt ist es im Protokoll selbst (``pdf_siegel``), und von dort kommt es am
-    Gerät, an der Person und im Self-Service.
+    Abgelegt ist es im Protokoll selbst, und von dort kommt es am Gerät, an der Person
+    und im Self-Service. Liefert, ob alles hinausging; sonst sendet die IT erneut.
     """
+    gesendet = True
     person_email = protokoll.gegenzeichnung_empfaenger or protokoll.person.email or ""
     if person_email:
-        _mail_anhang(protokoll, pdf_bytes, dateiname, person_email)
+        gesendet &= _mail_anhang(protokoll, pdf_bytes, dateiname, person_email, "/meine-geraete/", typ)
     bearbeiter = protokoll.bearbeiter_signiert_von or protokoll.erzeugt_von
     bearbeiter_email = bearbeiter.email if bearbeiter is not None else ""
     if bearbeiter_email and bearbeiter_email != person_email:
-        _mail_anhang(protokoll, pdf_bytes, dateiname, bearbeiter_email)
+        gesendet &= _mail_anhang(protokoll, pdf_bytes, dateiname, bearbeiter_email, f"/protokolle/{protokoll.nr}/", typ)
+    return gesendet
 
 
 def _mail_anhang(
@@ -2872,27 +2954,52 @@ def _mail_anhang(
     pdf_bytes: bytes,
     dateiname: str,
     empfaenger: str,
-) -> None:
-    """F-139: Mail mit dem versiegelten PDF als Anhang an einen Empfänger."""
+    pfad: str = "/meine-geraete/",
+    typ: str = "application/pdf",
+) -> bool:
+    """F-139: Mail mit dem fertigen Protokoll als Anhang an einen Empfänger."""
     from django.core.mail import EmailMessage
-    from konten.mail import mail_absender, mail_signatur
+    from smtplib import SMTPException
 
     # F-96: Mailart abschaltbar.
     if not Einstellungen.aktuelles().mail_protokoll_unterzeichnet:
-        return
+        return True
     msg = EmailMessage(
         subject=f"Protokoll {protokoll.nr}: abgeschlossen",
         body=(
-            f"Das Protokoll {protokoll.nr} ist von beiden Seiten signiert.\n\n"
-            f"Anbei erhalten Sie das versiegelte PDF ({dateiname}).\n\n"
+            f"Das Protokoll {protokoll.nr} ist von beiden Seiten unterschrieben.\n\n"
+            f"Anbei erhalten Sie das Protokoll ({dateiname}).\n\n"
+            f"Im Tool: {link_ins_tool(pfad)}\n\n"
             f"{mail_signatur()}"
         ),
         from_email=mail_absender(),
         to=[empfaenger],
     )
-    msg.attach(dateiname, pdf_bytes, "application/pdf")
-    # Das Protokoll ist abgeschlossen und liegt im Tool, auch wenn diese Mail nicht ankommt.
-    msg.send(fail_silently=True)
+    msg.attach(dateiname, pdf_bytes, typ)
+    try:
+        msg.send()
+    except (SMTPException, OSError):
+        return False
+    return True
+
+
+def protokoll_pdf_senden(protokoll: Protokoll) -> bool:
+    """F-139: Das fertige Protokoll erneut senden, nachdem der Versand gescheitert ist."""
+    from . import pdf as pdf_modul
+    from .protokoll import _typ_am_inhalt
+
+    if protokoll.stand != Protokoll.STAND_ABGESCHLOSSEN:
+        raise GeratFehler("Das Protokoll ist noch nicht abgeschlossen.")
+    if protokoll.scan_datei:
+        with protokoll.scan_datei.open("rb") as handle:
+            roh = handle.read()
+        typ = _typ_am_inhalt(roh) or "application/pdf"
+    else:
+        roh, typ = bytes(protokoll.pdf_siegel), "application/pdf"
+    gesendet = _ablage_mit_anhang(protokoll, roh, pdf_modul.dateiname_protokoll(protokoll, typ), typ)
+    protokoll.pdf_versand_offen = not gesendet
+    protokoll.save(update_fields=["pdf_versand_offen"])
+    return gesendet
 
 
 @transaction.atomic
@@ -2926,6 +3033,7 @@ def protokoll_link_neu_senden(
     gesendet = _mail_gegenzeichnen_link(
         protokoll, protokoll.gegenzeichnung_token, empfaenger,
         bearbeiter_name=bearbeiter.bezeichnung() if bearbeiter is not None else "",
+        erzwingen=True,
     )
     if not gesendet:
         return protokoll, False, "Der Link ist neu, die Mail ließ sich aber nicht senden."
@@ -3012,8 +3120,8 @@ def protokoll_gegenzeichnen(
     dateiname = pdf_modul.dateiname_protokoll(protokoll)
     protokoll.pdf_siegel = pdf_bytes
     protokoll.pdf_dateiname = dateiname
+    protokoll.pdf_versand_offen = not _ablage_mit_anhang(protokoll, pdf_bytes, dateiname)
     protokoll.save()
-    _ablage_mit_anhang(protokoll, pdf_bytes, dateiname)
     return protokoll, True, "Gegenzeichnung abgeschlossen."
 
 
@@ -3050,6 +3158,7 @@ def protokoll_korrigieren(
         checkliste_bemerkung=dict(protokoll.checkliste_bemerkung or {}),
         offboarding=dict(protokoll.offboarding or {}),
         positionen=list(protokoll.positionen or []),
+        texte=dict(protokoll.texte or {}),
         anhaenge=list(protokoll.anhaenge or []),
         rueckgabe_zu_protokoll=protokoll.rueckgabe_zu_protokoll,
         ist_korrektur=True,

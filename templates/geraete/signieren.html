@@ -14,13 +14,13 @@
 </div>
 
 {% if meldung %}
-<div class="meldung meldung-erfolg" data-test="signieren-meldung">
+<div class="meldung success" data-test="signieren-meldung">
     {{ meldung }}
 </div>
 {% endif %}
 
 {% if fehler %}
-<div class="meldung meldung-fehler" data-test="signieren-fehler" role="alert">
+<div class="meldung error" data-test="signieren-fehler" role="alert">
     {{ fehler }}
 </div>
 {% endif %}
@@ -32,7 +32,7 @@
     </p>
     <p class="muted">
         Bitte sehen Sie das Protokoll an und geben Sie unten den Einmalcode ein,
-        der Ihnen per Mail zugesandt wurde.
+        den Sie hier per Mail anfordern.
     </p>
 </section>
 

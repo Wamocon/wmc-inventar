@@ -15,6 +15,8 @@ RUN apt-get update && \
         libpangoft2-1.0-0 \
         libharfbuzz0b \
         libffi8 \
+        fonts-dejavu-core \
+        postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /srv/inventar

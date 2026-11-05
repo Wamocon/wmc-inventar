@@ -6,7 +6,7 @@
 .schritt{display:flex;align-items:center;gap:8px;font-weight:500;color:var(--fg-2)}
 .schritt b{font-family:var(--font-cond);font-stretch:var(--narrow);font-size:20px;font-weight:800;color:var(--fg-3);font-variant-numeric:tabular-nums}
 .schritt[aria-current="step"]{color:var(--fg);font-weight:700}
-.schritt[aria-current="step"] b{color:var(--signal)}
+.schritt[aria-current="step"] b{color:var(--red)}
 .schritt.fertig b{color:var(--ok)}
 .import-felder{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,360px));gap:14px 20px;margin-top:12px}
 .import-feld{max-width:420px;margin:14px 0 24px}

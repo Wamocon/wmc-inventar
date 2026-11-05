@@ -26,7 +26,7 @@ from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_POST
 
 from konten.zeit import jetzt_wie_im_entwicklungsmodus
-from stammdaten.models import Kategorie, Ort, Person
+from stammdaten.models import Einstellungen, Kategorie, Ort, Person
 
 from . import services
 from .forms import (
@@ -338,14 +338,22 @@ def detail(request, inventarnummer: str):
             # F-72, Kapitel 6: Etiketten sind ein Bildschirm des Admins, der Leser ändert nichts.
             "kann_etikett_sehen": request.user.ist_admin,
             "protokolle": gerat.alle_protokolle(),
-            "reparatur_offen": gerat.vorgaenge.filter(typ=Vorgang.TYP_REPARATUR, abschliesst=False).order_by("-id").first()
-            if gerat.status == Gerat.STATUS_IN_REPARATUR else None,
+            "reparatur_offen": _laufende_reparatur(gerat),
             "ausmusterung": gerat.vorgaenge.filter(typ=Vorgang.TYP_AUSMUSTERUNG).order_by("-id").first()
             if gerat.status == Gerat.STATUS_AUSGEMUSTERT else None,
             "loeschung_arten": services.LOESCHUNG_ARTEN,
+            "anhaenge": gerat.anhaenge.select_related("hochgeladen_von").order_by("-id"),
             "platz_im_plan": _platz_im_plan(gerat),
         },
     )
+
+
+def _laufende_reparatur(gerat: Gerat) -> Vorgang | None:
+    """Der letzte Reparatur-Vorgang, wenn er die laufende Reparatur ist (F-42)."""
+    if gerat.status != Gerat.STATUS_IN_REPARATUR:
+        return None
+    letzter = gerat.vorgaenge.filter(typ=Vorgang.TYP_REPARATUR).order_by("-id").first()
+    return letzter if letzter is not None and not letzter.abschliesst else None
 
 
 def _inventur(request, gerat: Gerat) -> dict | None:
@@ -1209,6 +1217,7 @@ def reparatur_start(request, inventarnummer: str):
                     vorgangsnummer=form.cleaned_data.get("vorgangsnummer"),
                     notiz=form.cleaned_data.get("notiz", ""),
                     ausgefuehrt_von=request.user,
+                    nachtragen=gerat.status == Gerat.STATUS_IN_REPARATUR,
                 )
             except services.GeratFehler as fehler:
                 meldung_error(request, str(fehler))
@@ -1227,7 +1236,7 @@ def reparatur_fertig(request, inventarnummer: str):
         raise PermissionDenied("Zugriff verweigert: Vorgänge macht die IT.")
     gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
     if request.method == "POST":
-        form = GeratReparaturFertigForm(request.POST)
+        form = GeratReparaturFertigForm(request.POST, gerat=gerat)
         if form.is_valid():
             try:
                 services.gerat_reparatur_fertig(
@@ -1245,7 +1254,7 @@ def reparatur_fertig(request, inventarnummer: str):
             meldung_success(request, "Reparatur abgeschlossen.")
             return redirect("/geraete/" + gerat.inventarnummer + "/")
     else:
-        form = GeratReparaturFertigForm()
+        form = GeratReparaturFertigForm(gerat=gerat)
     return render(request, "geraete/reparatur_fertig.html", {"gerat": gerat, "form": form})
 
 
@@ -1278,6 +1287,38 @@ def ausmustern(request, inventarnummer: str):
     else:
         form = GeratAusmusterungForm(gerat=gerat, initial={"grund": request.GET.get("grund", "")})
     return render(request, "geraete/ausmusterung.html", {"gerat": gerat, "form": form})
+
+
+@login_required
+def anhang_hochladen(request, inventarnummer: str):
+    """Dialog „Anhang“ (Kapitel 3.1, Kapitel 6, Testschnittstelle 4)."""
+    if not _darf_ändern(request.user):
+        raise PermissionDenied("Zugriff verweigert: Vorgänge macht die IT.")
+    gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
+    if request.method == "POST":
+        try:
+            services.anhang_hinzufuegen(gerat, request.FILES.get("datei"), request.user)
+        except services.GeratFehler as fehler:
+            meldung_error(request, str(fehler))
+            return redirect(f"/geraete/{gerat.inventarnummer}/anhang/")
+        meldung_success(request, "Anhang gespeichert.")
+        return redirect(f"/geraete/{gerat.inventarnummer}/")
+    return render(request, "geraete/anhang.html", {"gerat": gerat})
+
+
+@login_required
+def anhang_zeigen(request, inventarnummer: str, anhang_id: int):
+    """Anhang öffnen, für Admin und Leser."""
+    if not _darf_sehen(request.user):
+        raise PermissionDenied("Zugriff verweigert.")
+    from .models import GeratAnhang
+    from .protokoll import _typ_am_inhalt
+    anhang = get_object_or_404(GeratAnhang, pk=anhang_id, gerat__inventarnummer=inventarnummer)
+    with anhang.datei.open("rb") as handle:
+        roh = handle.read()
+    antwort = HttpResponse(roh, content_type=_typ_am_inhalt(roh) or "application/octet-stream")
+    antwort["Content-Disposition"] = f'attachment; filename="{anhang.datei.name.rsplit("/", 1)[-1]}"'
+    return antwort
 
 
 @login_required
@@ -1930,8 +1971,11 @@ def leihe_genehmigen_zeige(request, leih_id):
             )
             meldung_success(
                 request,
-                f"Genehmigt und {leihe.gerat.inventarnummer} reserviert. "
-                f"{leihe.person.voller_name()} wird per E-Mail informiert.",
+                f"Genehmigt und {leihe.gerat.inventarnummer} reserviert. " + (
+                    f"{leihe.person.voller_name()} wird per E-Mail informiert."
+                    if services.bekommt_mail(leihe.person, Einstellungen.aktuelles().mail_verleih_genehmigung)
+                    else "Eine Mail geht nicht hinaus."
+                ),
             )
             return redirect("/verleih/")
         except GeratFehler as fehler_vorgang:
@@ -2098,7 +2142,11 @@ def leihe_ablehnen_zeige(request, leih_id):
             )
             meldung_success(
                 request,
-                f"Abgelehnt. {leihe.person.voller_name()} wird per E-Mail informiert.",
+                "Abgelehnt. " + (
+                    f"{leihe.person.voller_name()} wird per E-Mail informiert."
+                    if services.bekommt_mail(leihe.person, Einstellungen.aktuelles().mail_verleih_ablehnung)
+                    else "Eine Mail geht nicht hinaus."
+                ),
             )
             return redirect("/verleih/")
         except GeratFehler as fehler_vorgang:
@@ -2236,8 +2284,9 @@ def protokoll_pdf(request, protokoll_nr):
         from .protokoll import _typ_am_inhalt
         with protokoll.scan_datei.open("rb") as handle:
             roh = handle.read()
-        antwort = HttpResponse(roh, content_type=_typ_am_inhalt(roh) or "application/octet-stream")
-        antwort["Content-Disposition"] = f'attachment; filename="{protokoll.scan_datei.name.rsplit("/", 1)[-1]}"'
+        typ = _typ_am_inhalt(roh) or "application/octet-stream"
+        antwort = HttpResponse(roh, content_type=typ)
+        antwort["Content-Disposition"] = f'attachment; filename="{protokoll_pdf_modul.dateiname_protokoll(protokoll, typ)}"'
         return antwort
     try:
         # F-139: Das versiegelte PDF wird nicht neu gebaut, sonst wäre es ein anderes.
@@ -2402,6 +2451,10 @@ def protokoll_abbrechen(request, protokoll_nr: str):
     if protokoll.stand != Protokoll.STAND_BEARBEITER_OFFEN:
         meldung_error(request, "Nur Protokolle auf 'bearbeiter-offen' können abgebrochen werden.")
         return redirect(f"/protokolle/{protokoll_nr}/")
+    # F-141: Die Geräte sind schon zurück, ein Abschluss ohne Gegenzeichnung darf es nicht geben.
+    if protokoll.art == Protokoll.ART_RUECKNAHME:
+        meldung_error(request, "Eine Rücknahme lässt sich nicht verwerfen. Die Geräte sind schon zurück.")
+        return redirect(f"/protokolle/{protokoll_nr}/")
     # Eine Korrektur verwerfen hieße, das ersetzte Original ohne Nachfolger zu lassen.
     if protokoll.ist_korrektur:
         meldung_error(request, "Eine neue Fassung lässt sich nicht verwerfen, nur signieren.")
@@ -2461,7 +2514,7 @@ def protokoll_signieren(request, protokoll_nr: str):
     elif not protokoll.gegenzeichnung_empfaenger:
         meldung_success(request, "Protokoll signiert. Für diese Person ist keine E-Mail hinterlegt: bitte eine Adresse eintragen oder vor Ort am Tablet gegenzeichnen.")
     elif getattr(protokoll, "mail_ging_nicht", False):
-        meldung_error(request, "Protokoll signiert, die Mail ließ sich aber nicht senden. Bitte den Link neu senden oder vor Ort am Tablet gegenzeichnen.")
+        meldung_error(request, "Protokoll signiert, aber es ging keine Mail hinaus. Bitte den Link neu senden oder vor Ort am Tablet gegenzeichnen.")
     else:
         meldung_success(request, "Protokoll signiert. Mail mit Link gesendet.")
     return redirect(f"/protokolle/{protokoll_nr}/")
@@ -2486,6 +2539,24 @@ def protokoll_code_senden(request, protokoll_nr: str):
         meldung_success(request, meldung)
     else:
         meldung_error(request, meldung or "Code konnte nicht gesendet werden.")
+    return redirect(f"/protokolle/{protokoll_nr}/")
+
+
+@require_POST
+@login_required
+def protokoll_pdf_senden(request, protokoll_nr: str):
+    """F-139: POST /protokolle/<Nummer>/pdf-senden/, wenn der Versand gescheitert ist."""
+    protokoll = get_object_or_404(Protokoll, nr=protokoll_nr)
+    _protokoll_schreibrecht(request)
+    try:
+        gesendet = services.protokoll_pdf_senden(protokoll)
+    except services.GeratFehler as fehler:
+        meldung_error(request, str(fehler))
+    else:
+        if gesendet:
+            meldung_success(request, "Das Protokoll ist versendet.")
+        else:
+            meldung_error(request, "Die Mail ließ sich wieder nicht senden. Bitte den Mailserver prüfen.")
     return redirect(f"/protokolle/{protokoll_nr}/")
 
 
@@ -2565,7 +2636,7 @@ def signieren_link(request, token: str):
         if protokoll_2 is None:
             return _signieren_hinweis(request, "Unbekannter Link", "Dieser Link ist ungültig.", 404)
         if erfolg:
-            return _signieren_hinweis(request, "Gegenzeichnung abgeschlossen", f"Vielen Dank. Protokoll {protokoll_2.nr} ist signiert, das versiegelte PDF kommt per Mail.")
+            return _signieren_hinweis(request, "Gegenzeichnung abgeschlossen", f"Vielen Dank. Protokoll {protokoll_2.nr} ist signiert. " + ("Die IT sendet Ihnen das versiegelte PDF zu." if protokoll_2.pdf_versand_offen else "Das versiegelte PDF kommt per Mail."))
         return render(
             request, "geraete/signieren.html",
             {"protokoll": protokoll_2, "token": token, "fehler": meldung or "Code ungültig."}, status=400,

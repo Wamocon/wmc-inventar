@@ -27,6 +27,8 @@ urlpatterns = [
     path("<slug:inventarnummer>/reparatur/fertig/", views.reparatur_fertig, name="reparatur-fertig"),
     path("<slug:inventarnummer>/ausmustern/", views.ausmustern, name="ausmustern"),
     path("<slug:inventarnummer>/nachweis/<int:vorgang_id>/", views.nachweis_zeigen, name="nachweis"),
+    path("<slug:inventarnummer>/anhang/", views.anhang_hochladen, name="anhang"),
+    path("<slug:inventarnummer>/anhang/<int:anhang_id>/", views.anhang_zeigen, name="anhang-zeigen"),
     path("<slug:inventarnummer>/loeschen/", views.loeschen_zeigen, name="loeschen-zeigen"),
     path("<slug:inventarnummer>/loeschen/bestaetigen/", views.loeschen, name="loeschen"),
     # QR-Code und Etiketten (F-12, F-70 bis F-73, F-89)

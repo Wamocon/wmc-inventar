@@ -43,6 +43,7 @@
   {% elif gerat.status == "in-reparatur" %}
   <div class="actions" data-test="lebenszyklus">
     <a href="/geraete/{{ gerat.inventarnummer }}/reparatur/fertig/" class="btn primary" data-test="aktion-reparatur-abschliessen">Reparatur abschließen</a>
+    <a href="/geraete/{{ gerat.inventarnummer }}/reparatur/start/" class="btn" data-test="aktion-reparatur-angaben">Angaben nachtragen</a>
     <a href="/geraete/{{ gerat.inventarnummer }}/ausmustern/" class="btn" data-test="aktion-ausmustern">Ausmustern</a>
   </div>
   {% endif %}
@@ -52,6 +53,7 @@
     <a class="btn" href="/geraete/neu/?vorlage={{ gerat.inventarnummer }}" data-test="aktion-vorlage">Als Vorlage kopieren</a>
     <a class="btn schnell" href="/geraete/{{ gerat.inventarnummer }}/notiz/" data-test="aktion-notiz">Notiz</a>
   {% endif %}
+  {% if ist_admin and gerat.status != "ausgemustert" %}<a class="btn" href="/geraete/{{ gerat.inventarnummer }}/anhang/" data-test="aktion-anhang">Anhang</a>{% endif %}
   {% if kann_etikett_sehen %}<a class="btn" href="/geraete/{{ gerat.inventarnummer }}/etikett/" data-test="aktion-etikett">Etikett</a>{% endif %}
   {% if platz_im_plan %}<a class="btn" href="/arbeitsplaetze/?hervorheben={{ platz_im_plan.kennung|urlencode }}" data-test="aktion-im-raumplan">Im Raumplan zeigen</a>{% endif %}
   {% if kann_loeschen %}<a class="btn" href="/geraete/{{ gerat.inventarnummer }}/loeschen/" data-test="aktion-loeschen">Löschen</a>{% endif %}
@@ -152,7 +154,7 @@
 <section class="card">
   <div class="card-head"><h2>Verbleib</h2></div>
   <dl class="kv">
-    <dt>Verbleib</dt><dd data-test="verbleib">{% if gerat.person %}Bei {{ gerat.person.voller_name }}{% elif gerat.ort.typ == "lager" %}Lager {{ gerat.ort.kennung }}{% elif gerat.ort %}An {{ gerat.ort.kennung }}{% elif gerat.status == "ausgemustert" %}Ausgemustert{% else %}Lager{% endif %}</dd>
+    <dt>Verbleib</dt><dd data-test="verbleib">{% if gerat.person %}Bei {{ gerat.person.voller_name }}{% elif gerat.ort.typ == "lager" %}Lager {{ gerat.ort.kennung }}{% elif gerat.ort %}An {{ gerat.ort.kennung }}{% elif gerat.status == "ausgemustert" %}Ausgemustert{% elif gerat.status == "in-reparatur" %}In Reparatur{% else %}Lager{% endif %}</dd>
     {% if gerat.person %}<dt>Person</dt><dd>{{ gerat.person.voller_name }}</dd>{% endif %}
     {% if gerat.ort %}<dt>Ort</dt><dd>{{ gerat.ort.kennung }}</dd>{% endif %}
   </dl>
@@ -192,11 +194,11 @@
     <dt>Gerätename</dt><dd data-test="geraetename">{{ gerat.geraetename|default:"–" }}</dd>
     <dt>Standardzubehör</dt><dd data-test="zubehoer">{{ gerat.standardzuehoer|default:"–" }}</dd>
     <dt>Technische Daten</dt><dd data-test="technische-daten">{{ gerat.technische_daten|default:"–" }}</dd>
-    <dt>Kaufdatum</dt><dd data-test="kaufdatum">{{ gerat.kaufdatum|date:"d.m.Y"|default:"–" }}</dd>
+    <dt>Kaufdatum</dt><dd data-test="kaufdatum">{% if gerat.kaufdatum %}{{ gerat.kaufdatum|date:"d.m.Y" }}{% elif gerat.kaufdatum_nicht_ermittelbar %}nicht ermittelbar{% else %}–{% endif %}</dd>
     <dt>Kaufpreis netto</dt><dd data-test="kaufpreis">{% if gerat.kaufpreis_netto is not None %}{{ gerat.kaufpreis_netto|betraegeuro }}{% else %}–{% endif %}</dd>
     <dt>Lieferant</dt><dd data-test="lieferant">{{ gerat.lieferant|default:"–" }}</dd>
     <dt>Rechnungsnummer</dt><dd data-test="rechnung">{{ gerat.rechnungsnummer|default:"–" }}</dd>
-    <dt>Garantie bis</dt><dd data-test="garantie">{{ gerat.garantie_bis|date:"d.m.Y"|default:"–" }}</dd>
+    <dt>Garantie bis</dt><dd data-test="garantie">{% if gerat.garantie_bis %}{{ gerat.garantie_bis|date:"d.m.Y" }}{% elif gerat.garantie_nicht_ermittelbar %}nicht ermittelbar{% else %}–{% endif %}</dd>
     <dt>Notiz</dt><dd data-test="notiz">{{ gerat.notiz|default:"–" }}</dd>
   </dl>
 </section>
@@ -205,7 +207,7 @@
   <div class="card-head"><h2>Prüfung</h2></div>
   <div class="card-text">
   {% if gerat.zuletzt_geprueft_am %}
-    <p>Zuletzt geprüft: {{ gerat.zuletzt_geprueft_am|date:"d.m.Y H:i" }}{% if gerat.zuletzt_geprueft_von %} · von {{ gerat.zuletzt_geprueft_von.name }}{% endif %}</p>
+    <p>Zuletzt geprüft: {{ gerat.zuletzt_geprueft_am|date:"d.m.Y H:i" }}{% if gerat.zuletzt_geprueft_von %} · von {{ gerat.zuletzt_geprueft_von.bezeichnung }}{% endif %}</p>
   {% else %}
     <p class="muted">Noch nicht geprüft.</p>
   {% endif %}
@@ -255,6 +257,19 @@
 </section>
 {% endif %}
 
+<section class="card" data-test="anhaenge">
+  <div class="card-head"><h2>Anhänge</h2><span class="count">{{ anhaenge|length }}</span></div>
+  {% if anhaenge %}
+  <ul class="worklist">
+    {% for a in anhaenge %}
+    <li data-test="anhang" data-id="{{ a.pk }}"><span class="what"><a href="/geraete/{{ gerat.inventarnummer }}/anhang/{{ a.pk }}/" data-test="anhang-link">{{ a.name }}</a></span><span class="muted small">{{ a.hochgeladen_am|date:"d.m.Y H:i" }}{% if a.hochgeladen_von %} · {{ a.hochgeladen_von.bezeichnung }}{% endif %}</span></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="leer-text">Keine Anhänge.</p>
+  {% endif %}
+</section>
+
 <section class="card">
   <div class="card-head"><h2>Protokolle</h2></div>
   {% if protokolle %}
@@ -281,7 +296,8 @@
     <li>
       <span class="t" data-test="vorgang" data-typ="{{ v.get_typ_display }}"{% if v.get_typ_display == "Änderung" %} data-feld="{{ v.aenderung_feld }}" data-alt="{{ v.aenderung_alter_wert }}" data-neu="{{ v.aenderung_neuer_wert }}"{% endif %}>{{ v.get_typ_display }}</span>
       <span class="d" data-test="zeitpunkt">{{ v.zeitpunkt|date:"d.m.Y H:i" }}</span>{% if v.erzeugt_von %}<span class="d" data-test="erzeugt-von">{{ v.erzeugt_von.bezeichnung }}</span>{% endif %}
-      {% if v.get_typ_display == "Änderung" %}<p data-test="aenderung-detail">{{ v.aenderung_feld }}: {{ v.aenderung_alter_wert|default:"(leer)" }} → {{ v.aenderung_neuer_wert|default:"(leer)" }}</p>{% endif %}
+      {% if v.aenderung_feld %}<p data-test="aenderung-detail">{{ v.aenderung_anzeige }}</p>{% endif %}
+      {% if v.reparatur_kosten is not None or v.reparatur_beleg %}<p data-test="reparatur-abschluss">{% if v.reparatur_kosten is not None %}Kosten: {{ v.reparatur_kosten|betraegeuro }}{% endif %}{% if v.reparatur_kosten is not None and v.reparatur_beleg %}, {% endif %}{% if v.reparatur_beleg %}Beleg: {{ v.reparatur_beleg }}{% endif %}</p>{% endif %}
       {% for zeile in v.wechsel_anzeige %}<p data-test="wechsel">{{ zeile }}</p>{% endfor %}
       {% if v.reperatur_anleitung %}<p data-test="reparatur-detail">{{ v.reperatur_anleitung }}</p>{% endif %}
       {% if v.ausmusterung_grund %}<p data-test="ausmusterung-detail">Grund: {{ v.ausmusterung_grund }}, Verbleib: {{ v.ausmusterung_disposition|default:"–" }}</p>{% endif %}

@@ -170,11 +170,11 @@ def offboarding_beantworten(
             continue  # un beantwortete Punkte bleiben un beantwortet
         datum = (werte or {}).get(f"{schluessel}.datum") or (
             heute.strftime("%d.%m.%Y")
-            if status == "erledigt"
+            if status in ("erledigt", "in_klaerung")
             else ""
         )
         kuerzel = (werte or {}).get(f"{schluessel}.kuerzel") or (
-            bearbeiter_kuerzel if status == "erledigt" else ""
+            bearbeiter_kuerzel if status in ("erledigt", "in_klaerung") else ""
         )
         bemerkung = (werte or {}).get(f"{schluessel}.bemerkung") or ""
         bereinigt[schluessel] = {
@@ -357,8 +357,14 @@ def scan_hochladen(
     protokoll.scan_am = jetzt_aware()
     protokoll.scan_von = ausgefuehrt_von
     protokoll.stand = Protokoll.STAND_ABGESCHLOSSEN
+    # F-139: Auch der Scan geht an beide Seiten, unter dem vorgesehenen Namen.
+    from . import pdf as pdf_modul
+    from .services import _ablage_mit_anhang
+    protokoll.pdf_versand_offen = not _ablage_mit_anhang(
+        protokoll, roh, pdf_modul.dateiname_protokoll(protokoll, typ), typ,
+    )
     protokoll.save(
-        update_fields=["scan_datei", "scan_am", "scan_von", "stand"]
+        update_fields=["scan_datei", "scan_am", "scan_von", "stand", "pdf_versand_offen"]
     )
     return protokoll
 
@@ -380,7 +386,7 @@ def protokoll_anlegen(
     das Ausgabeprotokoll. Stand beginnt immer „scan-offen" (F-22).
     Nummer UP-JJJJ-NNNN (F-131).
     """
-    from .services import _absenderzeile, _naechste_protokollnummer, position_aus_gerat
+    from .services import _absenderzeile, _naechste_protokollnummer, position_aus_gerat, protokolltexte
 
     now = datum or jetzt_aware()
     if art == Protokoll.ART_RUECKNAHME:
@@ -406,6 +412,7 @@ def protokoll_anlegen(
         formularnummer=formular,
         absenderzeile=_absenderzeile(),
         positionen=[position_aus_gerat(gerat)],
+        texte=protokolltexte(art),
         empfaenger_anschrift=empfaenger,
         bearbeiter=bearbeiter_name,
         checkliste=checkliste or {},

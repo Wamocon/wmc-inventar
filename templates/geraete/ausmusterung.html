@@ -17,6 +17,7 @@
       <div class="field"><label for="id_grund">Grund</label>{{ form.grund }}{% if form.grund.errors %}<div class="meldung error">{% for e in form.grund.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
       <div class="field"><label for="id_datum">Datum</label>{{ form.datum }}{% if form.datum.errors %}<div class="meldung error">{% for e in form.datum.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
       <div class="field full"><label for="id_disposition">Verbleib</label>{{ form.disposition }}{% if form.disposition.errors %}<div class="meldung error">{% for e in form.disposition.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+      {% if form.datentraeger %}
       <div class="field full"><label>Datenlöschung</label>
         {% for radio in form.loeschung_art %}
           <label class="check">{{ radio.tag }} {{ radio.choice_label }}</label>
@@ -25,6 +26,7 @@
       </div>
       <div class="field"><label for="id_loeschung_nachweis">Zertifikats- oder Protokollnummer</label>{{ form.loeschung_nachweis }}{% if form.loeschung_nachweis.errors %}<div class="meldung error">{% for e in form.loeschung_nachweis.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
       <div class="field"><label for="id_loeschung_datei">Nachweis (Datei hochladen)</label>{{ form.loeschung_datei }}{% if form.loeschung_datei.errors %}<div class="meldung error">{% for e in form.loeschung_datei.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+      {% endif %}
       <div class="field"><label class="check">{{ form.bestaetigt_gemeldt }} Der Vorfall ist an Datenschutz bzw. Informationssicherheit gemeldet.</label>{% if form.bestaetigt_gemeldt.errors %}<div class="meldung error">{% for e in form.bestaetigt_gemeldt.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
     </div>
     <p class="muted small">Ausgemusterte Geräte bleiben im Archiv lesbar, lassen sich aber nicht mehr ändern.</p>

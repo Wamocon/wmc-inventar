@@ -17,7 +17,7 @@
   <dl class="kv">
     <dt>Person</dt><dd>{{ person.vorname }} {{ person.nachname }}</dd>
     <dt>Bearbeiter</dt><dd>{{ protokoll.bearbeiter|default:"–" }}</dd>
-    <dt>Formular</dt><dd>WMC-IT-{{ protokoll.formularnummer }}, Version {{ protokoll.fassung }}</dd>
+    <dt>Formular</dt><dd>WMC-IT-{{ protokoll.formularnummer }}, Version {{ protokoll.fassung }}{% if protokoll.texte.version %}, Textversion {{ protokoll.texte.version }}{% endif %}</dd>
     {% if protokoll.korrigiert_zu_protokoll %}<dt>Korrektur von</dt><dd><a href="/protokolle/{{ protokoll.korrigiert_zu_protokoll.nr }}/">{{ protokoll.korrigiert_zu_protokoll.nr }}</a></dd>{% endif %}
     {% if ersetzt_durch %}<dt>Ersetzt durch</dt><dd><a href="/protokolle/{{ ersetzt_durch.nr }}/" data-test="ersetzt-durch">{{ ersetzt_durch.nr }}</a></dd>{% endif %}
     {% if protokoll.leihe %}<dt>Leihnummer</dt><dd data-test="protokoll-leihnummer">{{ protokoll.leihe.nr }}</dd><dt>Rückgabe bis</dt><dd>{{ protokoll.leihe.rueckgabe_bis|date:"d.m.Y"|default:"–" }}</dd><dt>Zweck</dt><dd>{{ protokoll.leihe.zweck|default:"–" }}</dd>{% endif %}
@@ -151,10 +151,12 @@
     <input type="password" name="passwort" id="passwort" required autocomplete="current-password" data-test="signieren-passwort">
     <button class="btn primary" type="submit" data-test="signieren-absenden">Signieren</button>
   </form>
+  {% if protokoll.art == "ausgabe" and not protokoll.ist_korrektur %}
   <form method="post" action="/protokolle/{{ protokoll.nr }}/abbrechen/" data-test="abbrechen-formular">
     {% csrf_token %}
     <p class="actions"><button class="btn" type="submit" data-test="abbrechen">Entwurf verwerfen</button> <span class="muted small">Das Gerät bleibt unverändert.</span></p>
   </form>
+  {% endif %}
 </section>
 {% endif %}
 
@@ -182,6 +184,19 @@
 <section class="card" data-test="protokoll-scan">
   <div class="card-head"><h2>Papierweg</h2></div>
   <p>Abgeschlossen am {{ protokoll.scan_am|date:"d.m.Y H:i" }}{% if protokoll.scan_von %} von {{ protokoll.scan_von.bezeichnung }}{% endif %}. <a href="/protokolle/{{ protokoll.nr }}/pdf/" data-test="scan-link">Scan öffnen</a></p>
+</section>
+{% endif %}
+
+{% if protokoll.pdf_versand_offen %}
+<section class="card" data-test="versand-offen">
+  <div class="card-head"><h2>Versand offen</h2></div>
+  <p>Das fertige Protokoll ließ sich nicht per Mail versenden. Es liegt hier bereit.</p>
+  {% if user.ist_admin %}
+  <form method="post" action="/protokolle/{{ protokoll.nr }}/pdf-senden/">
+    {% csrf_token %}
+    <p class="actions"><button class="btn primary" type="submit" data-test="pdf-senden">Erneut senden</button></p>
+  </form>
+  {% endif %}
 </section>
 {% endif %}
 
