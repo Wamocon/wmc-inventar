@@ -12,7 +12,7 @@
   {% if gerate %}
   <form method="post" action="/personen/{{ person.pk }}/offboarding/zuruecknehmen/" data-test="dialog" data-name="rueckgabe">
     {% csrf_token %}
-    <div class="tbl-wrap">
+    <div class="tbl-wrap" data-test="offboarding-geraete">
       <table data-test="liste" data-liste="offboarding-geraete">
         <thead><tr><th>Wahl</th><th>Gerät</th><th>Status</th><th>Zustand bei Ausgabe</th><th>Zustand bei Rückgabe</th><th>Zubehör komplett</th><th>Bemerkung, Mängel</th><th>Danach</th><th></th></tr></thead>
         <tbody>

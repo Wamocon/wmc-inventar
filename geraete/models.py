@@ -378,7 +378,7 @@ class Vorgang(models.Model):
             self.person_vorher = letzter.person_nachher
             self.ort_vorher = letzter.ort_nachher
         self.status_nachher = gerat.status
-        self.person_nachher = gerat.person.voller_name if gerat.person_id else ""
+        self.person_nachher = gerat.person.voller_name() if gerat.person_id else ""
         self.ort_nachher = gerat.ort.kennung if gerat.ort_id else ""
 
     @property

@@ -356,7 +356,7 @@ class AnsichtsTests(TestCase):
     def test_ausgemustert_zeigt_keine_aktion_bearbeiten(self):
         """A-0097 F-58: Ausgemustertes Gerät zeigt weder „Ändern“ noch „Prüfung abhaken“."""
         services.ausmustern(
-            self.g1, grund="verloren", datum=date(2026, 10, 1),
+            self.g1, grund="verloren", datum=date(2026, 10, 1), disposition="unbekannt",
             bestaetigt_gemeldt=True, ausgefuehrt_von=self.konto,
         )
         self.client.login(username=self.konto.email, password="test-passwort-123")
@@ -368,7 +368,7 @@ class AnsichtsTests(TestCase):
     def test_ausgemustert_aendern_adresse_lehnt_ab(self):
         """A-0097 F-58: /aendern/ eines ausgemusterten Geräts wird abgelehnt."""
         services.ausmustern(
-            self.g1, grund="verloren", datum=date(2026, 10, 1),
+            self.g1, grund="verloren", datum=date(2026, 10, 1), disposition="unbekannt",
             bestaetigt_gemeldt=True, ausgefuehrt_von=self.konto,
         )
         self.client.login(username=self.konto.email, password="test-passwort-123")
@@ -479,15 +479,17 @@ class M3LebenszyklusTests(TestCase):
         self.gerat.refresh_from_db()
         self.assertEqual(self.gerat.status, Gerat.STATUS_IN_REPARATUR)
 
-    def test_rueckgabe_fehlend_startet_ausmusterung(self):
+    def test_rueckgabe_fehlend_laeuft_ueber_den_dialog(self):
+        """F-57: Die Meldung bestätigt ein Mensch im Dialog, nicht dieser Aufruf."""
         services.gerat_ausgeben(self.gerat, self.person, ausgefuehrt_von=self.admin)
         self.gerat.refresh_from_db()
-        services.gerat_rueckgeben(
-            self.gerat, zustand_rueckgabe=1, fehlend=True,
-            ausgefuehrt_von=self.admin,
-        )
+        with self.assertRaises(services.GeratFehler):
+            services.gerat_rueckgeben(
+                self.gerat, zustand_rueckgabe=1, fehlend=True,
+                ausgefuehrt_von=self.admin,
+            )
         self.gerat.refresh_from_db()
-        self.assertEqual(self.gerat.status, Gerat.STATUS_AUSGEMUSTERT)
+        self.assertEqual(self.gerat.status, Gerat.STATUS_IN_BENUTZUNG)
 
     def test_rueckgabe_verweigert_auf_lager(self):
         """F-50: Nur In Benutzung oder Verliehen kann zurückgegeben werden."""
@@ -750,8 +752,9 @@ class DetailAktionenTests(TestCase):
         self.assertIn('data-test="aktion-rueckgabe"', text)
         self.assertIn('data-test="aktion-umzug"', text)
         self.assertNotIn('data-test="aktion-ausgabe"', text)
-        self.assertNotIn('data-test="aktion-reparatur"', text)
-        self.assertNotIn('data-test="aktion-ausmustern"', text)
+        # Kapitel 4: Reparatur aus „In Benutzung“, Ausmusterung bei verloren oder gestohlen.
+        self.assertIn('data-test="aktion-reparatur"', text)
+        self.assertIn('data-test="aktion-ausmustern"', text)
 
     def test_in_reparatur_admin_zeigt_abschliessen(self):
         g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
@@ -766,7 +769,8 @@ class DetailAktionenTests(TestCase):
         self.assertNotIn('data-test="aktion-ausgabe"', text)
         self.assertNotIn('data-test="aktion-rueckgabe"', text)
         self.assertNotIn('data-test="aktion-umzug"', text)
-        self.assertNotIn('data-test="aktion-ausmustern"', text)
+        # Kapitel 4: Aus „In Reparatur“ darf ausgemustert werden.
+        self.assertIn('data-test="aktion-ausmustern"', text)
 
     def test_mitarbeiter_zeigt_keine_aktionen(self):
         """Kapitel 3: Das Gerätedetail ist für Mitarbeiter gesperrt, auch für eigene Geräte."""
@@ -1092,7 +1096,7 @@ class DetailAktionenTests(TestCase):
         self.assertIn('data-test="status"', detail.content.decode())
 
     def test_dialog_rueckgabe_fehlend_startet_ausmusterung(self):
-        """A-0097: „fehlt, Ausmusterung starten“ startet die Ausmusterung."""
+        """F-50, F-57: „fehlt, Ausmusterung starten“ führt in den Dialog Ausmustern."""
         g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
         services.gerat_ausgeben(g, self.person, ausgefuehrt_von=self.admin)
         self.client.login(username=self.admin.email, password="test-passwort-123")
@@ -1101,12 +1105,9 @@ class DetailAktionenTests(TestCase):
             {"zustand_rueckgabe": "2", "zubehoer_komplett": "nein", "ziel": "fehlend"},
         )
         self.assertEqual(antwort.status_code, 302)
+        self.assertEqual(antwort.headers["Location"], f"/geraete/{g.inventarnummer}/ausmustern/?grund=verloren")
         g.refresh_from_db()
-        self.assertEqual(g.status, "ausgemustert")
-        detail = self.client.get(f"/geraete/{g.inventarnummer}/")
-        text = detail.content.decode()
-        self.assertIn('data-test="status"', text)
-        self.assertIn("ausgemustert", text)
+        self.assertEqual(g.status, "in-benutzung")
 
     def test_dialog_umzug_oeffnet_mit_speichern(self):
         g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
@@ -1275,7 +1276,7 @@ class DetailAktionenTests(TestCase):
         self.client.login(username=self.admin.email, password="test-passwort-123")
         antwort = self.client.post(
             f"/geraete/{g.inventarnummer}/ausmustern/",
-            {"grund": "verloren", "datum": "2026-10-01", "bestaetigt_gemeldt": "on"},
+            {"grund": "verloren", "datum": "2026-10-01", "disposition": "unbekannt", "bestaetigt_gemeldt": "on"},
         )
         self.assertEqual(antwort.status_code, 302)
         g.refresh_from_db()
@@ -3621,7 +3622,7 @@ class ProtokollRuecknahmeTests(TestCase):
         self.assertEqual(ruecknahme.formularnummer, "FRM-002")
         self.assertEqual(ruecknahme.rueckgabe_zu_protokoll, protokolle[0])
         self.assertEqual(len(ruecknahme.offboarding), 13)
-        self.assertEqual(ruecknahme.stand, Protokoll.STAND_SCAN_OFFEN)
+        self.assertEqual(ruecknahme.stand, Protokoll.STAND_BEARBEITER_OFFEN)
 
 
 class ProtokollFotoTests(TestCase):
