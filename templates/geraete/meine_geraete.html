@@ -77,7 +77,7 @@
             <tbody>
             {% for leihe in leihen %}
                 <tr data-test="zeile" data-id="{{ leihe.nr }}" data-stand="{{ leihe.stand_wert }}">
-                    <td class="mono">{{ leihe.nr }}</td>
+                    <td class="mono nowrap">{{ leihe.nr }}</td>
                     <td>
                         {% if leihe.kat %}{{ leihe.kat.name }}{% endif %}
                         {% if leihe.gerat %}<span class="sub">{{ leihe.gerat.inventarnummer }}, {{ leihe.gerat.modell }}</span>{% endif %}

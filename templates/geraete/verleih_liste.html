@@ -28,7 +28,7 @@
             <tbody>
             {% for leihe in leihen %}
                 <tr data-test="zeile" data-id="{{ leihe.nr }}" data-stand="{{ leihe.stand_wert }}">
-                    <td class="mono">{{ leihe.nr }}</td>
+                    <td class="mono nowrap">{{ leihe.nr }}</td>
                     <td>
                         {% if leihe.gerat %}
                             <a href="{% url 'geraete:detail' leihe.gerat.inventarnummer %}" class="inv">

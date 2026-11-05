@@ -461,17 +461,17 @@ class VerleihForm(forms.Form):
         label="Person",
         required=True,
         queryset=Person.objects.filter(aktiv=True).order_by("nachname"),
-        widget=forms.Select(attrs={"data-test": "person", "class": "req"}),
+        widget=forms.Select(attrs={"data-test": "person"}),
     )
     rueckgabe_bis = forms.DateField(
         label="Rückgabe bis",
         required=True,
-        widget=forms.DateInput(format="%Y-%m-%d", attrs={"data-test": "rueckgabe-bis", "type": "date", "class": "req"}),
+        widget=forms.DateInput(format="%Y-%m-%d", attrs={"data-test": "rueckgabe-bis", "type": "date"}),
     )
     zweck = forms.CharField(
         label="Zweck",
         required=True,
-        widget=forms.TextInput(attrs={"data-test": "zweck", "class": "req"}),
+        widget=forms.TextInput(attrs={"data-test": "zweck"}),
     )
     unterschrift = forms.ChoiceField(
         choices=UNTERSCHRIFT,
