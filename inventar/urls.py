@@ -2,7 +2,6 @@
 
 TESTSCHNITTSTELLE Abschnitt 3 (Adressen).
 """
-from django.contrib import admin
 from django.urls import path, include
 from geraete import views as geraete_views
 from geraete import import_views
@@ -67,5 +66,4 @@ urlpatterns = [
     path("signieren/<str:token>/code-senden/", geraete_views.signieren_code_senden, name="signieren-code-senden"),
     path("signieren/<str:token>/pdf/", geraete_views.signieren_pdf, name="signieren-pdf"),
     path("signieren/<str:token>/", geraete_views.signieren_link, name="signieren-link"),
-    path("admin/", admin.site.urls),
 ]

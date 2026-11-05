@@ -13,13 +13,14 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth import authenticate, login, logout, update_session_auth_hash
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.core.mail import EmailMessage
 from django.db import transaction
 from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import redirect, render
 from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from .models import Konto
@@ -55,8 +56,11 @@ def anmelden(request):
     Nach 5 Fehlversuchen ist das Konto 15 Minuten gesperrt.
     Deaktivierte Konten können sich nicht anmelden (F-02).
     """
+    ziel = request.POST.get("next") or request.GET.get("next") or ""
+    if not url_has_allowed_host_and_scheme(ziel, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
+        ziel = ""
     if request.user.is_authenticated:
-        return redirect(landing_fuer(request.user))
+        return redirect(ziel or landing_fuer(request.user))
 
     form = AnmeldeForm(request.POST or None)
     fehler = ""
@@ -71,13 +75,11 @@ def anmelden(request):
         except Konto.DoesNotExist:
             konto = None
 
-        if konto is None or not konto.aktiv:
-            # Neutrale Meldung (F-01): "E-Mail oder Passwort ist falsch."
-            fehler = "E-Mail oder Passwort ist falsch."
-        elif konto.ist_gesperrt(jetzt=_jetzt()):
-            fehler = "Das Konto ist vorübergehend gesperrt. Versuchen Sie es später erneut."
+        if konto is None or not konto.aktiv or konto.ist_gesperrt(jetzt=_jetzt()):
+            # Neutrale Meldung (F-01), auch bei Sperre: Sie verrät nicht, ob es das Konto gibt.
+            fehler = "E-Mail oder Passwort ist falsch. Nach mehreren Fehlversuchen ist die Anmeldung für 15 Minuten gesperrt."
         else:
-            benutzer = authenticate(request, email=email, password=passwort)
+            benutzer = authenticate(request, email=konto.email, password=passwort)
             if benutzer is None:
                 konto.registriere_fehlversuch(jetzt=_jetzt())
                 fehler = "E-Mail oder Passwort ist falsch."
@@ -87,9 +89,9 @@ def anmelden(request):
                 benutzer.save(update_fields=["letzter_login"])
                 benutzer.setze_fehlversuche_zurueck()
                 login(request, benutzer)
-                return redirect(landing_fuer(benutzer))
+                return redirect(ziel or landing_fuer(benutzer))
 
-    return render(request, "konten/anmelden.html", {"form": form, "fehler": fehler})
+    return render(request, "konten/anmelden.html", {"form": form, "fehler": fehler, "next": ziel})
 
 
 def landing_fuer(user) -> str:
@@ -190,8 +192,6 @@ def passwort_setzen(request, token):
 
 def passwort_aendern(request):
     """Passwort ändern (F-04): mindestens 12 Zeichen, altes Passwort."""
-    if not request.user.is_authenticated:
-        return redirect(f"{reverse('konten:anmelden')}?next={request.path}")
 
     form = PasswortAenderForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
@@ -202,6 +202,8 @@ def passwort_aendern(request):
         else:
             request.user.set_password(neues)
             request.user.save(update_fields=["password"])
+            # F-04: Die Sitzung bleibt bestehen, sonst landet man wieder auf der Anmeldung.
+            update_session_auth_hash(request, request.user)
             messages.success(request, "Das Passwort wurde geändert.")
             return redirect(reverse("konten:passwort-aendern"))
     return render(request, "konten/passwort_aendern.html", {"form": form})

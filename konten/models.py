@@ -147,8 +147,11 @@ class Konto(AbstractBaseUser, PermissionsMixin):
         if jetzt is None:
             from .zeit import jetzt_wie_im_entwicklungsmodus
             jetzt = jetzt_wie_im_entwicklungsmodus()
+        if self.gesperrt_bis is not None and self.gesperrt_bis <= jetzt:
+            self.fehlversuche = 0
+            self.gesperrt_bis = None
         self.fehlversuche = (self.fehlversuche or 0) + 1
-        if self.fehlversuche >= 5 and (self.gesperrt_bis is None or self.gesperrt_bis <= jetzt):
+        if self.fehlversuche >= 5 and self.gesperrt_bis is None:
             self.gesperrt_bis = jetzt + timedelta(minutes=15)
         self.save(update_fields=["fehlversuche", "gesperrt_bis"])
 

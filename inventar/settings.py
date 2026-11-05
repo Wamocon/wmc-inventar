@@ -28,6 +28,16 @@ else:
         )
     SECRET_KEY = secret
 
+# N-01: Hostnamen kommen aus BASIS_URL und optional INVENTAR_HOSTS (kommagetrennt).
+from urllib.parse import urlsplit  # noqa: E402
+
+_basis_host = urlsplit(os.environ.get("BASIS_URL", "").strip()).hostname
+ALLOWED_HOSTS = [h.strip() for h in os.environ.get("INVENTAR_HOSTS", "").split(",") if h.strip()]
+if _basis_host and _basis_host not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(_basis_host)
+if DEBUG:
+    ALLOWED_HOSTS += ["127.0.0.1", "localhost", "testserver", "[::1]"]
+
 # --- Zeitzone ---------------------------------------------------------------
 # N-08: Zeitzone Europe/Berlin, Datumsanzeige TT.MM.JJJJ
 TIME_ZONE = "Europe/Berlin"
@@ -62,6 +72,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "inventar.middleware.AnmeldungMiddleware",
     "inventar.middleware.CSPMiddleware",
 ]
 
@@ -127,6 +138,7 @@ PASSWORD_HASHERS = [
 # --- Authentifizierung ------------------------------------------------------
 # F-05: Sitzungsende nach 8 h ohne Aktivität
 SESSION_COOKIE_AGE = 8 * 60 * 60
+SESSION_SAVE_EVERY_REQUEST = True
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False
 
 # --- Statische Dateien ------------------------------------------------------

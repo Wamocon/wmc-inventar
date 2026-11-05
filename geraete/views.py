@@ -45,11 +45,13 @@ def _qr_svg(gerat):
 # --- Rechte -----------------------------------------------------------------
 
 def _darf_sehen(user) -> bool:
-    return user.ist_admin or user.ist_mitarbeiter or user.ist_leser
+    """Geräteliste, Gerätedetail, Historie, Dashboard, Export: Admin und Leser (Kapitel 2)."""
+    return user.ist_admin or user.ist_leser
 
 
 def _darf_ändern(user) -> bool:
-    return user.ist_admin or user.ist_mitarbeiter
+    """Erfassen, Ändern, Vorgänge: nur Admin (Kapitel 2, F-112, N-02)."""
+    return user.ist_admin
 
 
 def _darf_sehen_raumplan(user) -> bool:
@@ -63,7 +65,6 @@ def _keine_berechtigung(request, pfad: str):
     ``pfad`` ist die absolute Adresse, die im Satz vorkommt.
 
     """
-    meldung_error(request, "Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
     raise PermissionDenied(f"Zugriff verweigert: {pfad}")
 
 
@@ -321,7 +322,6 @@ def neu_anlegen(request):
     F-13: Die Stammdaten werden aus der Vorlage übernommen (``?vorlage=``).
     """
     if not _darf_ändern(request.user):
-        meldung_error(request, "Zugriff verweigert: Anlegen ist Ihnen nicht erlaubt.")
         raise PermissionDenied("Zugriff verweigert: Anlegen ist Ihnen nicht erlaubt.")
     form = GeratForm(request.POST, request.FILES)
     if form.is_valid():
@@ -365,7 +365,6 @@ def neu_anzeigen(request):
     genannten Geräts; die Seriennummer bleibt leer.
     """
     if not _darf_ändern(request.user):
-        meldung_error(request, "Zugriff verweigert: Anlegen ist Ihnen nicht erlaubt.")
         raise PermissionDenied("Zugriff verweigert: Anlegen ist Ihnen nicht erlaubt.")
     vorlage_inventarnummer = (request.GET.get("vorlage") or "").strip()
     initial = {}
@@ -403,14 +402,13 @@ def neu_anzeigen(request):
 @login_required
 def bearbeiten(request, inventarnummer: str):
     """Änderungen eintragen (F-15). Inventarnummer bleibt unverändert (F-12)."""
+    if not _darf_ändern(request.user):
+        raise PermissionDenied("Zugriff verweigert: Ändern ist Ihnen nicht erlaubt.")
     gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
     # F-58 (A-0097): Ausgemusterte Geräte sind nicht mehr änderbar.
     if gerat.status == Gerat.STATUS_AUSGEMUSTERT:
         meldung_error(request, "Ausgemusterte Geräte sind nicht mehr änderbar.")
         return redirect("/geraete/" + gerat.inventarnummer + "/")
-    if not _darf_ändern(request.user):
-        meldung_error(request, "Zugriff verweigert: Ändern ist Ihnen nicht erlaubt.")
-        raise PermissionDenied("Zugriff verweigert: Ändern ist Ihnen nicht erlaubt.")
     if request.method == "POST":
         form = GeratForm(request.POST, instance=gerat)
         if form.is_valid():
@@ -1017,9 +1015,6 @@ def gerat_kurz(request, inventarnummer: str):
     „Ihnen zugeordnet" oder „nicht Ihnen zugeordnet" – sonst nichts.
     Für Admin und Leser leitet weiter zu /geraete/<Inventarnummer>/ (F-70).
     """
-    if not _darf_sehen(request.user):
-        meldung_error(request, "Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
-        return redirect("/")
     if request.user.ist_mitarbeiter:
         gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
         person = request.user.person
@@ -1626,20 +1621,23 @@ def leihe_ablehnen_zeige(request, leih_id):
 # --- M6 Teil 1: Protokoll (F-130, F-132, F-133, F-134, F-22) ------------------
 
 def _protokoll_berechtigt(protokoll: Protokoll, request) -> None:
-    """Rechte (TESTSCHNITTSTELLE 3): 200 für die Person, Admin und Leser
-    mit Person; sonst 403.
-    """
-    if request.user.ist_admin:
+    """Lesen (TESTSCHNITTSTELLE 3): Admin und Leser immer, Mitarbeiter nur das eigene."""
+    if request.user.ist_admin or request.user.ist_leser:
         return
     person = protokoll.person
-    if request.user.ist_leser:
-        if request.user.person is not None:
-            return
-        raise PermissionDenied
     if request.user.person is None:
         raise PermissionDenied
     if person is None or request.user.person_id != person.id:
         raise PermissionDenied
+
+
+def _protokoll_schreibrecht(request) -> None:
+    """Checkliste, Foto, Scan, Signatur, Abbrechen, Korrektur, Code: nur Admin (Kapitel 2).
+
+    Die Person gegenzeichnet über den Link unter /signieren/, nicht hier.
+    """
+    if not request.user.ist_admin:
+        raise PermissionDenied("Zugriff verweigert: Vorgänge am Protokoll macht die IT.")
 
 
 @login_required
@@ -1730,7 +1728,7 @@ def protokoll_checkliste_beantworten(request, protokoll_nr):
     ist (F-22).
     """
     protokoll = get_object_or_404(Protokoll, nr=protokoll_nr)
-    _protokoll_berechtigt(protokoll, request)
+    _protokoll_schreibrecht(request)
 
     from . import protokoll as protokoll_services
 
@@ -1758,7 +1756,7 @@ def protokoll_offboarding_beantworten(request, protokoll_nr):
     Hardware-Inventar dokumentiert" setzt das Tool selbst (F-133).
     """
     protokoll = get_object_or_404(Protokoll, nr=protokoll_nr)
-    _protokoll_berechtigt(protokoll, request)
+    _protokoll_schreibrecht(request)
 
     from . import protokoll as protokoll_services
 
@@ -1796,7 +1794,7 @@ def protokoll_foto_hochladen(request, protokoll_nr):
     Protokoll.
     """
     protokoll = get_object_or_404(Protokoll, nr=protokoll_nr)
-    _protokoll_berechtigt(protokoll, request)
+    _protokoll_schreibrecht(request)
 
     from . import protokoll as protokoll_services
 
@@ -1821,7 +1819,7 @@ def protokoll_scan_hochladen(request, protokoll_nr):
     Der hochgeladene Scan setzt das Protokoll auf „abgeschlossen".
     """
     protokoll = get_object_or_404(Protokoll, nr=protokoll_nr)
-    _protokoll_berechtigt(protokoll, request)
+    _protokoll_schreibrecht(request)
 
     from . import protokoll as protokoll_services
 
@@ -1858,7 +1856,7 @@ def protokoll_abbrechen(request, protokoll_nr: str):
     Nur für Protokolle auf "bearbeiter-offen".
     """
     protokoll = get_object_or_404(Protokoll, nr=protokoll_nr)
-    _protokoll_berechtigt(protokoll, request)
+    _protokoll_schreibrecht(request)
 
     if protokoll.stand != Protokoll.STAND_BEARBEITER_OFFEN:
         meldung_error(request, "Nur Protokolle auf 'bearbeiter-offen' können abgebrochen werden.")
@@ -1884,7 +1882,7 @@ def protokoll_signieren(request, protokoll_nr: str):
     Mail mit Link in die Mailablage.
     """
     protokoll = get_object_or_404(Protokoll, nr=protokoll_nr)
-    _protokoll_berechtigt(protokoll, request)
+    _protokoll_schreibrecht(request)
 
     password = request.POST.get("passwort", "")
     if not password:
@@ -1923,7 +1921,7 @@ def protokoll_code_senden(request, protokoll_nr: str):
     schickt eine Mail mit der Zeile „Einmalcode: <code>".
     """
     protokoll = get_object_or_404(Protokoll, nr=protokoll_nr)
-    _protokoll_berechtigt(protokoll, request)
+    _protokoll_schreibrecht(request)
 
     empfaenger = request.POST.get("empfaenger", "").strip()
     erfolg, meldung = services.protokoll_code_senden(
@@ -1945,7 +1943,7 @@ def protokoll_link_neu_senden(request, protokoll_nr: str):
     Erinnerung am dritten Tag kommt mit dem Tageslauf in M7.
     """
     protokoll = get_object_or_404(Protokoll, nr=protokoll_nr)
-    _protokoll_berechtigt(protokoll, request)
+    _protokoll_schreibrecht(request)
 
     _, erfolg, meldung = services.protokoll_link_neu_senden(protokoll)
     if erfolg:
@@ -1963,7 +1961,7 @@ def protokoll_korrigieren(request, protokoll_nr: str):
     Erzeugt eine neue Fassung mit neuer Nummer.
     """
     protokoll = get_object_or_404(Protokoll, nr=protokoll_nr)
-    _protokoll_berechtigt(protokoll, request)
+    _protokoll_schreibrecht(request)
 
     neue, erfolg = services.protokoll_korrigieren(protokoll, request.user)
     if not erfolg:

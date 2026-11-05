@@ -11,8 +11,8 @@ from pathlib import Path
 
 from django.conf import settings
 
-_ROOT = Path(settings.BASE_DIR).resolve().parent
-JETZT_DATEI = _ROOT / "var" / "jetzt.txt"
+# Relative Pfade gelten ab dem Wurzelverzeichnis des Repositorys, wo manage.py liegt.
+JETZT_DATEI = Path(settings.BASE_DIR).resolve() / "var" / "jetzt.txt"
 
 # Europe/Berlin
 try:
@@ -36,7 +36,7 @@ def jetzt_wie_im_entwicklungsmodus() -> datetime:
     if entwicklungsmodus_aktiv() and JETZT_DATEI.exists():
         text = JETZT_DATEI.read_text(encoding="utf-8").strip()
         try:
-            return datetime.strptime(text, "%Y-%m-%dT%H:%M")
+            return datetime.strptime(text, "%Y-%m-%dT%H:%M").replace(tzinfo=_BERLIN)
         except ValueError:
             return datetime.now(_BERLIN)
     return datetime.now(_BERLIN)

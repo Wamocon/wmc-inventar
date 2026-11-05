@@ -7,6 +7,7 @@
   {% if fehler %}<div class="fehler-kasten" data-test="fehler">{{ fehler }}</div>{% endif %}
   <form method="post" action="/anmelden/" novalidate>
     {% csrf_token %}
+    {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
     <div class="login-feld">
       <label for="{{ form.email.id_for_label }}" class="req">E-Mail</label>
       {{ form.email }}
