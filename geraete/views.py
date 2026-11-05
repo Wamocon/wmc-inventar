@@ -187,11 +187,17 @@ def liste(request):
     aufsteigend = request.GET.get("sort") != "absteigend"
     qs = qs.order_by("inventarnummer" if aufsteigend else "-inventarnummer")
 
-    anzahl = qs.count()
     if unvollstaendig:
         qs = [g for g in qs if g.ist_unvollstaendig()]
     else:
         qs = list(qs)
+    anzahl = len(qs)
+    # Prototyp: Status mit ihren Zahlen über der Liste; nur Links auf den Filter.
+    status_chips = [
+        {"code": code, "label": "Archiv" if code == Gerat.STATUS_AUSGEMUSTERT else label,
+         "zahl": Gerat.objects.filter(status=code).count()}
+        for code, label in Gerat.STATUSES
+    ]
 
     # F-103 (A-0907, M7 Teil 3): Export der Liste mit aktuellem Filter.
     format_export = (request.GET.get("format") or "").strip().lower()
@@ -220,6 +226,8 @@ def liste(request):
             "unvollstaendig": unvollstaendig,
             "aufsteigend": aufsteigend,
             "statuser": [c for c in Gerat.STATUSES],
+            "status_chips": status_chips,
+            "status_gesamt": sum(c["zahl"] for c in status_chips),
             "orte": Ort.objects.all(),
             "kategorien": sorted(Kategorie.objects.all(), key=lambda k: k.name),
             "personen": Person.objects.all(),

@@ -1709,6 +1709,17 @@ class RaumplanTests(TestCase):
         antwort = self.client.get("/arbeitsplaetze/", {"plan": "999"})
         self.assertEqual(antwort.status_code, 200)
 
+    def test_rahmen_aktiver_eintrag_und_suche_einmal(self):
+        """Prototyp: aktiver Eintrag markiert, Marker suche je Seite einmal (F-44)."""
+        self.client.login(username=self.admin.email, password="test-passwort-123")
+        html = self.client.get("/geraete/").content.decode()
+        self.assertIn('data-test="nav-geraete" aria-current="page"', html)
+        self.assertEqual(html.count('data-test="suche"'), 1)
+        self.assertIn("/static/liste.js", html)
+        html = self.client.get("/").content.decode()
+        self.assertIn('data-test="nav-uebersicht" aria-current="page"', html)
+        self.assertEqual(html.count('data-test="suche"'), 1)
+
     def test_positionen_mit_punkt_und_auswahl_gefuellt(self):
         """F-65: Positionen mit Punkt, Auswahl gefüllt, nichts Inline (N-02)."""
         self.client.login(username=self.admin.email, password="test-passwort-123")

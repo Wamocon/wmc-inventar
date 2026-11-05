@@ -410,11 +410,11 @@ class GesamtschrankTests(TestCase):
         )
         # Die vier Kennzahlen mit gesamt
         for data_id in ["in-benutzung", "arbeitsplaetze-vollstaendig", "verliehen", "geprueft"]:
-            block = html.split(f'data-id="{data_id}"')[1].split("</tr>")[0] if f'data-id="{data_id}"' in html else ""
+            block = html.split(f'data-id="{data_id}"')[1].split("</li>")[0] if f'data-id="{data_id}"' in html else ""
             self.assertIn('data-test="gesamt"', block, msg=f"{data_id} hat kein gesamt")
         # Die vier ohne gesamt
         for data_id in ["ueberfaellig", "anfragen-offen", "garantie-30-tage", "unterschriften-offen"]:
-            block = html.split(f'data-id="{data_id}"')[1].split("</tr>")[0] if f'data-id="{data_id}"' in html else ""
+            block = html.split(f'data-id="{data_id}"')[1].split("</li>")[0] if f'data-id="{data_id}"' in html else ""
             self.assertNotIn('data-test="gesamt"', block, msg=f"{data_id} hat unerwartet gesamt")
 
 

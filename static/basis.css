@@ -50,25 +50,33 @@ button{font:inherit;color:inherit}
 
 /* Kopfzeile (Prototyp: topbar) */
 .topbar{position:sticky;top:0;z-index:30;background:var(--surface);border-bottom:4px solid var(--signal)}
-.top-in{display:flex;align-items:center;gap:12px 24px;padding:10px max(16px,env(safe-area-inset-left,0px)) 10px max(16px,env(safe-area-inset-right,0px));flex-wrap:wrap}
+.top-in{display:flex;align-items:center;gap:12px 24px;padding:10px 24px;flex-wrap:wrap}
 .brand{display:inline-flex;align-items:center;gap:10px;white-space:nowrap;color:var(--fg);font-size:15px;font-weight:600;text-decoration:none}
 .brand-tag{display:inline-block;font-family:var(--font-cond);font-stretch:var(--narrow);font-weight:800;font-size:15px;letter-spacing:.02em;line-height:1;padding:5px 7px 4px;border:1px solid var(--line);border-top:3px solid var(--signal);border-radius:3px;background:var(--paper);color:var(--ink)}
-.search{display:flex;align-items:center;gap:8px;flex:1;max-width:560px;min-width:220px;padding:8px 12px;border:1px solid var(--control);border-radius:4px;background:var(--surface)}
-.search input{flex:1;width:100%;min-height:24px;border:0;padding:0;background:none;outline:none}
+.search{position:relative;flex:1;min-width:200px;max-width:440px;margin:0}
+.search .ic{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--fg-2);width:16px;height:16px}
+.search input{width:100%;height:36px;min-height:36px;border:1px solid var(--control);border-radius:4px;padding:0 10px 0 34px;background:var(--surface);color:var(--fg);font:14px var(--font-ui)}
 .user{display:flex;align-items:center;gap:12px;margin-left:auto;white-space:nowrap}
 .user .who{display:flex;flex-direction:column;line-height:1.25;text-align:right}
 .user .who small{color:var(--fg-2);font-size:12px}
 .user form{margin:0}
 
 /* Seitenleiste (Prototyp: nav) */
-.shell{display:grid;grid-template-columns:220px minmax(0,1fr);gap:0 40px;max-width:1100px;margin:0 auto;width:100%}
-.nav{display:flex;flex-direction:column;gap:2px;padding:28px 0 72px;min-width:0}
-.nav .nav-item{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:4px;color:var(--fg);font-weight:550;text-decoration:none;white-space:nowrap}
-.nav .nav-item:hover{background:var(--surface-2);color:var(--red)}
-.nav .nav-item[aria-current="page"]{background:var(--hint);color:var(--red);box-shadow:inset 3px 0 0 var(--signal)}
+.ic{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.shell{display:grid;grid-template-columns:200px minmax(0,1fr);gap:40px;align-items:start;padding:0 24px}
+.nav{position:sticky;top:64px;display:flex;flex-direction:column;gap:1px;padding-block:28px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:7px 10px 7px 12px;color:var(--fg);font-weight:500;white-space:nowrap;text-decoration:none;box-shadow:inset 2px 0 0 var(--line-2)}
+.nav-item .ic{color:var(--fg-2);width:17px;height:17px}
+.nav-item:hover{color:var(--red)}
+.nav-item[aria-current="page"]{color:var(--red);font-weight:700;box-shadow:inset 3px 0 0 var(--signal)}
+.nav-item[aria-current="page"] .ic{color:var(--red)}
+.nav-sep{height:14px}
 
 /* Inhalt */
-.main{padding:28px max(16px,env(safe-area-inset-left,0px)) 72px max(16px,env(safe-area-inset-right,0px));min-width:0;display:flex;flex-direction:column;gap:24px;max-width:1100px;margin:0 auto;width:100%}
+.main{padding-block:28px 72px;min-width:0;display:flex;flex-direction:column;gap:28px;width:100%}
+.back{display:inline-flex;align-items:center;gap:4px;color:var(--fg-2);font-weight:500;text-decoration:none;align-self:flex-start;margin-bottom:-14px}
+.back:hover{color:var(--red)}
+.back .ic{width:16px;height:16px}
 .page-head{display:flex;flex-wrap:wrap;gap:12px 16px;align-items:flex-end;justify-content:space-between}
 .page-head .lead{color:var(--fg-2);margin-top:6px;max-width:68ch}
 .actions{display:flex;flex-wrap:wrap;gap:8px}
@@ -152,21 +160,14 @@ form .actions{margin-top:8px}
 }
 
 /* Schmale Bildschirme: Seitenleiste wie im Prototyp eingeklappt (horizontal, ab 900 px) */
-@media (max-width:900px){
-  .shell{grid-template-columns:minmax(0,1fr);gap:0}
-  .nav{flex-direction:row;overflow-x:auto;padding:8px max(16px,env(safe-area-inset-left,0px));border-bottom:1px solid var(--line);gap:2px}
-  .nav .nav-item{box-shadow:inset 0 0 0 transparent;padding:8px 10px}
-  .nav .nav-item[aria-current="page"]{box-shadow:inset 0 -3px 0 var(--signal)}
-  .user .who{display:none}
-}
-
 /* Status-Chip */
-.chip-status{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;font-weight:600;font-size:12.5px;border:1px solid var(--line)}
-.chip-status.auf-lager{background:var(--info-bg);color:var(--info);border-color:var(--info)}
-.chip-status.in-benutzung{background:var(--ok-bg);color:var(--ok);border-color:var(--ok)}
-.chip-status.verliehen{background:var(--warn-bg);color:var(--warn);border-color:var(--warn)}
-.chip-status.in-reparatur{background:var(--neutral-bg);color:var(--neutral);border-color:var(--neutral)}
-.chip-status.ausgemustert{background:var(--err-bg);color:var(--err);border-color:var(--err)}
+.chip-status{display:inline-flex;align-items:center;gap:5px;min-height:24px;padding:0 9px;border-radius:999px;font-size:12.5px;font-weight:600;white-space:nowrap;line-height:1;color:var(--neutral);background:var(--neutral-bg)}
+.chip-status.auf-lager{color:var(--info);background:var(--info-bg)}
+.chip-status.in-benutzung{color:var(--ok);background:var(--ok-bg)}
+.chip-status.verliehen{color:var(--neutral);background:var(--neutral-bg)}
+.chip-status.in-reparatur,.chip-status.warn{color:var(--warn);background:var(--warn-bg)}
+.chip-status.ausgemustert{color:var(--err);background:var(--err-bg)}
+.pills{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 
 /* Raumplan (F-65 bis F-68, A-0913 Teil 2) */
 .plan-grid{display:grid;grid-template-columns:1fr 280px;gap:16px;align-items:start}
@@ -222,52 +223,130 @@ form .actions{margin-top:8px}
 .plan-orte .orte.raum{border-style:dashed;background:var(--surface-2);padding:3px 8px;min-height:24px;font-size:11px}
 .plan-orte .orte.raum .raum-name{font-size:11px;font-weight:600;max-width:100px;overflow:hidden;text-overflow:ellipsis}
 
+/* Abschnitte im Inventarbuch: Kopflinie statt Kasten (Prototyp: card) */
+.card{min-width:0;display:flex;flex-direction:column}
+.card-head{display:flex;flex-wrap:wrap;gap:4px 12px;justify-content:space-between;align-items:baseline;padding-bottom:8px;border-bottom:2px solid var(--fg)}
+.card-head .count{font-family:var(--font-cond);font-stretch:var(--narrow);font-weight:700;font-size:19px;color:var(--fg-2);font-variant-numeric:tabular-nums}
+.card-kopf-rechts{display:flex;align-items:baseline;gap:4px 12px}
+.card-kopf-rechts .btn.link{font-size:12.5px;font-weight:500;min-height:0}
+.leer-text{padding:10px 0;color:var(--fg-2);border-bottom:1px solid var(--line-2)}
+.card-text{padding-top:10px}
+
 /* Bestand nach Status (Prototyp: stock) */
-.stock{margin-bottom:24px}
-.stock-bar{display:flex;height:10px;border-radius:999px;overflow:hidden;background:var(--surface-2);margin-bottom:10px}
-.stock-segment{display:block;height:100%}
-.stock-segment.in-benutzung{background:var(--signal)}
-.stock-segment.verliehen{background:var(--red)}
-.stock-segment.auf-lager{background:var(--ok)}
-.stock-segment.in-reparatur{background:var(--info)}
-.stock-legend{display:flex;flex-wrap:wrap;gap:14px;list-style:none;margin:0 0 8px;padding:0;font-size:12px;font-weight:500}
-.stock-legend li{display:flex;align-items:center;gap:6px}
-.stock-legend b{font-weight:700}
-.stock-dot{display:inline-block;width:10px;height:10px;border-radius:50%}
-.stock-dot.in-benutzung{background:var(--signal)}
-.stock-dot.verliehen{background:var(--red)}
-.stock-dot.auf-lager{background:var(--ok)}
-.stock-dot.in-reparatur{background:var(--info)}
-.stock-meta{display:flex;flex-wrap:wrap;gap:16px;font-size:12px;color:var(--fg-2);margin:0}
-.stock-meta b{font-weight:700;color:var(--fg)}
+.stock{display:flex;flex-direction:column;gap:10px}
+.stock-bar{display:flex;height:30px;gap:3px}
+.stock-segment{display:block;flex:1 1 0;height:100%;border-radius:2px;min-width:4px}
+.stock-legend{display:flex;flex-wrap:wrap;gap:8px 32px;list-style:none;margin:0;padding:0}
+.stock-legend li{display:flex;align-items:baseline;gap:8px;font-size:13px;color:var(--fg-2)}
+.stock-legend i{width:10px;height:10px;border-radius:2px;display:inline-block;align-self:center}
+.stock-legend b{font-family:var(--font-cond);font-stretch:var(--narrow);font-size:22px;font-weight:750;color:var(--fg);font-variant-numeric:tabular-nums}
+.stock-meta{display:flex;flex-wrap:wrap;gap:4px 28px;font-size:13px;color:var(--fg-2)}
+.stock-meta b{color:var(--fg);font-weight:650;font-variant-numeric:tabular-nums}
+.stock-segment.in-benutzung,.stock-dot.in-benutzung{background:var(--ok)}
+.stock-segment.verliehen,.stock-dot.verliehen{background:var(--neutral)}
+.stock-segment.auf-lager,.stock-dot.auf-lager{background:var(--info)}
+.stock-segment.in-reparatur,.stock-dot.in-reparatur{background:var(--warn)}
 
-/* Übersicht: Kennzahlen links, Arbeitslisten rechts */
-.dash{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:24px;align-items:start}
-@media(max-width:900px){.dash{grid-template-columns:1fr}}
+/* Übersicht: Kennzahlen links, Arbeitslisten rechts (Prototyp: dash, ledger, todo) */
+.dash{display:grid;grid-template-columns:minmax(260px,360px) minmax(0,1fr);gap:28px 48px;align-items:start}
+.ledger{list-style:none;margin:0;padding:0}
+.ledger li{display:grid;grid-template-columns:minmax(0,1fr) auto 52px;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line-2)}
+.ledger .k-name{display:flex;flex-direction:column;font-weight:600;line-height:1.3}
+.ledger .k-name small{font-weight:400;color:var(--fg-2);font-size:12.5px}
+.ledger .k-val{font-family:var(--font-cond);font-stretch:var(--narrow);font-weight:750;font-size:24px;line-height:1;font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.ledger .k-val small{font-size:16px;font-weight:500;color:var(--fg-2)}
+.ledger .attn .k-val{color:var(--err)}
+.ledger .delta{text-align:right;font-size:13px}
+.delta{font-weight:700;font-variant-numeric:tabular-nums}
+.delta.flat{color:var(--fg-2)}
+.ledger-note{font-size:12.5px;color:var(--fg-2);margin-top:8px}
+.ledger-note b{color:var(--fg);font-weight:650}
+.todo{display:flex;flex-direction:column;gap:28px;min-width:0}
+.worklist{list-style:none;margin:0;padding:0}
+.worklist li{display:flex;gap:8px 16px;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line-2);flex-wrap:wrap}
+.worklist .what{display:flex;flex-direction:column;min-width:0}
+.worklist .what small{color:var(--fg-2);font-size:12.5px}
+.worklist .what a{color:var(--fg);font-weight:600;text-decoration:none}
+.worklist .what a:hover{color:var(--red);text-decoration:underline}
 
-/* Arbeitslisten-Karten */
-.worklists{display:flex;flex-direction:column;gap:16px}
-.worklist{border:1px solid var(--line);border-radius:6px;background:var(--surface);overflow:hidden}
-.worklist-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--surface-2)}
-.worklist-head h3{font-size:14px;font-weight:700;margin:0;display:flex;align-items:center;gap:8px}
-.worklist-head .count{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-size:12px;font-weight:700}
-.worklist-head .actions{display:flex;gap:6px}
-.worklist-items{list-style:none;margin:0;padding:0}
-.worklist-items li{border-bottom:1px solid var(--line)}
-.worklist-items li:last-child{border-bottom:0}
-.worklist-link{display:block;padding:10px 16px;text-decoration:none;font-size:13px;font-weight:600;color:var(--fg)}
-.worklist-link:hover{background:var(--surface-2);color:var(--red)}
-.worklist-sub{display:block;padding:0 16px 10px;font-size:12px;color:var(--fg-2)}
+/* Register: Tabellen mit feinen Zeilenlinien (Prototyp: table, chips, toolbar, bulk) */
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th{text-align:left;font-size:12.5px;font-weight:600;color:var(--fg-2);padding:8px 12px 7px 0;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:10px 12px 10px 0;border-bottom:1px solid var(--line-2);vertical-align:middle}
+th:last-child,td:last-child{padding-right:0}
+td.nowrap{white-space:nowrap}
+td .sub{display:block;font-size:12.5px;color:var(--fg-2)}
+tr.gewaehlt td{background:var(--hint)}
+td a.inv{color:var(--fg);text-decoration:none}
+td a.inv:hover{color:var(--red);text-decoration:underline}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:0 12px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--fg);font-weight:500;font-size:13px;white-space:nowrap;text-decoration:none}
+.chip .n{color:var(--fg-2);font-variant-numeric:tabular-nums}
+.chip:hover{border-color:var(--control)}
+.chip[aria-current="true"]{background:var(--fg);border-color:var(--fg);color:var(--bg)}
+.chip[aria-current="true"] .n{color:var(--bg);opacity:.75}
+.toolbar{display:flex;flex-wrap:wrap;gap:10px 12px;align-items:center}
+.toolbar select{width:auto;min-width:160px}
+.toolbar input[type=search]{width:260px}
+.bulk{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;padding:8px 8px 8px 14px;margin-bottom:8px;background:var(--fg);color:var(--bg);border-radius:4px}
+.bulk .btn{background:transparent;color:var(--bg);border-color:var(--bg)}
+.bulk .btn:hover{background:var(--bg);color:var(--fg)}
+.bulk label{display:inline-flex;align-items:center;gap:6px;font-weight:500}
+.bulk input[type=number]{width:64px;min-height:30px;padding:2px 6px}
+.bulk.leer{background:none;color:var(--fg-2);padding:0}
+.bulk.leer .btn{color:var(--fg);border-color:var(--control)}
 
-/* Detail: Aktionen als Knöpfe in einer Reihe */
-.actions{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 24px}
-.actions .btn{flex:none}
+/* Gerätedetail: Etikett, Register und Historie (Prototyp: tag, kv, timeline) */
+.tag{display:inline-grid;grid-template-columns:auto minmax(0,1fr);gap:18px;align-items:center;padding:14px 22px 14px 14px;border:1px solid var(--line);border-top:5px solid var(--signal);border-radius:6px;background:var(--paper);color:var(--ink);max-width:100%}
+.tag .qr{display:block;width:92px;height:92px;flex:none}
+.tag .qr svg{width:100%;height:100%;display:block}
+.tag-text{display:flex;flex-direction:column;gap:4px;min-width:0}
+h1.tag-nr,.tag-nr{font-family:var(--font-cond);font-stretch:var(--narrow);font-weight:800;font-size:46px;line-height:.95;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.tag-model{font-size:14px;font-weight:600}
+.tag-own{font-size:12px;color:var(--paper-muted)}
+.detail-head{display:flex;flex-wrap:wrap;gap:16px 28px;align-items:flex-end}
+.detail-meta{display:flex;flex-direction:column;gap:8px;padding-bottom:4px}
+.detail-meta p{color:var(--fg-2)}
+.detail-spalten{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:28px 48px;align-items:start}
+.stack{display:flex;flex-direction:column;gap:28px;min-width:0}
+dl.kv{display:grid;grid-template-columns:minmax(120px,34%) minmax(0,1fr);margin:0}
+dl.kv dt,dl.kv dd{padding:8px 0;border-bottom:1px solid var(--line-2)}
+dl.kv dt{color:var(--fg-2);font-size:13px;padding-right:12px}
+dl.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.timeline{list-style:none;margin:0;padding:6px 0 0}
+.timeline li{position:relative;padding:8px 0 12px 20px;border-left:1px solid var(--line);margin-left:5px}
+.timeline li::before{content:"";position:absolute;left:-5px;top:14px;width:9px;height:9px;border-radius:2px;background:var(--surface);border:2px solid var(--control)}
+.timeline li:first-child::before{border-color:var(--signal);background:var(--signal)}
+.timeline .t{font-weight:650}
+.timeline .d{font-size:12.5px;color:var(--fg-2);font-variant-numeric:tabular-nums;margin-left:6px}
+.timeline p{font-size:13px;margin-top:2px;overflow-wrap:anywhere}
+.actions .actions{display:contents}
+.actions form{margin:0}
+.plan-grid .plan-fig{max-width:820px}
 
-/* Kennzahlen-Tabelle */
-table.ledger{width:100%;border-collapse:collapse}
-table.ledger tr{border-bottom:1px solid var(--line)}
-table.ledger tr:last-child{border-bottom:0}
-table.ledger td{padding:10px 12px;font-size:13px}
-table.ledger .k-name{font-weight:600}
-table.ledger .k-val{text-align:right;font-variant-numeric:tabular-nums}
-table.ledger .delta{text-align:right;font-size:12px;color:var(--fg-2)}
+/* Schmale Bildschirme: zuletzt, damit sie die Regeln oben überschreiben (Prototyp) */
+@media (max-width:1180px){.dash,.detail-spalten{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:900px){
+  .shell{grid-template-columns:minmax(0,1fr);gap:0;padding:0 16px}
+  .top-in{padding:10px 16px}
+  .nav{position:static;flex-direction:row;overflow-x:auto;padding-block:6px;border-bottom:1px solid var(--line);gap:2px}
+  .nav-item{box-shadow:inset 0 -2px 0 transparent;padding:8px 10px}
+  .nav-item[aria-current="page"]{box-shadow:inset 0 -3px 0 var(--signal)}
+  .nav-sep{display:none}
+  .user .who{display:none}
+}
+@media (max-width:640px){
+  .search{order:3;flex-basis:100%;max-width:none}
+  h1{font-size:28px}
+  .tag-nr{font-size:38px}
+  .tag .qr{width:76px;height:76px}
+  .tag{padding:12px 14px 12px 12px;gap:12px}
+  h1.tag-nr,.tag-nr{font-size:34px;white-space:nowrap}
+  dl.kv{grid-template-columns:minmax(0,1fr)}
+  dl.kv dt{border-bottom:0;padding-bottom:0}
+  dl.kv dd{padding-top:2px}
+  .actions .btn{flex:1 1 auto}
+  .stock-legend{gap:6px 20px}
+  .toolbar select,.toolbar input[type=search]{width:100%;min-width:0}
+}

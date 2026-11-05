@@ -18,6 +18,19 @@ from . import export as _export
 from . import kennzahlen as _kz
 from .views import _darf_sehen
 
+# Prototyp: Unterzeile je Kennzahl und Warnfarbe, solange etwas offen ist.
+UNTERZEILEN = {
+    "in-benutzung": "von allen aktiven Geräten",
+    "ueberfaellig": "von den ausgegebenen Leihen",
+    "anfragen-offen": "warten auf Entscheidung",
+    "garantie-30-tage": "in den nächsten 30 Tagen",
+    "unterschriften-offen": "Protokolle ohne Unterschrift",
+    "arbeitsplaetze-vollstaendig": "Soll-Ausstattung erfüllt",
+    "verliehen": "vom Leihpool",
+    "geprueft": "Stand der Erstinventur",
+}
+ACHTUNG = {"ueberfaellig", "unterschriften-offen"}
+
 
 def _keine_berechtigung(request):
     """F-112: Antwort 403 mit Seite „Keine Berechtigung“."""
@@ -44,7 +57,9 @@ def uebersicht(request):
     heute = _kz._heute()
     delta = _kz.delta_zum_vortag() or {}
     kennzahlen = [
-        {**kz, "delta": delta.get(kz["data_id"]), "delta_abs": abs(delta.get(kz["data_id"], 0) or 0)}
+        {**kz, "delta": delta.get(kz["data_id"]), "delta_abs": abs(delta.get(kz["data_id"], 0) or 0),
+         "unterzeile": UNTERZEILEN.get(kz["data_id"], ""),
+         "achtung": kz["data_id"] in ACHTUNG and bool(kz.get("ist"))}
         for kz in _kz.kennzahlen(heute)
     ]
     # Bestand nach Status (Prototyp: stock-bar)

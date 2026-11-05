@@ -2,48 +2,50 @@
 {% block titel %}Geräte · WMC Inventar{% endblock %}
 {% block inhalt %}
 <div class="page-head">
-  <div><h1>Geräte</h1><p class="muted lead">Alle Geräte des Bestands (F-41).</p></div>
-  {% if koennen_aendern %}<div class="actions"><a class="btn primary" href="/geraete/neu/" data-test="geraet-anlegen">Gerät anlegen</a></div>{% endif %}
+  <div><h1>Geräte</h1><p class="muted lead" data-test="anzahl">{{ anzahl }} {% if anzahl == 1 %}Gerät{% else %}Geräte{% endif %}</p></div>
+  <div class="actions">
+    {% if koennen_aendern %}<a class="btn primary" href="/geraete/neu/" data-test="geraet-anlegen"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Gerät erfassen</a>{% endif %}
+    <a class="btn" href="?format=xlsx{% if suche %}&amp;q={{ suche }}{% endif %}{% if status_filter %}&amp;status={{ status_filter }}{% endif %}{% if ort_filter %}&amp;ort={{ ort_filter }}{% endif %}{% if kategorie_filter %}&amp;kategorie={{ kategorie_filter }}{% endif %}{% if person_filter %}&amp;person={{ person_filter }}{% endif %}{% if unvollstaendig %}&amp;unvollstaendig=1{% endif %}" data-test="export-xlsx"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v12M7 11l5 5 5-5M4 20h16"/></svg>Export .xlsx</a>
+    <a class="btn" href="?format=csv{% if suche %}&amp;q={{ suche }}{% endif %}{% if status_filter %}&amp;status={{ status_filter }}{% endif %}{% if ort_filter %}&amp;ort={{ ort_filter }}{% endif %}{% if kategorie_filter %}&amp;kategorie={{ kategorie_filter }}{% endif %}{% if person_filter %}&amp;person={{ person_filter }}{% endif %}{% if unvollstaendig %}&amp;unvollstaendig=1{% endif %}" data-test="export-csv">Export .csv</a>
+  </div>
 </div>
 
-<div class="filter-bar">
-  <form method="get" action="/geraete/" data-test="suche-formular">
-    <input type="search" name="q" value="{{ suche }}" placeholder="Inventarnummer, Name, Seriennummer, Kategorie, Person, Ort …" data-test="suche" aria-label="Suche">
-    <select name="status" data-test="filter-status">
-      <option value="">Status: alle</option>
-      {% for code, label in statuser %}
-      <option value="{{ code }}" {% if status_filter == code %}selected{% endif %}>{{ label }}</option>
-      {% endfor %}
-    </select>
-    <select name="ort" data-test="filter-ort">
-      <option value="">Ort: alle</option>
-      {% for o in orte %}
-      <option value="{{ o.pk }}" {% if ort_filter == o.pk|stringformat:"s" %}selected{% endif %}>{{ o.kennung }}</option>
-      {% endfor %}
-    </select>
-    <select name="kategorie" data-test="filter-kategorie">
-      <option value="">Kategorie: alle</option>
-      {% for k in kategorien %}
-      <option value="{{ k.pk }}" {% if kategorie_filter == k.pk|stringformat:"s" %}selected{% endif %}>{{ k.name }}</option>
-      {% endfor %}
-    </select>
-    <select name="person" data-test="filter-person">
-      <option value="">Person: alle</option>
-      {% for p in personen %}
-      <option value="{{ p.pk }}" {% if person_filter == p.pk|stringformat:"s" %}selected{% endif %}>{{ p.voller_name }}</option>
-      {% endfor %}
-    </select>
-    <label class="check"><input type="checkbox" name="unvollstaendig" value="1" {% if unvollstaendig %}checked{% endif %} data-test="filter-unvollstaendig"> nur unvollständige</label>
-    <button type="submit" class="btn sm">Anwenden</button>
-  </form>
+<div class="chips" data-test="status-chips">
+  <a class="chip" href="/geraete/"{% if not status_filter %} aria-current="true"{% endif %}>Alle <span class="n">{{ status_gesamt }}</span></a>
+  {% for s in status_chips %}
+  <a class="chip" href="/geraete/?status={{ s.code }}"{% if status_filter == s.code %} aria-current="true"{% endif %}>{{ s.label }} <span class="n">{{ s.zahl }}</span></a>
+  {% endfor %}
 </div>
 
-<p class="anzahl" data-test="anzahl">{{ anzahl }} {% if anzahl == 1 %}Gerät{% else %}Geräte{% endif %}</p>
-
-<div class="export-aktionen">
-    <a class="btn sm" href="?format=xlsx{% if suche %}&amp;q={{ suche }}{% endif %}{% if status_filter %}&amp;status={{ status_filter }}{% endif %}{% if ort_filter %}&amp;ort={{ ort_filter }}{% endif %}{% if kategorie_filter %}&amp;kategorie={{ kategorie_filter }}{% endif %}{% if person_filter %}&amp;person={{ person_filter }}{% endif %}{% if unvollstaendig %}&amp;unvollstaendig=1{% endif %}" data-test="export-xlsx">Export XLSX</a>
-    <a class="btn sm" href="?format=csv{% if suche %}&amp;q={{ suche }}{% endif %}{% if status_filter %}&amp;status={{ status_filter }}{% endif %}{% if ort_filter %}&amp;ort={{ ort_filter }}{% endif %}{% if kategorie_filter %}&amp;kategorie={{ kategorie_filter }}{% endif %}{% if person_filter %}&amp;person={{ person_filter }}{% endif %}{% if unvollstaendig %}&amp;unvollstaendig=1{% endif %}" data-test="export-csv">Export CSV</a>
-</div>
+<form class="toolbar" method="get" action="/geraete/" data-test="suche-formular">
+  <select name="status" data-test="filter-status" aria-label="Status">
+    <option value="">Alle Status</option>
+    {% for code, label in statuser %}
+    <option value="{{ code }}" {% if status_filter == code %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <select name="kategorie" data-test="filter-kategorie" aria-label="Kategorie">
+    <option value="">Alle Kategorien</option>
+    {% for k in kategorien %}
+    <option value="{{ k.pk }}" {% if kategorie_filter == k.pk|stringformat:"s" %}selected{% endif %}>{{ k.name }}</option>
+    {% endfor %}
+  </select>
+  <select name="ort" data-test="filter-ort" aria-label="Ort">
+    <option value="">Alle Orte</option>
+    {% for o in orte %}
+    <option value="{{ o.pk }}" {% if ort_filter == o.pk|stringformat:"s" %}selected{% endif %}>{{ o.kennung }}</option>
+    {% endfor %}
+  </select>
+  <select name="person" data-test="filter-person" aria-label="Person">
+    <option value="">Alle Personen</option>
+    {% for p in personen %}
+    <option value="{{ p.pk }}" {% if person_filter == p.pk|stringformat:"s" %}selected{% endif %}>{{ p.voller_name }}</option>
+    {% endfor %}
+  </select>
+  <label class="check"><input type="checkbox" name="unvollstaendig" value="1" {% if unvollstaendig %}checked{% endif %} data-test="filter-unvollstaendig"> nur unvollständige</label>
+  <input type="search" name="q" value="{{ suche }}" placeholder="In der Liste filtern" data-test="liste-filter" aria-label="In der Liste filtern">
+  <button type="submit" class="btn" data-test="filter-anwenden">Anwenden</button>
+</form>
 
 {% if fortschritt %}
 <div class="abschnitt" data-test="inventur-fortschritt">
@@ -56,26 +58,41 @@
 </div>
 {% endif %}
 
-<div class="liste" data-test="liste">
-  <form method="post" action="/etiketten/auswahl/" data-test="etiketten-formular">
-    {% csrf_token %}
-    <div class="etiketten-kopf">
-      <label><input type="checkbox" id="auswahl-alle" data-test="auswahl-alle" title="Alle auswählen"></label>
-      <input type="number" name="startposition" value="1" min="1" max="24" data-test="startposition" title="Startposition auf dem Bogen (F-73)">
-      <button type="submit" class="btn primary" data-test="etiketten-drucken" disabled>Etiketten drucken</button>
-      <span class="muted small" data-test="auswahl-anzahl">0 ausgewählt</span>
-    </div>
-    {% for g in geraete %}
-    <div class="zeile" data-test="zeile" data-id="{{ g.inventarnummer }}">
-      <label class="auswahl"><input type="checkbox" name="auswahl" value="{{ g.inventarnummer }}" class="auswahl-box" data-test="auswahl" data-inventarnummer="{{ g.inventarnummer }}"></label>
-      <span class="inv num" data-test="inventarnummer">{% if suche %}<span data-test="suchtreffer">{{ g.inventarnummer }} · {{ g.geraetename|default:g.modell }}{% if g.person %} · {{ g.person.voller_name }}{% endif %}</span>{% else %}{{ g.inventarnummer }}{% endif %}</span>
-      <span data-test="zeile-name">{{ g.geraetename|default:g.modell }} · {{ g.kategorie.name }}{% if g.ort %} · {{ g.ort.kennung }}{% elif g.person %} · {{ g.person.voller_name }}{% endif %}</span>
-      <span class="chip-status {{ g.status }}" data-test="status">{{ g.status_anzeige }}</span>
-      <a class="btn sm" href="/geraete/{{ g.inventarnummer }}/" data-test="detail-link">Ansehen</a>
-    </div>
-    {% empty %}
-    <div class="zeile muted">Keine Geräte gefunden.</div>
-    {% endfor %}
-  </form>
-</div>
+<form method="post" action="/etiketten/auswahl/" data-test="etiketten-formular">
+  {% csrf_token %}
+  <div class="bulk leer">
+    <span data-test="auswahl-anzahl">0 ausgewählt</span>
+    <label>Startposition <input type="number" name="startposition" value="1" min="1" max="24" data-test="startposition" title="Startposition auf dem Bogen (F-73)"></label>
+    <button type="submit" class="btn sm" data-test="etiketten-drucken" disabled>Etiketten drucken</button>
+  </div>
+  <div class="tbl-wrap" data-test="liste">
+    <table>
+      <thead>
+        <tr>
+          <th><input type="checkbox" data-test="auswahl-alle" aria-label="Alle auswählen"></th>
+          <th>Inventarnr.</th><th>Gerät</th><th>Gerätename</th><th>Seriennr.</th><th>Status</th><th>Zuordnung</th><th>Garantie bis</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for g in geraete %}
+        <tr data-test="zeile" data-id="{{ g.inventarnummer }}">
+          <td><input type="checkbox" name="auswahl" value="{{ g.inventarnummer }}" class="auswahl-box" data-test="auswahl" data-inventarnummer="{{ g.inventarnummer }}" aria-label="{{ g.inventarnummer }} auswählen"></td>
+          <td class="nowrap"><a class="inv" href="/geraete/{{ g.inventarnummer }}/" data-test="detail-link"><span data-test="inventarnummer">{% if suche %}<span data-test="suchtreffer">{{ g.inventarnummer }} · {{ g.geraetename|default:g.modell }}{% if g.person %} · {{ g.person.voller_name }}{% endif %}</span>{% else %}{{ g.inventarnummer }}{% endif %}</span></a></td>
+          <td data-test="zeile-name">{{ g.kategorie.name }}<span class="sub">{{ g.hersteller }} {{ g.modell }}</span></td>
+          <td class="nowrap mono">{{ g.geraetename|default:"–" }}</td>
+          <td class="nowrap mono">{{ g.seriennummer|default:"–" }}</td>
+          <td class="nowrap"><span class="chip-status {{ g.status }}" data-test="status">{{ g.status_anzeige }}</span></td>
+          <td>{% if g.person %}{{ g.person.voller_name }}{% elif g.ort %}{{ g.ort.kennung }}{% else %}–{% endif %}</td>
+          <td class="nowrap">{{ g.garantie_bis|date:"d.m.Y"|default:"–" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" class="muted">Keine Geräte gefunden.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</form>
+{% endblock %}
+{% block skripte %}
+<script src="/static/liste.js"></script>
 {% endblock %}

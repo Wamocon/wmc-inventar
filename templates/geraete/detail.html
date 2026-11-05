@@ -1,152 +1,24 @@
 {% extends "basis.html" %}
 {% block titel %}{{ gerat.inventarnummer }} · WMC Inventar{% endblock %}
 {% block inhalt %}
-<div class="page-head">
-  <div>
-    <h1 data-test="inventarnummer">{{ gerat.inventarnummer }}</h1>
-    <p class="muted lead">{{ gerat.geraetename|default:gerat.modell }} · {{ gerat.kategorie.name }}</p>
-  </div>
-  <div class="actions">
-    {% if kann_loeschen %}<a class="btn" href="/geraete/{{ gerat.inventarnummer }}/loeschen/" data-test="aktion-loeschen">Löschen</a>{% endif %}
-    {% if ist_admin and gerat.status != "ausgemustert" %}
-      <a class="btn" href="/geraete/{{ gerat.inventarnummer }}/aendern/" data-test="aktion-bearbeiten">Ändern</a>
-      <a class="btn" href="/geraete/neu/?vorlage={{ gerat.inventarnummer }}" data-test="aktion-vorlage">Als Vorlage kopieren</a>
-      <a class="btn" href="/geraete/{{ gerat.inventarnummer }}/notiz/" data-test="aktion-notiz">Notiz</a>
-      <form method="post" action="/geraete/{{ gerat.inventarnummer }}/pruefen/" data-test="pruefen-formular">
-        {% csrf_token %}
-        <button type="submit" class="btn" data-test="geprueft">Geprüft</button>
-      </form>
-    {% endif %}
-  </div>
-</div>
+<a class="back" href="/geraete/"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>Geräte</a>
 
-{% if offene_konflikte %}
-<div class="meldung warning" data-test="konflikt-warndung">
-  <strong>{{ offene_konflikte|length }} offener Importkonflikt{{ offene_konflikte|length|pluralize }}.</strong>
-  Bitte entscheiden je Konflikt, ob der alte oder der neue Wert gilt.
-</div>
-{% endif %}
-
-{% if doppelte_namen %}
-<div class="meldung info" data-test="hinweis-doppelter-name">
-  Gleichnamige Geräte im Bestand:
-  {% for g in doppelte_namen %}<a href="/geraete/{{ g.inventarnummer }}/" data-test="doppelter-name">{{ g.inventarnummer }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}
-</div>
-{% endif %}
-
-{% if doppelte_serien %}
-<div class="meldung info" data-test="hinweis-doppelte-seriennummer">
-  Gleichlautende Seriennummer auch bei:
-  {% for g in doppelte_serien %}<a href="/geraete/{{ g.inventarnummer }}/" data-test="doppelte-serien">{{ g.inventarnummer }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}
-</div>
-{% endif %}
-
-<div class="abschnitt">
-  <h2>Status</h2>
-  <p><span class="chip-status {{ gerat.status }}" data-test="status" data-wert="{{ gerat.status_wert }}">{{ gerat.status_anzeige }}</span>
-  {% if gerat.person %} · zuweisende Person: {{ gerat.person.voller_name }}{% endif %}
-  {% if gerat.ort %} · Ort: {{ gerat.ort.kennung }}{% endif %}
-  {% if gerat.leihpool %} · Leihpool{% endif %}</p>
-  <p data-test="verbleib">
-    {% if gerat.person %}Bei {{ gerat.person.voller_name }}{% elif gerat.ort %}An {{ gerat.ort.kennung }}{% else %}Lager{% endif %}
-  </p>
-</div>
-
-<div class="abschnitt">
-  <h2>QR-Code und Etikett</h2>
-  <div class="qr-zeile">
-    <span data-test="qr" data-qr="{{ qr_inhalt }}">{{ qr_svg }}</span>
-    <div>
-      <p class="muted small" data-test="qr-inhalt">{{ qr_inhalt }}</p>
-      {% if kann_etikett_sehen %}
-      <a class="btn" href="/geraete/{{ gerat.inventarnummer }}/etikett/" data-test="aktion-etikett">Etikett drucken</a>
-      {% endif %}
+<div class="detail-head">
+  <div class="tag">
+    <span class="qr" data-test="qr" data-qr="{{ qr_inhalt }}">{{ qr_svg }}</span>
+    <div class="tag-text">
+      <h1 class="tag-nr" data-test="inventarnummer">{{ gerat.inventarnummer }}</h1>
+      <span class="tag-model">{{ gerat.kategorie.name }}, {{ gerat.hersteller }} {{ gerat.modell }}</span>
+      <span class="tag-own">Eigentum der WAMOCON GmbH</span>
     </div>
   </div>
-</div>
-
-<div class="abschnitt">
-  <h2>Daten</h2>
-  <dl class="detail-grid">
-    <dt>Kategorie</dt><dd data-test="kategorie">{{ gerat.kategorie.name }}</dd>
-    <dt>Hersteller</dt><dd data-test="hersteller">{{ gerat.hersteller }}</dd>
-    <dt>Modell</dt><dd data-test="modell">{{ gerat.modell }}</dd>
-    <dt>Seriennummer</dt><dd data-test="seriennummer">{{ gerat.seriennummer|default:"–" }}</dd>
-    <dt>Zustand</dt><dd data-test="zustand">{{ gerat.get_zustand_display }}</dd>
-    <dt>Gerätename</dt><dd data-test="geraetename">{{ gerat.geraetename|default:"–" }}</dd>
-    <dt>Standardzubehör</dt><dd data-test="zubehoer">{{ gerat.standardzuehoer|default:"–" }}</dd>
-    <dt>Technische Daten</dt><dd data-test="technische-daten">{{ gerat.technische_daten|default:"–" }}</dd>
-    <dt>Kaufdatum</dt><dd data-test="kaufdatum">{{ gerat.kaufdatum|default:"–" }}</dd>
-    <dt>Kaufpreis netto</dt><dd data-test="kaufpreis">{% if gerat.kaufpreis_netto is not None %}{{ gerat.kaufpreis_netto }} EUR{% else %}–{% endif %}</dd>
-    <dt>Lieferant</dt><dd data-test="lieferant">{{ gerat.lieferant|default:"–" }}</dd>
-    <dt>Rechnungsnummer</dt><dd data-test="rechnung">{{ gerat.rechnungsnummer|default:"–" }}</dd>
-    <dt>Garantie bis</dt><dd data-test="garantie">{{ gerat.garantie_bis|default:"–" }}</dd>
-    <dt>Notiz</dt><dd data-test="notiz">{{ gerat.notiz|default:"–" }}</dd>
-  </dl>
-</div>
-
-<div class="abschnitt">
-  <h2>Prüfung</h2>
-  {% if gerat.zuletzt_geprueft_am %}
-    <p>Zuletzt geprüft: {{ gerat.zuletzt_geprueft_am|date:"d.m.Y H:i" }}{% if gerat.zuletzt_geprueft_von %} · von {{ gerat.zuletzt_geprueft_von.name }}{% endif %}</p>
-  {% else %}
-    <p class="muted">Noch nicht geprüft.</p>
-  {% endif %}
-</div>
-
-{% if datenluecken %}
-<div class="abschnitt">
-  <h2>Datenlücken</h2>
-  <p data-test="datenluecken">
-    {% for l in datenluecken %}<span class="chip-status ausgemustert">{{ l }}</span>{% if not forloop.last %} {% endif %}{% endfor %}
-  </p>
-</div>
-{% endif %}
-
-{% if offene_konflikte %}
-<div class="abschnitt">
-  <h2>Offene Konflikte</h2>
-  <div class="liste" data-test="konflikt-liste">
-    {% for k in offene_konflikte %}
-    <div class="zeile">
-      <span data-test="konflikt-feld">{{ k.feld }}</span>
-      <span data-test="konflikt-werte">alt: {{ k.alter_wert|default:"–" }} · neu: {{ k.neuer_wert|default:"–" }}{% if k.herkunft %} · {{ k.herkunft }}{% endif %}</span>
-      {% if koennen_aendern %}
-      <form method="post" action="/geraete/{{ gerat.inventarnummer }}/konflikt/{{ k.pk }}/loesen/" class="actions">
-        {% csrf_token %}
-        <button type="submit" name="nehmen" value="alt" class="btn sm" data-test="konflikt-alt">Alt behalten</button>
-        <button type="submit" name="nehmen" value="neu" class="btn sm" data-test="konflikt-neu">Neu übernehmen</button>
-      </form>
-      {% endif %}
-    </div>
-    {% endfor %}
+  <div class="detail-meta">
+    <div class="pills"><span class="chip-status {{ gerat.status }}" data-test="status" data-wert="{{ gerat.status_wert }}">{{ gerat.status_anzeige }}</span>{% if gerat.leihpool %}<span class="chip-status verliehen">Leihpool</span>{% endif %}</div>
+    <p class="small">QR-Code öffnet <span data-test="qr-inhalt">{{ qr_inhalt }}</span></p>
   </div>
 </div>
-{% endif %}
 
-{% if gerat.erstellt_am %}
-<div class="abschnitt">
-  <h2>Erstellt</h2>
-  <p>{{ gerat.erstellt_am|date:"d.m.Y H:i" }}{% if gerat.erstellt_von %} · von {{ gerat.erstellt_von.bezeichnung }}{% endif %}</p>
-</div>
-{% endif %}
-
-{% if gerat.altbestand_ohne_protokoll %}
-<div class="meldung info" data-test="altbestand-hinweis">
-  Altbestand ohne Protokoll (Import).
-</div>
-{% endif %}
-
-{% if gerat.ort and gerat.ort.standort %}
-<div class="abschnitt">
-  <h2>Raumplan</h2>
-  <p class="muted">Den Platz im Grundriss sehen (F-69).</p>
-  <a class="btn"
-     href="/arbeitsplaetze/?hervorheben={{ gerat.ort.standort|urlencode }}|{{ gerat.ort.kennung|urlencode }}"
-     data-test="aktion-im-raumplan">Im Raumplan zeigen</a>
-</div>
-{% endif %}
-
+<div class="actions" data-test="aktionen">
 {% if ist_admin %}
   {% if gerat.status == "auf-lager" %}
   <div class="actions" data-test="lebenszyklus">
@@ -171,42 +43,167 @@
   </div>
   {% endif %}
 {% endif %}
-
-<div class="abschnitt">
-  <h2>Protokolle</h2>
-  {% if gerat.protokolle.exists %}
-  <div class="liste" data-test="protokolle">
-    {% for p in gerat.protokolle.all %}
-    <div class="zeile" data-test="protokoll" data-id="{{ p.nr }}" data-stand="{{ p.stand }}">
-      <a href="/protokolle/{{ p.nr }}/" data-test="protokoll-link">{{ p.nr }}</a>
-      <span class="chip-status {{ p.stand_class }}">{{ p.stand_anzeige }}</span>
-    </div>
-    {% endfor %}
-  </div>
-  {% else %}
-  <p class="muted">Noch keine Protokolle.</p>
+  {% if ist_admin and gerat.status != "ausgemustert" %}
+    <a class="btn" href="/geraete/{{ gerat.inventarnummer }}/aendern/" data-test="aktion-bearbeiten">Ändern</a>
+    <a class="btn" href="/geraete/neu/?vorlage={{ gerat.inventarnummer }}" data-test="aktion-vorlage">Als Vorlage kopieren</a>
+    <a class="btn" href="/geraete/{{ gerat.inventarnummer }}/notiz/" data-test="aktion-notiz">Notiz</a>
+    <form method="post" action="/geraete/{{ gerat.inventarnummer }}/pruefen/" data-test="pruefen-formular">
+      {% csrf_token %}
+      <button type="submit" class="btn" data-test="geprueft">Geprüft</button>
+    </form>
   {% endif %}
+  {% if kann_etikett_sehen %}<a class="btn" href="/geraete/{{ gerat.inventarnummer }}/etikett/" data-test="aktion-etikett">Etikett</a>{% endif %}
+  {% if gerat.ort and gerat.ort.standort %}<a class="btn" href="/arbeitsplaetze/?hervorheben={{ gerat.ort.standort|urlencode }}|{{ gerat.ort.kennung|urlencode }}" data-test="aktion-im-raumplan">Im Raumplan zeigen</a>{% endif %}
+  {% if kann_loeschen %}<a class="btn" href="/geraete/{{ gerat.inventarnummer }}/loeschen/" data-test="aktion-loeschen">Löschen</a>{% endif %}
 </div>
 
-<div class="abschnitt">
-  <h2>Historie</h2>
-  {% if gerat.vorgaenge.exists %}
-  <div class="liste" data-test="historie">
-    {% for v in gerat.vorgaenge.all %}
+{% if offene_konflikte %}
+<div class="meldung warning" data-test="konflikt-warndung">
+  <strong>{{ offene_konflikte|length }} offener Importkonflikt{{ offene_konflikte|length|pluralize }}.</strong>
+  Bitte entscheiden je Konflikt, ob der alte oder der neue Wert gilt.
+</div>
+{% endif %}
+
+{% if doppelte_namen %}
+<div class="meldung info" data-test="hinweis-doppelter-name">
+  Gleichnamige Geräte im Bestand:
+  {% for g in doppelte_namen %}<a href="/geraete/{{ g.inventarnummer }}/" data-test="doppelter-name">{{ g.inventarnummer }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}
+</div>
+{% endif %}
+
+{% if doppelte_serien %}
+<div class="meldung info" data-test="hinweis-doppelte-seriennummer">
+  Gleichlautende Seriennummer auch bei:
+  {% for g in doppelte_serien %}<a href="/geraete/{{ g.inventarnummer }}/" data-test="doppelte-serien">{{ g.inventarnummer }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}
+</div>
+{% endif %}
+
+{% if gerat.altbestand_ohne_protokoll %}
+<div class="meldung info" data-test="altbestand-hinweis">
+  Altbestand ohne Protokoll (Import).
+</div>
+{% endif %}
+
+<div class="detail-spalten">
+<div class="stack">
+
+<section class="card">
+  <div class="card-head"><h2>Verbleib</h2></div>
+  <dl class="kv">
+    <dt>Verbleib</dt><dd data-test="verbleib">{% if gerat.person %}Bei {{ gerat.person.voller_name }}{% elif gerat.ort %}An {{ gerat.ort.kennung }}{% else %}Lager{% endif %}</dd>
+    {% if gerat.person %}<dt>Person</dt><dd>{{ gerat.person.voller_name }}</dd>{% endif %}
+    {% if gerat.ort %}<dt>Ort</dt><dd>{{ gerat.ort.kennung }}</dd>{% endif %}
+  </dl>
+</section>
+
+<section class="card">
+  <div class="card-head"><h2>Stammdaten</h2></div>
+  <dl class="kv">
+    <dt>Kategorie</dt><dd data-test="kategorie">{{ gerat.kategorie.name }}</dd>
+    <dt>Hersteller</dt><dd data-test="hersteller">{{ gerat.hersteller }}</dd>
+    <dt>Modell</dt><dd data-test="modell">{{ gerat.modell }}</dd>
+    <dt>Seriennummer</dt><dd data-test="seriennummer">{{ gerat.seriennummer|default:"–" }}</dd>
+    <dt>Zustand</dt><dd data-test="zustand">{{ gerat.get_zustand_display }}</dd>
+    <dt>Gerätename</dt><dd data-test="geraetename">{{ gerat.geraetename|default:"–" }}</dd>
+    <dt>Standardzubehör</dt><dd data-test="zubehoer">{{ gerat.standardzuehoer|default:"–" }}</dd>
+    <dt>Technische Daten</dt><dd data-test="technische-daten">{{ gerat.technische_daten|default:"–" }}</dd>
+    <dt>Kaufdatum</dt><dd data-test="kaufdatum">{{ gerat.kaufdatum|default:"–" }}</dd>
+    <dt>Kaufpreis netto</dt><dd data-test="kaufpreis">{% if gerat.kaufpreis_netto is not None %}{{ gerat.kaufpreis_netto }} EUR{% else %}–{% endif %}</dd>
+    <dt>Lieferant</dt><dd data-test="lieferant">{{ gerat.lieferant|default:"–" }}</dd>
+    <dt>Rechnungsnummer</dt><dd data-test="rechnung">{{ gerat.rechnungsnummer|default:"–" }}</dd>
+    <dt>Garantie bis</dt><dd data-test="garantie">{{ gerat.garantie_bis|default:"–" }}</dd>
+    <dt>Notiz</dt><dd data-test="notiz">{{ gerat.notiz|default:"–" }}</dd>
+  </dl>
+</section>
+
+<section class="card">
+  <div class="card-head"><h2>Prüfung</h2></div>
+  <div class="card-text">
+  {% if gerat.zuletzt_geprueft_am %}
+    <p>Zuletzt geprüft: {{ gerat.zuletzt_geprueft_am|date:"d.m.Y H:i" }}{% if gerat.zuletzt_geprueft_von %} · von {{ gerat.zuletzt_geprueft_von.name }}{% endif %}</p>
+  {% else %}
+    <p class="muted">Noch nicht geprüft.</p>
+  {% endif %}
+  </div>
+</section>
+
+{% if datenluecken %}
+<section class="card">
+  <div class="card-head"><h2>Datenlücken</h2></div>
+  <div class="card-text">
+  <p data-test="datenluecken">
+    {% for l in datenluecken %}<span class="chip-status ausgemustert">{{ l }}</span>{% if not forloop.last %} {% endif %}{% endfor %}
+  </p>
+  </div>
+</section>
+{% endif %}
+
+{% if offene_konflikte %}
+<section class="card">
+  <div class="card-head"><h2>Offene Konflikte</h2></div>
+  <div class="card-text">
+  <div class="liste" data-test="konflikt-liste">
+    {% for k in offene_konflikte %}
     <div class="zeile">
-      <span data-test="vorgang" data-typ="{{ v.get_typ_display }}"{% if v.get_typ_display == "Änderung" %} data-feld="{{ v.aenderung_feld }}" data-alt="{{ v.aenderung_alter_wert }}" data-neu="{{ v.aenderung_neuer_wert }}"{% endif %}>
-        {{ v.get_typ_display }}{% if v.get_typ_display == "Änderung" %}
-        <span data-test="aenderung-detail">{{ v.aenderung_feld }}: {{ v.aenderung_alter_wert|default:"(leer)" }} → {{ v.aenderung_neuer_wert|default:"(leer)" }}</span>
-        {% endif %}
-      </span>
-      <span data-test="zeitpunkt">{{ v.zeitpunkt|date:"d.m.Y H:i" }}</span>
-      {% if v.erzeugt_von %}<span data-test="erzeugt-von">{{ v.erzeugt_von.bezeichnung }}</span>{% endif %}
-      {% if v.notiz %}<span data-test="notiz-vorgang">{{ v.notiz }}</span>{% endif %}
+      <span data-test="konflikt-feld">{{ k.feld }}</span>
+      <span data-test="konflikt-werte">alt: {{ k.alter_wert|default:"–" }} · neu: {{ k.neuer_wert|default:"–" }}{% if k.herkunft %} · {{ k.herkunft }}{% endif %}</span>
+      {% if koennen_aendern %}
+      <form method="post" action="/geraete/{{ gerat.inventarnummer }}/konflikt/{{ k.pk }}/loesen/" class="actions">
+        {% csrf_token %}
+        <button type="submit" name="nehmen" value="alt" class="btn sm" data-test="konflikt-alt">Alt behalten</button>
+        <button type="submit" name="nehmen" value="neu" class="btn sm" data-test="konflikt-neu">Neu übernehmen</button>
+      </form>
+      {% endif %}
     </div>
     {% endfor %}
   </div>
+  </div>
+</section>
+{% endif %}
+
+{% if gerat.erstellt_am %}
+<section class="card">
+  <div class="card-head"><h2>Erstellt</h2></div>
+  <div class="card-text">
+  <p>{{ gerat.erstellt_am|date:"d.m.Y H:i" }}{% if gerat.erstellt_von %} · von {{ gerat.erstellt_von.bezeichnung }}{% endif %}</p>
+  </div>
+</section>
+{% endif %}
+
+<section class="card">
+  <div class="card-head"><h2>Protokolle</h2></div>
+  {% if gerat.protokolle.exists %}
+  <ul class="worklist" data-test="protokolle">
+    {% for p in gerat.protokolle.all %}
+    <li data-test="protokoll" data-id="{{ p.nr }}" data-stand="{{ p.stand }}">
+      <span class="what"><a href="/protokolle/{{ p.nr }}/" data-test="protokoll-link">{{ p.nr }}</a></span>
+      <span class="chip-status {{ p.stand_class }}">{{ p.stand_anzeige }}</span>
+    </li>
+    {% endfor %}
+  </ul>
   {% else %}
-  <p class="muted">Noch keine Vorgänge.</p>
+  <p class="leer-text">Noch keine Protokolle.</p>
   {% endif %}
+</section>
+
+</div>
+
+<section class="card">
+  <div class="card-head"><h2>Historie</h2><span class="count">{{ gerat.vorgaenge.count }}</span></div>
+  {% if gerat.vorgaenge.exists %}
+  <ul class="timeline" data-test="historie">
+    {% for v in gerat.vorgaenge.all %}
+    <li>
+      <span class="t" data-test="vorgang" data-typ="{{ v.get_typ_display }}"{% if v.get_typ_display == "Änderung" %} data-feld="{{ v.aenderung_feld }}" data-alt="{{ v.aenderung_alter_wert }}" data-neu="{{ v.aenderung_neuer_wert }}"{% endif %}>{{ v.get_typ_display }}</span>
+      <span class="d" data-test="zeitpunkt">{{ v.zeitpunkt|date:"d.m.Y H:i" }}</span>{% if v.erzeugt_von %}<span class="d" data-test="erzeugt-von">{{ v.erzeugt_von.bezeichnung }}</span>{% endif %}
+      {% if v.get_typ_display == "Änderung" %}<p data-test="aenderung-detail">{{ v.aenderung_feld }}: {{ v.aenderung_alter_wert|default:"(leer)" }} → {{ v.aenderung_neuer_wert|default:"(leer)" }}</p>{% endif %}
+      {% if v.notiz %}<p data-test="notiz-vorgang">{{ v.notiz }}</p>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="leer-text">Noch keine Vorgänge.</p>
+  {% endif %}
+</section>
 </div>
 {% endblock %}
