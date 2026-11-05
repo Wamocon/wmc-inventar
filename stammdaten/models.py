@@ -176,6 +176,27 @@ class Ort(models.Model):
         return self.position_x is not None and self.position_y is not None
 
 
+class Checklistenpunkt(models.Model):
+    """Ein Punkt der Checkliste Zugänge oder der Prüfpunkte IT-Offboarding (Kapitel 3.2)."""
+
+    LISTEN = [("zugaenge", "Zugänge"), ("offboarding", "IT-Offboarding")]
+
+    liste = models.CharField("Liste", max_length=20, choices=LISTEN)
+    schluessel = models.CharField("Schlüssel", max_length=40)
+    text = models.CharField("Text", max_length=200)
+    reihenfolge = models.PositiveIntegerField("Reihenfolge", default=0)
+    aktiv = models.BooleanField("aktiv", default=True)
+
+    class Meta:
+        verbose_name = "Checklistenpunkt"
+        verbose_name_plural = "Checklistenpunkte"
+        ordering = ["liste", "reihenfolge", "id"]
+        constraints = [models.UniqueConstraint(fields=("liste", "schluessel"), name="checklistenpunkt_eindeutig")]
+
+    def __str__(self):
+        return self.text
+
+
 class Einstellungen(models.Model):
     """M7 Teil 1 (A-0905): Einstellungen (F-122, F-90, F-96, F-130, N-02).
 
@@ -260,6 +281,8 @@ class Einstellungen(models.Model):
     )
 
     # --- Etiketten ---
+    # F-14: Höchste je vergebene Nummer, damit ein gelöschtes Gerät seine nicht weitergibt.
+    inventar_zaehler = models.PositiveIntegerField("Höchste vergebene Inventarnummer", default=0)
     etikettenformat = models.CharField(
         max_length=20, default="a4",
         choices=[("a4", "A4-Bogen, 24 Etiketten, 70 × 37 mm"), ("a5", "A5-Bogen, 10 Etiketten, 74 × 42 mm")],

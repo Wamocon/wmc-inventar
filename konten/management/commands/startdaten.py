@@ -1,9 +1,8 @@
-"""Startdaten für den Betrieb (N-11): Kategorien, ein Lagerort, ein Admin-Konto.
+"""Startdaten für den Betrieb (N-11): Kategorien, Checklisten, ein Lagerort, ein Admin-Konto.
 
     ADMIN_EMAIL=... ADMIN_PASSWORT=... python manage.py startdaten
 
-Die Checklisten stehen im Code (Protokoll.CHECKLISTE_PUNKTE, OFFBOARDING_PUNKTE). Die
-verbindlichen Texte der Protokolle trägt die IT in den Einstellungen ein (FRM-001, FRM-002).
+Die verbindlichen Texte der Protokolle trägt die IT in den Einstellungen ein (FRM-001, FRM-002).
 Vorhandenes bleibt unberührt, der Befehl lässt sich gefahrlos wiederholen.
 """
 from __future__ import annotations
@@ -14,6 +13,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 from konten.forms import MIN_PASSWORT_LAENGE
 from konten.models import Konto
+from stammdaten.checklisten import vorbelegen
 from stammdaten.models import Kategorie, Ort
 
 from .beispieldaten import KATEGORIEN
@@ -34,6 +34,7 @@ class Command(BaseCommand):
             )
             neu += angelegt
         self.stdout.write(f"Kategorien: {neu} neu, {Kategorie.objects.count()} insgesamt")
+        self.stdout.write(f"Checklistenpunkte: {vorbelegen()} neu")
 
         if not Ort.objects.filter(typ=Ort.TYP_LAGER).exists():
             Ort.objects.create(typ=Ort.TYP_LAGER, kennung=optionen["lager"], name="Lager")

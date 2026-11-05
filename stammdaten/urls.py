@@ -7,6 +7,7 @@ app_name = "stammdaten"
 urlpatterns = [
     # Einstellungen (F-122, F-90, F-96, F-130, N-02) — M7 Teil 1 (A-0905)
     path("einstellungen/", views.einstellungen_sehen, name="einstellungen"),
+    path("einstellungen/checklisten/", views.checklisten_pflegen, name="checklisten"),
     path("einstellungen/testmail/", views.einstellungen_testmail, name="einstellungen-testmail"),
     path("einstellungen/logo/", views.einstellungen_logo, name="einstellungen-logo"),
     # Kategorien (F-120)

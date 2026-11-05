@@ -13,6 +13,8 @@ import re
 
 from django.db import models
 from django.utils import timezone
+
+from stammdaten import checklisten
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -210,6 +212,16 @@ class Gerat(models.Model):
         return list(Gerat.objects.filter(seriennummer__iexact=vermerk).exclude(pk=self.pk))
 
     # --- F-84: Hinweise auf doppelte Namen ----------------------------------
+    def delete(self, *args, **kwargs):
+        # F-14: Die Nummer steht vielleicht schon auf einem Etikett und wird nie neu vergeben.
+        from stammdaten.models import Einstellungen
+        einstellungen = Einstellungen.aktuelles()
+        nummer = int(self.inventarnummer[4:]) if self.inventarnummer[4:].isdigit() else 0
+        if nummer > einstellungen.inventar_zaehler:
+            einstellungen.inventar_zaehler = nummer
+            einstellungen.save(update_fields=["inventar_zaehler"])
+        return super().delete(*args, **kwargs)
+
     def alle_protokolle(self):
         """Alle Protokolle des Geräts, auch wenn es darin nicht das erste Gerät ist."""
         return Protokoll.objects.filter(
@@ -730,16 +742,7 @@ class Protokoll(models.Model):
     # --- F-132: Checkliste Zugänge (sechs Punkte) ------------------------------
     # Wortlaut aus docs/vorlagen/FRM-001.md Abschnitt 3, Vorbelegung
     # (F-132). Reihenfolge und Bezeichnung sind fest.
-    CHECKLISTE_PUNKTE = (
-        ("m365", "Benutzerkonto Microsoft 365, Erstkennwort persönlich übergeben"),
-        ("mfa", "Mehrfaktor-Authentifizierung eingerichtet"),
-        ("passwortmanager", "Zugang Passwortmanager"),
-        ("vpn", "VPN-Zugang, Zertifikat oder Schlüssel"),
-        ("projektsysteme", "Zugriff Confluence, Jira und weitere Projektsysteme"),
-        ("zugangskarte", "Zugangskarte, Schlüssel, Transponder"),
-        # TODO: A-0126 (M6 Teil 3) ersetzt die letzten zwei Punkte durch
-        # „Zugänge entzogen" und „Daten gelöscht".
-    )
+    CHECKLISTE_PUNKTE = checklisten.Punktliste(checklisten.ZUGAENGE)
 
     def checkliste_unbeantwortet(self) -> list[str]:
         """F-132: Punkte, die noch nicht ja/nein beantwortet sind.
@@ -758,25 +761,8 @@ class Protokoll(models.Model):
         return offene
 
     # --- F-133: Prüfpunkte IT-Offboarding (13 Punkte) --------------------------
-    # Wortlaut aus docs/vorlagen/FRM-002.md Abschnitt 3, Vorbelegung
-    # (F-133). Reihenfolge und Bezeichnung sind fest.
-    OFFBOARDING_PUNKTE = (
-        ("werkseinstellung", "Gerät auf Werkseinstellungen zurückgesetzt, Datenträger sicher gelöscht"),
-        ("daten_gesichert", "Lokale Daten des Nutzers gesichert oder zur Löschung freigegeben"),
-        ("geraeteverwaltung", "Gerät aus der Geräteverwaltung und aus dem Inventar ausgetragen"),
-        ("benutzerkonten", "Benutzerkonten deaktiviert (Microsoft 365, Confluence, Jira, weitere)"),
-        ("mfa_entkoppelt", "Mehrfaktor-Authentifizierung und Authenticator vom Gerät entkoppelt"),
-        ("ssh_api", "SSH-Schlüssel und API-Token widerrufen"),
-        ("vpn_zertifikate", "VPN-Zugang und Zertifikate widerrufen"),
-        ("passwortmanager", "Zugriffe im Passwortmanager entzogen"),
-        ("gemeinsame_kennworter", "Gemeinsam genutzte Kennwörter geändert"),
-        ("softwarelizenzen", "Softwarelizenzen zurückgeführt oder neu zugewiesen (Microsoft 365)"),
-        ("zugangskarte", "Zugangskarte, Schlüssel und Transponder zurückgegeben"),
-        ("private_geraete", "Geschäftliche Daten von privaten Geräten und Cloud-Speichern entfernt"),
-        ("inventar_dokumentiert", "Rückgabe im Hardware-Inventar dokumentiert"),
-        # TODO: A-0126 (M6 Teil 3) ersetzt die letzten zwei Punkte durch
-        # „Backup" und „Archiv" mit geprüften Namen.
-    )
+    # Vorbelegung aus docs/vorlagen/FRM-002.md Abschnitt 3 (F-133), gepflegt in den Einstellungen.
+    OFFBOARDING_PUNKTE = checklisten.Punktliste(checklisten.OFFBOARDING)
 
     def offboarding_unbeantwortet(self) -> list[str]:
         """F-133: Prüfpunkte, die noch nicht beantwortet sind.
@@ -795,6 +781,13 @@ class Protokoll(models.Model):
 
     def anhaenge_liste(self) -> list[dict]:
         return list(self.anhaenge or [])
+
+    def punkte_zum_anzeigen(self, liste: str) -> tuple:
+        """Offen die aktuellen Punkte, signiert das, was damals beantwortet wurde (F-135)."""
+        if self.bearbeiter_signiert_am is None:
+            return checklisten.aktive_punkte(liste)
+        antworten = self.checkliste if liste == checklisten.ZUGAENGE else self.offboarding
+        return checklisten.punkte_mit_antwort(liste, antworten)
 
     def geraete_liste(self) -> list:
         """Alle Geräte des Protokolls in der Reihenfolge der Positionen."""

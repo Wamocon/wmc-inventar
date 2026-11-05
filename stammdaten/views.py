@@ -706,6 +706,50 @@ def _testmail_senden(empfaenger: str) -> None:
     ).send()
 
 
+def checklisten_pflegen(request):
+    """/einstellungen/checklisten/: Text, Reihenfolge und aktiv der Checklisten (Kapitel 6)."""
+    if not _nur_admin(request):
+        return _keine_berechtigung(request)
+    from .checklisten import FESTE_PUNKTE, vorbelegen
+    from .models import Checklistenpunkt
+    vorbelegen()
+    if request.method == "POST":
+        liste = request.POST.get("liste")
+        punkte = list(Checklistenpunkt.objects.filter(liste=liste))
+        fehler = "" if liste in dict(Checklistenpunkt.LISTEN) else "Unbekannte Liste."
+        for p in punkte:
+            text = (request.POST.get(f"text-{p.pk}", p.text) or "").strip()
+            roh = request.POST.get(f"reihenfolge-{p.pk}", str(p.reihenfolge))
+            if not text:
+                fehler = "Ein Punkt braucht einen Text."
+            elif not roh.isdigit():
+                fehler = "Die Reihenfolge ist eine ganze Zahl."
+            if fehler:
+                break
+            p.text, p.reihenfolge = text, int(roh)
+            p.aktiv = (liste, p.schluessel) in FESTE_PUNKTE or f"aktiv-{p.pk}" in request.POST
+        if fehler:
+            messages.error(request, fehler)
+            return redirect("/einstellungen/checklisten/")
+        for p in punkte:
+            p.save()
+        neu = (request.POST.get("neu") or "").strip()
+        if neu:
+            hoechste = max((p.reihenfolge for p in punkte), default=0)
+            punkt = Checklistenpunkt.objects.create(liste=liste, schluessel="neu", text=neu, reihenfolge=hoechste + 10)
+            punkt.schluessel = f"punkt{punkt.pk}"
+            punkt.save(update_fields=["schluessel"])
+        messages.success(request, "Checkliste gespeichert.")
+        return redirect("/einstellungen/checklisten/")
+    gruppen = []
+    for liste, titel in Checklistenpunkt.LISTEN:
+        punkte = list(Checklistenpunkt.objects.filter(liste=liste))
+        for p in punkte:
+            p.fest = (liste, p.schluessel) in FESTE_PUNKTE
+        gruppen.append({"liste": liste, "titel": titel, "punkte": punkte})
+    return render(request, "stammdaten/checklisten.html", {"gruppen": gruppen})
+
+
 def einstellungen_sehen(request):
     """/einstellungen/ — Einstellungen anzeigen und pflegen.
 

@@ -196,6 +196,9 @@ class Command(BaseCommand):
         # flush leert alle Tabellen und kennt auch neue Modelle (TESTSCHNITTSTELLE:
         # --neu leert den Datenbankinhalt, auch während der Server läuft).
         call_command("flush", verbosity=0, interactive=False)
+        # flush nimmt auch, was die Migration angelegt hat.
+        from stammdaten.checklisten import vorbelegen
+        vorbelegen()
 
         for var in ("DATEIABLAGE", "MAIL_ABLAGE"):
             p = getattr(settings, var, "")

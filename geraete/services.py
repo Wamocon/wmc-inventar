@@ -34,12 +34,12 @@ class GeratFehler(ValueError):
 def naechste_inventarnummer() -> str:
     """Nächste freie Inventarnummer im Format WMC-00001 (O-03)."""
     hoechst = Gerat.objects.aggregate(m=Max("inventarnummer"))["m"]
-    zaehler = 1
+    zaehler = Einstellungen.aktuelles().inventar_zaehler + 1
     if hoechst and str(hoechst).startswith("WMC-"):
         try:
-            zaehler = int(str(hoechst)[4:]) + 1
+            zaehler = max(zaehler, int(str(hoechst)[4:]) + 1)
         except ValueError:
-            zaehler = 1
+            pass
     return f"WMC-{zaehler:05d}"
 
 
@@ -687,6 +687,8 @@ def _offboarding_vorbelegung(gerat: Gerat, person: Person, konto: Konto | None =
     beantwortet die IT. Jede andere Rückgabe: Punkte 1 und 13 erledigt, die übrigen
     nicht zutreffend.
     """
+    from stammdaten.checklisten import PUNKT_INVENTAR, PUNKT_ZURUECKSETZEN
+
     schluessel = [k for k, _text in Protokoll.OFFBOARDING_PUNKTE]
     erledigt = {
         "status": "erledigt",
@@ -695,13 +697,13 @@ def _offboarding_vorbelegung(gerat: Gerat, person: Person, konto: Konto | None =
         "bemerkung": "",
     }
     if getattr(person, "austritt", None):
-        return {schluessel[-1]: erledigt}
+        return {PUNKT_INVENTAR: erledigt}
     vorbelegung = {
         k: {"status": "nicht_zutreffend", "datum": "", "kuerzel": "", "bemerkung": ""}
         for k in schluessel
     }
-    vorbelegung[schluessel[0]] = dict(erledigt)
-    vorbelegung[schluessel[-1]] = dict(erledigt)
+    vorbelegung[PUNKT_ZURUECKSETZEN] = dict(erledigt)
+    vorbelegung[PUNKT_INVENTAR] = dict(erledigt)
     return vorbelegung
 
 

@@ -2125,10 +2125,10 @@ def protokoll_detail(request, protokoll_nr):
 
     checkliste = [
         {"schluessel": schluessel, "text": text, "wert": (protokoll.checkliste or {}).get(schluessel)}
-        for schluessel, text in Protokoll.CHECKLISTE_PUNKTE
+        for schluessel, text in protokoll.punkte_zum_anzeigen("zugaenge")
     ]
     offboarding = []
-    for schluessel, text in Protokoll.OFFBOARDING_PUNKTE:
+    for schluessel, text in protokoll.punkte_zum_anzeigen("offboarding"):
         wert = (protokoll.offboarding or {}).get(schluessel)
         if isinstance(wert, dict):
             offboarding.append({

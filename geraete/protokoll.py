@@ -188,8 +188,7 @@ def offboarding_beantworten(
 
     # Punkt 13 „Rückgabe im Hardware-Inventar dokumentiert" setzt das Tool
     # selbst (F-133): immer erledigt, unabhängig von der Eingabe.
-    from .models import Protokoll as _Protokoll
-    p13_schluessel = _Protokoll.OFFBOARDING_PUNKTE[-1][0]
+    from stammdaten.checklisten import PUNKT_INVENTAR as p13_schluessel
     bereinigt[p13_schluessel] = {
         "status": "erledigt",
         "datum": heute.strftime("%d.%m.%Y"),
