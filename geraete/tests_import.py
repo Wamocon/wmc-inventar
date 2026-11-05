@@ -99,7 +99,7 @@ class ImportTests(TestCase):
             {"Notebook": "Notebook"}, {"Miriam Schulz": "Miriam Schulz"}, {})
         csv_text = import_parser.csv_vorschau(zeilen)
         self.assertIn("neu", csv_text)
-        self.assertIn("ergaenzt", csv_text)
+        self.assertIn("ergänzt", csv_text)
         self.assertEqual(len(csv_text.strip().split("\n")), 3)
 
     def test_import_fuer_it_admin(self):

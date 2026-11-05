@@ -500,7 +500,7 @@ class M3LebenszyklusTests(TestCase):
     # --- F-41: Umzug -------------------------------------------------------------
 
     def test_umzug(self):
-        ort2 = Ort.objects.create(typ=Ort.TYP_LAGER, kennung="M3-LAG2", name="M3-Lager2")
+        ort2 = Ort.objects.create(typ=Ort.TYP_RAUM, kennung="M3-RAUM2", name="M3-Raum2")
         services.gerat_ausgeben(self.gerat, self.ort, ausgefuehrt_von=self.admin)
         self.gerat.refresh_from_db()
         services.gerat_umziehen(self.gerat, ort2, ausgefuehrt_von=self.admin)
@@ -748,7 +748,7 @@ class DetailAktionenTests(TestCase):
         self.assertIn('data-test="aktion-rueckgabe"', text)
         self.assertIn('data-test="aktion-umzug"', text)
         self.assertNotIn('data-test="aktion-ausgabe"', text)
-        self.assertNotIn('data-test="aktion-reparatur"', text)
+        self.assertIn('data-test="aktion-reparatur"', text)
         self.assertNotIn('data-test="aktion-ausmustern"', text)
 
     def test_in_reparatur_admin_zeigt_abschliessen(self):
@@ -978,6 +978,7 @@ class DetailAktionenTests(TestCase):
 
     def test_link_umzug_offnet_seite(self):
         g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        services.gerat_ausgeben(g, self.person, ausgefuehrt_von=self.admin)
         self.client.login(username=self.admin.email, password="test-passwort-123")
         antwort = self.client.get(f"/geraete/{g.inventarnummer}/umziehen/")
         self.assertEqual(antwort.status_code, 200)
@@ -1108,6 +1109,7 @@ class DetailAktionenTests(TestCase):
 
     def test_dialog_umzug_oeffnet_mit_speichern(self):
         g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        services.gerat_ausgeben(g, self.person, ausgefuehrt_von=self.admin)
         self.client.login(username=self.admin.email, password="test-passwort-123")
         antwort = self.client.get(f"/geraete/{g.inventarnummer}/umziehen/")
         self.assertEqual(antwort.status_code, 200)
@@ -1118,10 +1120,12 @@ class DetailAktionenTests(TestCase):
 
     def test_dialog_umzug_speichern_zeigt_meldung(self):
         g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
+        services.gerat_ausgeben(g, self.person, ausgefuehrt_von=self.admin)
+        raum = Ort.objects.create(typ=Ort.TYP_RAUM, kennung="DET-RAUM")
         self.client.login(username=self.admin.email, password="test-passwort-123")
         antwort = self.client.post(
             f"/geraete/{g.inventarnummer}/umziehen/",
-            {"ziel_ort": self.ort.pk},
+            {"ziel_ort": raum.pk},
         )
         self.assertEqual(antwort.status_code, 302)
         detail = self.client.get(f"/geraete/{g.inventarnummer}/")
@@ -1381,14 +1385,20 @@ class M4ArbeitsplatzTests(TestCase):
             erzeugt_von=self.admin,
         )
 
+    def _an_ort(self, g, ort):
+        """Das Gerät an den Ort stellen: am Lagerort Auf Lager, sonst In Benutzung (Kapitel 4)."""
+        g.ort = ort
+        g.status = Gerat.STATUS_AUF_LAGER if ort.typ == Ort.TYP_LAGER else Gerat.STATUS_IN_BENUTZUNG
+        g.save()
+
     # --- F-62: Soll-Ist-Abgleich -------------------------------------------------
 
     def test_soll_ist_vollstaendig(self):
         for i in range(2):
             g = self._gerat(self.kat_monitor, ort=self.ort)
-            services.gerat_umziehen(g, self.ort, ausgefuehrt_von=self.admin)
+            self._an_ort(g, self.ort)
         g = self._gerat(self.kat_docking, ort=self.ort)
-        services.gerat_umziehen(g, self.ort, ausgefuehrt_von=self.admin)
+        self._an_ort(g, self.ort)
         abgleich = services.soll_ist_abgleich(self.ort)
         self.assertEqual(abgleich["ergebnis"], "vollstaendig")
         self.assertEqual(abgleich["fehlend"], [])
@@ -1396,7 +1406,7 @@ class M4ArbeitsplatzTests(TestCase):
 
     def test_soll_ist_unvollstaendig(self):
         g = self._gerat(self.kat_monitor, ort=self.ort)
-        services.gerat_umziehen(g, self.ort, ausgefuehrt_von=self.admin)
+        self._an_ort(g, self.ort)
         abgleich = services.soll_ist_abgleich(self.ort)
         self.assertEqual(abgleich["ergebnis"], "unvollstaendig")
         self.assertEqual(len(abgleich["fehlend"]), 2)
@@ -1407,16 +1417,16 @@ class M4ArbeitsplatzTests(TestCase):
     def test_soll_ist_mehr_als_soll(self):
         for i in range(3):
             g = self._gerat(self.kat_monitor, ort=self.ort)
-            services.gerat_umziehen(g, self.ort, ausgefuehrt_von=self.admin)
+            self._an_ort(g, self.ort)
         g = self._gerat(self.kat_docking, ort=self.ort)
-        services.gerat_umziehen(g, self.ort, ausgefuehrt_von=self.admin)
+        self._an_ort(g, self.ort)
         abgleich = services.soll_ist_abgleich(self.ort)
         self.assertEqual(abgleich["ergebnis"], "mehr-als-soll")
         self.assertEqual(abgleich["zuviel"], [(self.kat_monitor, 1)])
 
     def test_geraete_aus_reparatur_nicht_im_abgleich(self):
         g = self._gerat(self.kat_monitor, ort=self.ort)
-        services.gerat_umziehen(g, self.ort, ausgefuehrt_von=self.admin)
+        self._an_ort(g, self.ort)
         services.gerat_in_reparatur_geschickt(
             g, dienstleister="FixIT", vorgangsnummer="VR-M4",
             notiz="Defekt", ausgefuehrt_von=self.admin,
@@ -1430,7 +1440,7 @@ class M4ArbeitsplatzTests(TestCase):
     def test_geraete_ausgemustert_nicht_im_abgleich(self):
         from datetime import date
         g = self._gerat(self.kat_monitor, ort=self.ort)
-        services.gerat_umziehen(g, self.ort, ausgefuehrt_von=self.admin)
+        self._an_ort(g, self.ort)
         services.ausmustern(
             g, grund="defekt", datum=date(2026, 10, 1),
             disposition="Recycling", ausgefuehrt_von=self.admin,
@@ -1462,7 +1472,7 @@ class M4ArbeitsplatzTests(TestCase):
 
     def test_bedarf_mit_lagerbestand(self):
         g = self._gerat(self.kat_monitor, ort=self.lager)
-        services.gerat_umziehen(g, self.lager, ausgefuehrt_von=self.admin)
+        self._an_ort(g, self.lager)
         abgleich = services.bedarf_uebersicht([self.ort])
         self.assertEqual(abgleich["lagerbestand"][self.kat_monitor], 1)
         self.assertEqual(abgleich["summe"][self.kat_monitor], 2)
@@ -1475,7 +1485,7 @@ class M4ArbeitsplatzTests(TestCase):
 
     def test_fortschritt_je_ort(self):
         g = self._gerat(self.kat_monitor, ort=self.ort)
-        services.gerat_umziehen(g, self.ort, ausgefuehrt_von=self.admin)
+        self._an_ort(g, self.ort)
         zeilen = services.fortschritt_je_ort([self.ort])
         self.assertEqual(len(zeilen), 1)
         self.assertEqual(zeilen[0]["geprueft"], 0)
@@ -1484,7 +1494,7 @@ class M4ArbeitsplatzTests(TestCase):
 
     def test_fortschritt_nach_pruefen(self):
         g = self._gerat(self.kat_monitor, ort=self.ort)
-        services.gerat_umziehen(g, self.ort, ausgefuehrt_von=self.admin)
+        self._an_ort(g, self.ort)
         services.gerat_pruefen(g, self.admin)
         zeilen = services.fortschritt_je_ort([self.ort])
         self.assertEqual(zeilen[0]["geprueft"], 1)
@@ -2065,12 +2075,11 @@ class QRCodeTests(TestCase):
         self.assertEqual(antwort["Content-Type"], "application/pdf")
         self.assertTrue(antwort.content.startswith(b"%PDF"))
 
-    def test_etikett_drucken_leser_200(self):
-        """F-72: Leser können Etikett drucken."""
+    def test_etikett_drucken_leser_403(self):
+        """F-72: Der Leser druckt nicht (Kapitel 6, Testschnittstelle 3)."""
         self.client.login(username=self.leser.email, password="test-passwort-123")
         antwort = self.client.get(f"/geraete/{self.gerat.inventarnummer}/etikett/")
-        self.assertEqual(antwort.status_code, 200)
-        self.assertEqual(antwort["Content-Type"], "application/pdf")
+        self.assertEqual(antwort.status_code, 403)
 
     def test_etikett_drucken_mitarbeiter_403(self):
         """F-112: Mitarbeiter können kein Etikett drucken."""
