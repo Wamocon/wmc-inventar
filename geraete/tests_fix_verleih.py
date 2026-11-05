@@ -743,7 +743,7 @@ class RueckgabeUeberDasGeraetTests(VerleihTestCase):
         self.leihe.refresh_from_db()
         self.a.refresh_from_db()
         self.assertEqual(self.a.status, Gerat.STATUS_AUSGEMUSTERT)
-        self.assertEqual(self.leihe.status, Leihe.STATUS_ZURUECKGEGEBEN)
+        self.assertEqual(self.leihe.status, Leihe.STATUS_VERLOREN)
 
     def test_ruecknahme_in_der_verleihliste(self):
         seite = self.client_fuer(self.admin).get("/verleih/")
