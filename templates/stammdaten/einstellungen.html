@@ -14,7 +14,7 @@
 </div>
 
 {# F-90: Eigenes Formular außerhalb des Hauptformulars. Feld und Knopf stehen in der Karte SMTP und hängen über form= daran. #}
-<form method="post" action="/einstellungen/testmail/" id="testmail-formular" data-test="testmail-formular">{% csrf_token %}</form>
+<form method="post" action="/einstellungen/testmail/" id="testmail-formular" novalidate data-test="testmail-formular">{% csrf_token %}</form>
 
 <form method="post" enctype="multipart/form-data" novalidate data-test="einstellungen-formular">
   {% csrf_token %}
