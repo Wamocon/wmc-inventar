@@ -153,5 +153,5 @@ class EinstellungenLogoTests(TestCase):
         text = antwort.content.decode()
         # Das Formularfeld für das Logo muss vorhanden sein
         self.assertIn('data-test="logo"', text)
-        # Die Hilfe muss N-02 erwähnen
-        self.assertIn("N-02", text)
+        # Die Hilfe nennt die Regel aus N-02
+        self.assertIn("nie als Inline-SVG", text)
