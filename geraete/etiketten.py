@@ -85,9 +85,12 @@ def qr_inhalt(gerat: Gerat) -> str:
 def qr_svg(gerat: Gerat, breite_px: int = 180) -> str:
     """QR-Code als SVG (F-70). Kein Inline-Skript, nur statisches Markup."""
     code = segno.make(qr_inhalt(gerat))
+    # omitsize: Mit viewBox statt fester Größe; sonst schneidet der Browser den Code
+    # ab, sobald die Seite ihn kleiner zeigt, und er lässt sich nicht mehr scannen.
     svg = code.svg_inline(
         scale=max(1, breite_px // 36),
         border=2,
+        omitsize=True,
     )
     return svg
 

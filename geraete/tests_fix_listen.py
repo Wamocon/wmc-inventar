@@ -228,6 +228,11 @@ class EtikettenTests(Grund):
         self.assertEqual(self._seiten(etiketten.bogen_pdf(geraete)), 2)
         self.assertContains(self.client.get("/etiketten/"), 'max="10"')
 
+    def test_qr_im_browser_skaliert(self):
+        svg = etiketten.qr_svg(self._gerat())
+        self.assertIn("viewBox", svg)
+        self.assertNotIn(" width=", svg.split(">")[0])
+
     def test_modell_wird_maskiert_und_gekuerzt(self):
         g = self._gerat(modell='Modell <b>A&B</b> "Q" mit einem sehr langen Namen')
         text = etiketten.etikett_html(g)
@@ -597,6 +602,36 @@ class ImportRegelnTests(Werkzeug):
             self.assertIn('data-art="geraetename-doppelt"', block)
         block = re.search(r'data-zeile="18".*?</tr>', seite, re.S).group(0)
         self.assertIn('data-art="seriennummer-doppelt"', block)
+
+
+class ImportEckwerteTests(Werkzeug):
+    """Fallen aus vorlagen/README, gelesen am Ergebnis im Bestand."""
+
+    def test_zeile_5_und_die_ipads(self):
+        self._blatt("Inventar")
+        self._xlsx("Notebooks", "4")
+        self._weiter_mit_vorschlaegen()
+        seite = self.client.get("/import/").content.decode()
+        for zeile in (18, 19):
+            block = re.search(rf'data-zeile="{zeile}".*?</tr>', seite, re.S).group(0)
+            self.assertIn('data-art="geraetename-doppelt"', block)
+        self._speichern()
+        defekt = Gerat.objects.get(geraetename="WMC-NB-MB-01")
+        self.assertEqual(defekt.zustand, Gerat.ZUSTAND_EINGESCHRAENKT)
+        self.assertEqual(defekt.notiz, "Defect; laut Altliste defekt: reparieren oder ausmustern")
+        ipads = Gerat.objects.filter(geraetename="WMC-I-2301")
+        self.assertEqual(ipads.count(), 2)
+        self.assertEqual(ipads.exclude(seriennummer="").count(), 2)
+        a = ipads.first()
+        self.assertContains(self.client.get(f"/geraete/{a.inventarnummer}/"), "Gerätename auch bei")
+
+    def test_zeile_18_zeigt_den_vermerk_im_detail(self):
+        self._blatt("Inventar")
+        g = Gerat.objects.get(geraetename="WMC-HW-2016")
+        self.assertEqual(g.seriennummer, "")
+        seite = self.client.get(f"/geraete/{g.inventarnummer}/")
+        self.assertContains(seite, 'data-test="hinweis" data-art="seriennummer-doppelt"')
+        self.assertContains(seite, "2382KZ42KWQ5")
 
 
 class ImportVerbleibTests(Werkzeug):

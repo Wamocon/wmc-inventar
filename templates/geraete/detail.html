@@ -166,11 +166,11 @@
     <dt>Gerätename</dt><dd data-test="geraetename">{{ gerat.geraetename|default:"–" }}</dd>
     <dt>Standardzubehör</dt><dd data-test="zubehoer">{{ gerat.standardzuehoer|default:"–" }}</dd>
     <dt>Technische Daten</dt><dd data-test="technische-daten">{{ gerat.technische_daten|default:"–" }}</dd>
-    <dt>Kaufdatum</dt><dd data-test="kaufdatum">{{ gerat.kaufdatum|default:"–" }}</dd>
+    <dt>Kaufdatum</dt><dd data-test="kaufdatum">{{ gerat.kaufdatum|date:"d.m.Y"|default:"–" }}</dd>
     <dt>Kaufpreis netto</dt><dd data-test="kaufpreis">{% if gerat.kaufpreis_netto is not None %}{{ gerat.kaufpreis_netto }} EUR{% else %}–{% endif %}</dd>
     <dt>Lieferant</dt><dd data-test="lieferant">{{ gerat.lieferant|default:"–" }}</dd>
     <dt>Rechnungsnummer</dt><dd data-test="rechnung">{{ gerat.rechnungsnummer|default:"–" }}</dd>
-    <dt>Garantie bis</dt><dd data-test="garantie">{{ gerat.garantie_bis|default:"–" }}</dd>
+    <dt>Garantie bis</dt><dd data-test="garantie">{{ gerat.garantie_bis|date:"d.m.Y"|default:"–" }}</dd>
     <dt>Notiz</dt><dd data-test="notiz">{{ gerat.notiz|default:"–" }}</dd>
   </dl>
 </section>
