@@ -25,6 +25,7 @@ urlpatterns = [
     # M4 Arbeitsplätze und Raumplan (F-65 bis F-69, A-0076 Teil 1):
     # direkt unter /arbeitsplaetze/, unter /geraete/arbeitsplaetze/ bleibt nichts.
     path("arbeitsplaetze/", geraete_views.arbeitsplaetze, name="arbeitsplaetze-raumplan"),
+    path("arbeitsplaetze/plan/neu/", stammdaten_views.plan_anlegen, name="plan-anlegen"),
     path("arbeitsplaetze/plan/<int:plan_id>/bearbeiten/", stammdaten_views.plan_bearbeiten, name="plan-bearbeiten"),
     path("arbeitsplaetze/plan/<int:plan_id>/grundriss/", geraete_views.grundriss_zeige, name="plan-grundriss"),
     path("arbeitsplaetze/liste/", geraete_views.arbeitsplaetze_liste, name="arbeitsplaetze-liste"),
@@ -33,6 +34,7 @@ urlpatterns = [
     path("arbeitsplaetze/<slug:kennung>/", geraete_views.arbeitsplatz_detail, name="arbeitsplatz-detail"),
     path("arbeitsplaetze/<slug:kennung>/pruefen/", geraete_views.ort_pruefen, name="ort-pruefen"),
     path("arbeitsplaetze/<slug:kennung>/popup/", geraete_views.platz_popup, name="platz-popup"),
+    path("arbeitsplaetze/<slug:kennung>/ausgeben/", geraete_views.platz_ausgeben, name="platz-ausgeben"),
     path("arbeitsplaetze/raum/<slug:kennung>/popup/", geraete_views.raum_popup, name="raum-popup"),
     # Import (A-0113, F-80 bis F-84, F-86): Folge von Schritten, keine Ablage
     path("import/", import_views.import_seite, name="import"),

@@ -2,15 +2,16 @@
 {% block titel %}Profile · WMC Inventar{% endblock %}
 {% block inhalt %}
 <div class="page-head">
-  <div><h1>Ausstattungsprofile</h1><p class="muted lead">Profile pflegen (F-61).</p></div>
-  {% if user.ist_admin %}<div class="actions"><a class="btn primary" href="/profile/neu/" data-test="profil-anlegen">Neues Profil</a></div>{% endif %}
+  <div><h1>Ausstattungsprofile</h1><p class="muted lead">Profile pflegen und Arbeitsplätzen zuweisen (F-61). Die Zuweisung geschieht am Ort.</p></div>
+  {% if ist_admin %}<div class="actions"><a class="btn primary" href="/profile/neu/" data-test="profil-anlegen">Neues Profil</a></div>{% endif %}
 </div>
-<div class="liste" data-test="profile-liste">
+<div class="liste" data-test="liste">
   {% for p in profile %}
-  <div class="zeile">
-    <a href="#">{{ p.name }}</a>
-    <span class="muted">{{ p.positionen.count }} Position(en)</span>
-    {% if user.ist_admin %}<a class="btn sm" href="/profile/{{ p.pk }}/aendern/">Ändern</a>{% endif %}
+  <div class="zeile" data-test="zeile" data-id="{{ p.name }}">
+    {% if ist_admin %}<a href="/profile/{{ p.pk }}/aendern/">{{ p.name }}</a>{% else %}<span>{{ p.name }}</span>{% endif %}
+    <span class="muted" data-test="positionen">{% for pos in p.positionen.all %}{{ pos.anzahl }} × {{ pos.kategorie.name }}{% if not forloop.last %}, {% endif %}{% empty %}keine Positionen{% endfor %}</span>
+    <span class="muted">{{ p.plaetze.all|length }} Arbeitsplätze</span>
+    {% if ist_admin %}<a class="btn sm" href="/profile/{{ p.pk }}/aendern/" data-test="aktion-bearbeiten">Ändern</a>{% endif %}
   </div>
   {% empty %}
   <div class="zeile muted">Keine Profile vorhanden.</div>

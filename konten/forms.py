@@ -105,13 +105,27 @@ class KontoForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["person"].required = False
-        # Passwort ist optional (nur bei Anlage relevant, F-02 Einladung)
+        # Optional; wenn gesetzt, gilt dieselbe Regel wie überall (F-04).
         self.fields["passwort"] = forms.CharField(
             label="Passwort",
-            widget=forms.PasswordInput,
+            widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}),
             required=False,
-            min_length=0,
+            min_length=MIN_PASSWORT_LAENGE,
+            validators=[_passwort_mind_12],
+            help_text=(
+                "Leer lassen ändert nichts. Mindestens 12 Zeichen."
+                if self.instance.pk
+                else "Optional, mindestens 12 Zeichen. Die Einladungsmail geht in jedem Fall raus."
+            ),
         )
+
+    def clean_email(self):
+        """Die Anmeldung sucht ohne Groß- und Kleinschreibung (F-01), also auch hier."""
+        email = self.cleaned_data["email"]
+        andere = Konto.objects.filter(email__iexact=email).exclude(pk=self.instance.pk)
+        if andere.exists():
+            raise ValidationError("Für diese E-Mail gibt es schon ein Konto.")
+        return email
 
     def clean(self):
         daten = super().clean()

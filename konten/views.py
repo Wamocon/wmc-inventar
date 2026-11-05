@@ -16,13 +16,14 @@ from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout, update_session_auth_hash
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.core.mail import EmailMessage
-from django.db import transaction
 from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import redirect, render
 from django.urls import reverse
-from django.utils.http import url_has_allowed_host_and_scheme
+from django.utils.crypto import constant_time_compare
+from django.utils.http import base36_to_int, url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
+from .mail import link_ins_tool, mail_absender
 from .models import Konto
 from .zeit import jetzt_wie_im_entwicklungsmodus
 from .forms import (
@@ -33,12 +34,48 @@ from .forms import (
     PasswortVergessenForm,
 )
 
-# Token-Generatoren für Passwort vergessen (F-03) und Passwort setzen (F-02 Einladung)
-_token_vergessen = PasswordResetTokenGenerator()
 
 
-def _basis_url() -> str:
-    return settings.BASIS_URL
+class _LinkToken(PasswordResetTokenGenerator):
+    """Link zum Passwort setzen: nur einmal nutzbar, mit eigener Gültigkeit.
+
+    Nur einmal, weil der Passwort-Hash in den Token eingeht. Die Zeit ist die
+    der Anwendung (TESTSCHNITTSTELLE 1.2). Djangos Standard kennt nur eine
+    Gültigkeit für alle Links und nur die echte Uhr.
+    """
+
+    gueltig_sekunden = 0
+
+    def _now(self):
+        return jetzt_wie_im_entwicklungsmodus().replace(tzinfo=None)
+
+    def check_token(self, user, token):
+        try:
+            stempel = base36_to_int((token or "").split("-")[0])
+        except ValueError:
+            return False
+        for geheim in [self.secret, *self.secret_fallbacks]:
+            if constant_time_compare(self._make_token_with_timestamp(user, stempel, geheim), token):
+                return self._num_seconds(self._now()) - stempel <= self.gueltig_sekunden
+        return False
+
+
+class _TokenVergessen(_LinkToken):
+    """F-03: Passwort vergessen, Link 1 Stunde gültig."""
+
+    key_salt = "konten.views.TokenVergessen"
+    gueltig_sekunden = 60 * 60
+
+
+class _TokenEinladung(_LinkToken):
+    """F-02: Einladung, Link 72 Stunden gültig."""
+
+    key_salt = "konten.views.TokenEinladung"
+    gueltig_sekunden = 72 * 60 * 60
+
+
+_token_vergessen = _TokenVergessen()
+_token_einladung = _TokenEinladung()
 
 
 def _jetzt():
@@ -128,8 +165,7 @@ def passwort_vergessen(request):
 
         if konto is not None and konto.aktiv:
             token = _token_vergessen.make_token(konto)
-            link = f"{_basis_url()}/passwort-setzen/{token}/"
-            absender = settings.DEFAULT_FROM_EMAIL
+            link = link_ins_tool(f"/passwort-setzen/{token}/")
             body = (
                 "Sie haben bei WMC Inventar ein neues Passwort angefordert.\n"
                 f"Öffnen Sie den Link, um ein neues Passwort zu setzen: {link}\n"
@@ -139,8 +175,8 @@ def passwort_vergessen(request):
             msg = EmailMessage(
                 subject="WMC Inventar: Passwort zurücksetzen",
                 body=body,
-                from_email=absender,
-                to=[email],
+                from_email=mail_absender(),
+                to=[konto.email],
             )
             msg.send()
 
@@ -158,10 +194,10 @@ def passwort_setzen(request, token):
     if request.user.is_authenticated:
         return redirect(landing_fuer(request.user))
 
-    # Token prüfen: Konto + Gültigkeit + einmalig
+    # Token prüfen: aktives Konto + Gültigkeit + einmalig
     konto = None
-    for k in Konto.objects.all():
-        if _token_vergessen.check_token(k, token):
+    for k in Konto.objects.filter(aktiv=True):
+        if _token_vergessen.check_token(k, token) or _token_einladung.check_token(k, token):
             konto = k
             break
 
@@ -232,45 +268,43 @@ def konten_liste(request):
 
 
 def konto_anlegen(request):
-    """Neues Konto anlegen (F-02). Einladungsmail mit Link (72 h)."""
+    """Neues Konto anlegen (F-02).
+
+    Jedes neue Konto erhält die Einladungsmail mit Link (72 h), auch wenn der
+    Admin ein Passwort vergibt. Ein deaktiviertes Konto bekommt keine (F-96).
+    """
     admin = _nur_admin(request)
     if admin is None:
         return _keine_berechtigung(request)
     form = KontoForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
-        with transaction.atomic():
-            konto = form.save(commit=False)
-            email = konto.email
-            passwort_formuliert = form.cleaned_data["passwort"]
-            if passwort_formuliert:
-                konto.set_password(passwort_formuliert)
-            else:
-                konto.set_unusable_password()
-            konto.save()
-            if konto.rolle == Konto.ROLLE_MITARBEITER and not konto.person:
-                # F-02: Rolle Mitarbeiter braucht eine Person
-                return render(
-                    request,
-                    "konten/konto_anlegen.html",
-                    {"form": form, "fehler": "Die Rolle Mitarbeiter braucht eine Person."},
-                )
-            # Einladungsmail mit Link (F-02, 72 h)
-            if not passwort_formuliert:
-                token = _token_vergessen.make_token(konto)
-                link = f"{_basis_url()}/passwort-setzen/{token}/"
-                absender = settings.DEFAULT_FROM_EMAIL
-                body = (
-                    f"Sie haben ein Konto bei WMC Inventar erhalten.\n"
-                    f"Rolle: {konto.get_rolle_display()}\n"
-                    f"Setzen Sie Ihr Passwort über diesen Link (72 Stunden gültig): {link}\n"
-                )
-                EmailMessage(
-                    subject="WMC Inventar: Einladung",
-                    body=body,
-                    from_email=absender,
-                    to=[email],
-                ).send()
-        messages.success(request, f"Konto {email} angelegt.")
+        konto = form.save(commit=False)
+        if form.cleaned_data["passwort"]:
+            konto.set_password(form.cleaned_data["passwort"])
+        else:
+            konto.set_unusable_password()
+        konto.save()
+        if not konto.aktiv:
+            messages.success(request, f"Konto {konto.email} angelegt, keine Einladung: Es ist nicht aktiv.")
+            return redirect(reverse("konten:konten-liste"))
+        link = link_ins_tool(f"/passwort-setzen/{_token_einladung.make_token(konto)}/")
+        body = (
+            f"Sie haben ein Konto bei WMC Inventar erhalten.\n"
+            f"Rolle: {konto.get_rolle_display()}\n"
+            f"Setzen Sie Ihr Passwort über diesen Link (72 Stunden gültig): {link}\n"
+        )
+        try:
+            EmailMessage(
+                subject="WMC Inventar: Einladung",
+                body=body,
+                from_email=mail_absender(),
+                to=[konto.email],
+            ).send()
+        except OSError as fehler:
+            # Das Konto bleibt bestehen; „Passwort vergessen“ liefert einen neuen Link.
+            messages.error(request, f"Konto {konto.email} angelegt, Einladung nicht gesendet: {fehler}")
+            return redirect(reverse("konten:konten-liste"))
+        messages.success(request, f"Konto {konto.email} angelegt, Einladung gesendet.")
         return redirect(reverse("konten:konten-liste"))
     return render(request, "konten/konto_anlegen.html", {"form": form})
 

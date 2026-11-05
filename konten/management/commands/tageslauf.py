@@ -19,32 +19,18 @@ from __future__ import annotations
 import calendar
 from datetime import date, timedelta
 
-from django.conf import settings
 from django.core.mail import send_mail
 from django.core.management.base import BaseCommand, CommandError
 
-from konten.zeit import jetzt_aware
-from stammdaten.models import Einstellungen, Mailversand, Ort, Zaehlerstand
+from konten.mail import aktive_empfaenger, link_ins_tool, mail_absender, mail_signatur
+from konten.zeit import jetzt_aware, jetzt_wie_im_entwicklungsmodus
+from stammdaten.models import Einstellungen, Mailversand, Ort, Person, Zaehlerstand
 from geraete.models import Gerat, Leihe, Protokoll
-
-
-def _absender() -> str:
-    return settings.DEFAULT_FROM_EMAIL or "inventar@beispiel.test"
-
-
-def _basis_url() -> str:
-    url = settings.BASIS_URL or "http://127.0.0.1:8000"
-    return url.rstrip("/")
 
 
 def _it_email() -> str:
     einstellungen = Einstellungen.aktuelles()
-    return einstellungen.email_it or _absender()
-
-
-def _absenderzeile() -> str:
-    einstellungen = Einstellungen.aktuelles()
-    return einstellungen.absenderzeile or "Wamocon GmbH · IT"
+    return einstellungen.email_it or mail_absender()
 
 
 def _datums_text(d: date) -> str:
@@ -86,13 +72,13 @@ def _versand_melden(stichtag: date, mailtyp: str, anzahl: int) -> None:
 
 
 def _mail_leihe_endet_morgen(stichtag: date) -> int:
-    """F-91: Leihe endet morgen → Mail an die Person."""
+    """F-91: Leihe endet morgen → Mail an die Person (Frist aus den Einstellungen)."""
     einstellungen = Einstellungen.aktuelles()
     if not einstellungen.mail_leihe_endet_morgen:
         return 0
     if _bereits_gesendet(stichtag, Mailversand.MAILTYP_F91):
         return 0
-    morgen = stichtag + timedelta(days=1)
+    morgen = stichtag + timedelta(days=einstellungen.frist_leihe_tage)
     leihen = (
         Leihe.objects.filter(
             rueckgabe_bis=morgen,
@@ -103,7 +89,8 @@ def _mail_leihe_endet_morgen(stichtag: date) -> int:
     )
     anzahl = 0
     for leihe in leihen:
-        empfaenger = leihe.person.email if leihe.person else ""
+        # F-96: keine Mail an deaktivierte Konten.
+        empfaenger = aktive_empfaenger([leihe.person.email if leihe.person else ""])
         if not empfaenger:
             continue
         gerat_name = leihe.gerat.inventarnummer if leihe.gerat else ""
@@ -112,11 +99,11 @@ def _mail_leihe_endet_morgen(stichtag: date) -> int:
             message=(
                 f"Ihre Leihe {gerat_name} endet morgen ({_datums_text(morgen)}). "
                 f"Bitte geben Sie das Gerät bis dahin zurück.\n\n"
-                f"Details: {_basis_url()}/verleih/\n\n"
-                f"{_absenderzeile()}"
+                f"Details: {link_ins_tool('/meine-geraete/')}\n\n"
+                f"{mail_signatur()}"
             ),
-            from_email=_absender(),
-            recipient_list=[empfaenger],
+            from_email=mail_absender(),
+            recipient_list=empfaenger,
             fail_silently=True,
         )
         anzahl += 1
@@ -149,20 +136,21 @@ def _mail_leihe_ueberfaellig(stichtag: date) -> int:
             f"Ihre Leihe {gerat_name} ist überfällig.\n"
             f"Die Rückgabefrist ({frist}) ist überschritten.\n"
             f"Bitte geben Sie das Gerät unverzüglich zurück.\n\n"
-            f"Details: {_basis_url()}/verleih/\n\n"
-            f"{_absenderzeile()}"
+            # F-96: Der Mitarbeiter darf /verleih/ nicht öffnen, die IT braucht es.
+            f"Ihre Leihen: {link_ins_tool('/meine-geraete/')}\n"
+            f"Für die IT: {link_ins_tool('/verleih/')}\n\n"
+            f"{mail_signatur()}"
         )
-        empfaenger_liste = []
-        if empfaenger_person:
-            empfaenger_liste.append(empfaenger_person)
-        if it_email and it_email != empfaenger_person:
-            empfaenger_liste.append(it_email)
+        # F-96: keine Mail an deaktivierte Konten; die IT bleibt informiert.
+        empfaenger_liste = aktive_empfaenger(
+            [empfaenger_person, it_email if it_email != empfaenger_person else ""]
+        )
         if not empfaenger_liste:
             continue
         send_mail(
             subject=f"Leihe überfällig – {gerat_name}",
             message=text,
-            from_email=_absender(),
+            from_email=mail_absender(),
             recipient_list=empfaenger_liste,
             fail_silently=True,
         )
@@ -175,7 +163,8 @@ def _mail_sammelmail(stichtag: date) -> int:
     """F-94 + F-95: Sammelmail an die IT, nur Montag.
 
     F-94: Garantie endet in 30 Tagen.
-    F-95: Unterschriften seit mehr als 3 Tagen offen.
+    F-95: Unterschriften seit mehr als 3 Tagen offen, in jedem offenen Stand:
+    Bearbeiter, Gegenzeichnung oder Scan. Fristen aus den Einstellungen.
     """
     einstellungen = Einstellungen.aktuelles()
     if not einstellungen.mail_garantie_sammelmail and not einstellungen.mail_unterzeichen_sammelmail:
@@ -187,14 +176,14 @@ def _mail_sammelmail(stichtag: date) -> int:
     # Nur Montag
     if stichtag.weekday() != 0:
         return 0
-    it_email = _it_email()
-    if not it_email:
+    it_empfaenger = aktive_empfaenger([_it_email()])
+    if not it_empfaenger:
         return 0
     sektionen = []
 
     # F-94: Garantie endet in 30 Tagen
     if einstellungen.mail_garantie_sammelmail:
-        grenze = stichtag + timedelta(days=30)
+        grenze = stichtag + timedelta(days=einstellungen.frist_garantie_tage)
         geraete = (
             Gerat.objects.filter(
                 garantie_bis__gte=stichtag,
@@ -209,35 +198,40 @@ def _mail_sammelmail(stichtag: date) -> int:
                 for g in geraete
             ]
             sektionen.append(
-                f"Geräte, deren Garantie in den nächsten 30 Tagen endet ({len(geraete)}):\n"
+                f"Geräte, deren Garantie in den nächsten {einstellungen.frist_garantie_tage} Tagen endet ({len(geraete)}):\n"
                 + "\n".join(zeilen)
             )
 
     # F-95: Unterschriften seit mehr als 3 Tagen offen
     if einstellungen.mail_unterzeichen_sammelmail:
-        grenze_3tage = stichtag - timedelta(days=3)
+        tage = einstellungen.frist_unterschrift_tage
+        grenze_tage = stichtag - timedelta(days=tage)
         protokolle = (
             Protokoll.objects.filter(
-                stand=Protokoll.STAND_GEGENZEICHNUNG_OFFEN,
-                gegenzeichnung_token_erstellt__isnull=False,
+                stand__in=(
+                    Protokoll.STAND_BEARBEITER_OFFEN,
+                    Protokoll.STAND_GEGENZEICHNUNG_OFFEN,
+                    Protokoll.STAND_SCAN_OFFEN,
+                ),
             )
             .select_related("person")
-            .order_by("gegenzeichnung_token_erstellt", "id")
+            .order_by("datum", "id")
         )
         offene = []
         for p in protokolle:
-            erstellt = p.gegenzeichnung_token_erstellt
-            if erstellt is None:
-                continue
-            erstellt_datum = _erstellt_datum(erstellt)
-            if erstellt_datum < grenze_3tage:
-                person_name = f"{p.person.vorname} {p.person.nachname}" if p.person else ""
-                offene.append(
-                    f"- Protokoll {p.nr} ({person_name}) – Link verschickt am {_datums_text(erstellt_datum)}"
-                )
+            person_name = f"{p.person.vorname} {p.person.nachname}" if p.person else ""
+            if p.stand == Protokoll.STAND_GEGENZEICHNUNG_OFFEN and p.gegenzeichnung_token_erstellt:
+                seit = _erstellt_datum(p.gegenzeichnung_token_erstellt)
+                zusatz = f"Link verschickt am {_datums_text(seit)}"
+            else:
+                seit = p.datum
+                fehlt = "Bearbeiter" if p.stand == Protokoll.STAND_BEARBEITER_OFFEN else "Scan fehlt"
+                zusatz = f"{fehlt}, offen seit {_datums_text(seit)}"
+            if seit < grenze_tage:
+                offene.append(f"- Protokoll {p.nr} ({person_name}) – {zusatz}")
         if offene:
             sektionen.append(
-                f"Unterschriften, die seit mehr als 3 Tagen offen sind ({len(offene)}):\n"
+                f"Unterschriften, die seit mehr als {tage} Tagen offen sind ({len(offene)}):\n"
                 + "\n".join(offene)
             )
 
@@ -251,16 +245,16 @@ def _mail_sammelmail(stichtag: date) -> int:
         + sektionen
         + [
             "",
-            f"Details: {_basis_url()}/",
+            f"Details: {link_ins_tool('/')}",
             "",
-            _absenderzeile(),
+            mail_signatur(),
         ]
     )
     send_mail(
         subject=f"Wöchentliche Sammelmail – {_datums_text(stichtag)}",
         message=inhalt,
-        from_email=_absender(),
-        recipient_list=[it_email],
+        from_email=mail_absender(),
+        recipient_list=it_empfaenger,
         fail_silently=True,
     )
     # Beide Typen als gesendet markieren (eine Sammelmail deckt beide ab)
@@ -283,7 +277,7 @@ def _mail_gegenzeichnung_erinnerung(stichtag: date) -> int:
         return 0
     if _bereits_gesendet(stichtag, Mailversand.MAILTYP_F140):
         return 0
-    versanddatum = stichtag - timedelta(days=3)
+    versanddatum = stichtag - timedelta(days=einstellungen.frist_gegenzeichnung_tage)
     protokolle = (
         Protokoll.objects.filter(
             stand=Protokoll.STAND_GEGENZEICHNUNG_OFFEN,
@@ -304,16 +298,17 @@ def _mail_gegenzeichnung_erinnerung(stichtag: date) -> int:
         empfaenger = p.gegenzeichnung_empfaenger or (p.person.email if p.person else "")
         if not empfaenger:
             continue
-        link = f"{_basis_url()}/signieren/{p.gegenzeichnung_token}/"
+        # F-96: Der Link zur Gegenzeichnung geht auch an deaktivierte Konten.
+        link = link_ins_tool(f"/signieren/{p.gegenzeichnung_token}/")
         send_mail(
             subject=f"Erinnerung: Gegenzeichnung Protokoll {p.nr}",
             message=(
                 f"Sie haben am {_datums_text(versanddatum)} einen Link zur Gegenzeichnung "
                 f"des Protokolls {p.nr} erhalten.\n\n"
                 f"Bitte zeichnen Sie gegen: {link}\n\n"
-                f"{_absenderzeile()}"
+                f"{mail_signatur()}"
             ),
-            from_email=_absender(),
+            from_email=mail_absender(),
             recipient_list=[empfaenger],
             fail_silently=True,
         )
@@ -322,6 +317,11 @@ def _mail_gegenzeichnung_erinnerung(stichtag: date) -> int:
         anzahl += 1
     _versand_melden(stichtag, Mailversand.MAILTYP_F140, anzahl)
     return anzahl
+
+
+def _personen_austreten(stichtag: date) -> int:
+    """F-53: Person wird am Austrittstag inaktiv, vorher ist sie wählbar."""
+    return Person.objects.filter(austritt__lte=stichtag, aktiv=True).update(aktiv=False)
 
 
 def _konten_deaktivieren(stichtag: date) -> int:
@@ -433,11 +433,13 @@ class Command(BaseCommand):
             except ValueError:
                 raise CommandError(f"Ungültiger Stichtag: {stichtag_str}. Erwartet: JJJJ-MM-TT.")
         else:
-            stichtag = date.today()
+            # TESTSCHNITTSTELLE 1.2: „heute“ ist die Zeit der Anwendung.
+            stichtag = jetzt_wie_im_entwicklungsmodus().date()
 
         self.stdout.write(f"Tageslauf für {stichtag:%d.%m.%Y}")
 
-        # F-53: Konten deaktivieren (vor den Mails)
+        # F-53: Personen und Konten nach dem Austritt (vor den Mails)
+        self.stdout.write(f"  F-53  Personen inaktiv: {_personen_austreten(stichtag)}")
         deaktiviert = _konten_deaktivieren(stichtag)
         self.stdout.write(f"  F-53  Konten deaktiviert: {deaktiviert}")
 

@@ -1,11 +1,17 @@
-{% extends "basis.html" %}
-{% block titel %}{{ titel }} · WMC Inventar{% endblock %}
-{% block inhalt %}
+{# Formular ohne eigenen Rahmen; die Seite, die es einbindet, erbt von basis.html. #}
 <div class="page-head">
   <div><h1>{{ titel }}</h1></div>
 </div>
+{% if gerate %}
+<div class="meldung warning" data-test="warnung" role="alert">
+  <strong>{{ person.voller_name }} hat noch {{ gerate|length }} Gerät(e):</strong>
+  {% for g in gerate %}<span data-test="warnung-geraet">{{ g.inventarnummer }} ({{ g.geraetename|default:g.modell }})</span>{% if not forloop.last %}, {% endif %}{% endfor %}.
+  Austritt trotzdem speichern?
+</div>
+{% endif %}
 <form method="post" novalidate>
   {% csrf_token %}
+  {% if gerate %}<input type="hidden" name="austritt_bestaetigt" value="1">{% endif %}
   <div class="meldungen">
     {% include "fragmente/fehler.html" %}
   </div>
@@ -20,8 +26,11 @@
     {% endfor %}
   </div>
   <div class="actions">
+    {% if gerate %}
+    <button type="submit" class="btn primary" data-test="bestaetigen">Bestätigen</button>
+    {% else %}
     <button type="submit" class="btn primary" data-test="speichern">Speichern</button>
-    <a class="btn" href="{{ zurueck }}">Abbrechen</a>
+    {% endif %}
+    <a class="btn" href="{{ zurueck }}" data-test="abbrechen">Abbrechen</a>
   </div>
 </form>
-{% endblock %}

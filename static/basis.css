@@ -170,13 +170,16 @@ form .actions{margin-top:8px}
 .pills{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 
 /* Raumplan (F-65 bis F-68, A-0913 Teil 2) */
-.plan-grid{display:grid;grid-template-columns:1fr 280px;gap:16px;align-items:start}
-@media (max-width:700px){.plan-grid{grid-template-columns:1fr}}
+.plan-grid,.plan-wrap{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:16px;align-items:start}
+@media (max-width:1250px){.plan-grid,.plan-wrap{grid-template-columns:minmax(0,1fr)}}
+/* F-65: Der Plan behält eine Mindestbreite, die Marken überlappen nicht. Darunter scrollt nur er. */
+.plan-scroll{overflow-x:auto;min-width:0}
+.plan-scroll .plan-fig{min-width:720px}
 .plan-fig{margin:0;position:relative;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--surface-2);min-height:200px}
 .plan-bild{display:block;width:100%;height:auto;background:var(--paper)}
 .plan-orte .orte.platz{display:grid;grid-template-columns:auto auto;justify-items:start;align-items:center;gap:0 4px;padding:3px 8px;border-radius:8px;line-height:1.2}
 .plan-orte .orte.platz .platz-kennung{grid-column:1/-1}
-.pflegen .plan-fig{max-width:780px}
+.pflegen .plan-fig{max-width:780px;overflow:visible}
 .pflegen .plan-orte .orte{touch-action:none;cursor:grab}
 .popup-inhalt{padding-bottom:16px}
 .popup-inhalt>:not(.popup-kopf){margin:10px 20px 0}
@@ -220,8 +223,16 @@ form .actions{margin-top:8px}
 .seg-btn:last-child{border-right:0}
 .seg-btn:hover{background:var(--surface-2)}
 .seg-btn.aktiv{background:var(--btn);color:var(--on-btn);border-color:var(--btn)}
-.plan-orte .orte.raum{border-style:dashed;background:var(--surface-2);padding:3px 8px;min-height:24px;font-size:11px}
-.plan-orte .orte.raum .raum-name{font-size:11px;font-weight:600;max-width:100px;overflow:hidden;text-overflow:ellipsis}
+.plan-orte .orte.raum{flex-direction:column;justify-content:center;gap:2px;border-style:dashed;border-radius:4px;background:var(--surface-2);padding:6px 10px;min-width:104px;min-height:58px;font-size:11px}
+.plan-orte .orte.raum .raum-name{font-size:12px;font-weight:700}
+.plan-orte .orte.raum .raum-anzahl{font-size:11px;font-weight:500;color:var(--fg-2)}
+.pflegen .plan-orte .orte.raum{min-height:0;min-width:0;padding:4px 8px}
+.linkish{background:none;border:0;padding:0;font:inherit;font-weight:600;color:var(--fg);cursor:pointer;text-align:left;text-decoration:underline}
+.linkish:hover{color:var(--red)}
+.logo-vorschau{display:block;max-width:200px;max-height:80px;margin-top:8px;background:var(--paper)}
+.mail-hilfe{display:block}
+.profil-position{align-items:end;gap:12px}
+.card > .check{display:flex;gap:8px;align-items:flex-start;margin:6px 0}
 
 /* Abschnitte im Inventarbuch: Kopflinie statt Kasten (Prototyp: card) */
 .card{min-width:0;display:flex;flex-direction:column}

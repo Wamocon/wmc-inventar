@@ -1,0 +1,5 @@
+{% extends "basis.html" %}
+{% block titel %}Neuer Raumplan · WMC Inventar{% endblock %}
+{% block inhalt %}
+{% include "stammdaten/_formular.html" with titel="Neuer Raumplan" form=form zurueck="/arbeitsplaetze/" %}
+{% endblock %}
