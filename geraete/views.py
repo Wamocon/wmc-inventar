@@ -1681,10 +1681,8 @@ def meine_geraete_zeige(request):
     def _eintrag(gerat):
         vorgang_ausgabe = ausgaben.get(gerat.id)
         protokoll = (
-            Protokoll.objects.filter(
-                geraet=gerat, person=person, art=Protokoll.ART_AUSGABE
-            )
-            .order_by("-datum", "-id")
+            # Auch ein Gerät, das nicht das erste im Protokoll ist (F-20, Sammelausgabe).
+            gerat.alle_protokolle().filter(person=person, art=Protokoll.ART_AUSGABE)
             .first()
         )
         return {
