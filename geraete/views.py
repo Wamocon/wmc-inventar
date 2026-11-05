@@ -1672,6 +1672,7 @@ def protokoll_detail(request, protokoll_nr):
                 "schluessel": schluessel, "text": text, "wert": None,
                 "datum": "", "kuerzel": "", "bemerkung": "",
             })
+    from . import pdf as pdf_modul
     return render(
         request,
         "geraete/protokoll_detail.html",
@@ -1682,6 +1683,15 @@ def protokoll_detail(request, protokoll_nr):
             "checkliste": checkliste,
             "offboarding": offboarding,
             "anhaenge": protokoll.anhaenge_liste(),
+            "positionen": pdf_modul._positionen(protokoll),
+            "titel": pdf_modul._titel(protokoll),
+            # F-135: Nach der Signatur ist der Inhalt gesperrt; bedienen darf nur die IT.
+            "editierbar": request.user.ist_admin and not protokoll.ist_gesperrt
+            and protokoll.stand in (Protokoll.STAND_BEARBEITER_OFFEN, Protokoll.STAND_SCAN_OFFEN),
+            "pdf_moeglich": bool(protokoll.scan_datei) or not pdf_modul._offene_punkte(protokoll),
+            "ersetzt_durch": protokoll.korrekturen.order_by("-id").first(),
+            "link_gegenzeichnung": services._link_gegenzeichnung(protokoll.gegenzeichnung_token)
+            if protokoll.gegenzeichnung_token else "",
         },
     )
 
@@ -1697,8 +1707,17 @@ def protokoll_pdf(request, protokoll_nr):
     _protokoll_berechtigt(protokoll, request)
 
     from . import pdf as protokoll_pdf_modul
+    # F-22: Beim Papierweg ist der Scan das Protokoll.
+    if protokoll.scan_datei:
+        from .protokoll import _typ_am_inhalt
+        with protokoll.scan_datei.open("rb") as handle:
+            roh = handle.read()
+        antwort = HttpResponse(roh, content_type=_typ_am_inhalt(roh) or "application/octet-stream")
+        antwort["Content-Disposition"] = f'attachment; filename="{protokoll.scan_datei.name.rsplit("/", 1)[-1]}"'
+        return antwort
     try:
-        inhalt = protokoll_pdf_modul.pdf_fertig_bauen(protokoll)
+        # F-139: Das versiegelte PDF wird nicht neu gebaut, sonst wäre es ein anderes.
+        inhalt = bytes(protokoll.pdf_siegel) if protokoll.pdf_siegel else protokoll_pdf_modul.pdf_fertig_bauen(protokoll, versiegeln=False)
     except services.GeratFehler as fehler:
         meldung_error(request, str(fehler))
         return redirect(f"/protokolle/{protokoll_nr}/")
@@ -1724,12 +1743,17 @@ def protokoll_checkliste_beantworten(request, protokoll_nr):
     from . import protokoll as protokoll_services
 
     werte = {}
+    bemerkungen = {}
+    # TESTSCHNITTSTELLE Kapitel 4: value = ausgegeben oder nicht-zutreffend.
     for schluessel, _text in Protokoll.CHECKLISTE_PUNKTE:
         roh = request.POST.get(f"checkliste.{schluessel}")
-        if roh in ("0", "1"):
-            werte[schluessel] = int(roh)
+        if roh in ("1", "ausgegeben"):
+            werte[schluessel] = 1
+        elif roh in ("0", "nicht-zutreffend"):
+            werte[schluessel] = 0
+        bemerkungen[schluessel] = request.POST.get(f"checkliste.{schluessel}.bemerkung", "")
     try:
-        protokoll_services.checkliste_beantworten(protokoll, werte, request.user)
+        protokoll_services.checkliste_beantworten(protokoll, werte, request.user, bemerkungen=bemerkungen)
     except services.GeratFehler as fehler:
         meldung_error(request, str(fehler))
     else:
@@ -1753,7 +1777,7 @@ def protokoll_offboarding_beantworten(request, protokoll_nr):
 
     werte = {}
     for schluessel, _text in Protokoll.OFFBOARDING_PUNKTE:
-        roh = request.POST.get(f"offboarding.{schluessel}")
+        roh = (request.POST.get(f"offboarding.{schluessel}") or "").replace("-", "_")
         if roh in ("erledigt", "in_klaerung", "nicht_zutreffend"):
             werte[schluessel] = roh
             werte[f"{schluessel}.datum"] = request.POST.get(
@@ -1852,6 +1876,11 @@ def protokoll_abbrechen(request, protokoll_nr: str):
     if protokoll.stand != Protokoll.STAND_BEARBEITER_OFFEN:
         meldung_error(request, "Nur Protokolle auf 'bearbeiter-offen' können abgebrochen werden.")
         return redirect(f"/protokolle/{protokoll_nr}/")
+    # Eine Korrektur verwerfen hieße, das ersetzte Original ohne Nachfolger zu lassen.
+    if protokoll.ist_korrektur:
+        meldung_error(request, "Eine neue Fassung lässt sich nicht verwerfen, nur signieren.")
+        return redirect(f"/protokolle/{protokoll_nr}/")
+    ziel = f"/geraete/{protokoll.geraet.inventarnummer}/"
 
     # A-0128: Bei Verleih (F-30, F-33) auch die Leihe entfernen,
     # damit das Gerät wieder ausgebbar ist.
@@ -1860,7 +1889,7 @@ def protokoll_abbrechen(request, protokoll_nr: str):
 
     protokoll.delete()
     meldung_success(request, "Protokoll abgebrochen. Das Gerät bleibt unverändert.")
-    return redirect("/meine-geraete/")
+    return redirect(ziel)
 
 
 @require_POST
@@ -1882,15 +1911,18 @@ def protokoll_signieren(request, protokoll_nr: str):
 
     try:
         _, erfolg = services.protokoll_bearbeiter_signieren(
-            protokoll, password, request
+            protokoll, password, request, konto=request.user
         )
-    except Exception as fehler:
+    except services.GeratFehler as fehler:
         meldung_error(request, f"Signatur fehlgeschlagen: {fehler}")
         return redirect(f"/protokolle/{protokoll_nr}/")
 
     if not erfolg:
-        offene = protokoll.checkliste_unbeantwortet()
-        if offene:
+        from . import pdf as pdf_modul
+        offene = pdf_modul._offene_punkte(protokoll)
+        if protokoll.stand != Protokoll.STAND_BEARBEITER_OFFEN:
+            meldung_error(request, "Dieses Protokoll wartet nicht auf die Signatur des Bearbeiters.")
+        elif offene:
             meldung_error(
                 request,
                 f"Die Checkliste ist noch nicht vollständig beantwortet "
@@ -1898,6 +1930,8 @@ def protokoll_signieren(request, protokoll_nr: str):
             )
         else:
             meldung_error(request, "Passwort ungültig (F-135).")
+    elif not protokoll.gegenzeichnung_empfaenger:
+        meldung_success(request, "Protokoll signiert. Für diese Person ist keine E-Mail hinterlegt: bitte eine Adresse eintragen oder vor Ort am Tablet gegenzeichnen.")
     else:
         meldung_success(request, "Protokoll signiert. Mail mit Link gesendet (F-135, F-136).")
     return redirect(f"/protokolle/{protokoll_nr}/")
@@ -1936,7 +1970,7 @@ def protokoll_link_neu_senden(request, protokoll_nr: str):
     protokoll = get_object_or_404(Protokoll, nr=protokoll_nr)
     _protokoll_schreibrecht(request)
 
-    _, erfolg, meldung = services.protokoll_link_neu_senden(protokoll)
+    _, erfolg, meldung = services.protokoll_link_neu_senden(protokoll, request.POST.get("empfaenger", ""))
     if erfolg:
         meldung_success(request, meldung)
     else:
@@ -1966,89 +2000,48 @@ def protokoll_korrigieren(request, protokoll_nr: str):
     return redirect(f"/protokolle/{neue.nr}/")
 
 
-def signieren_link(request, token: str):
-    """F-136: GET /signieren/<token>/ – ohne Anmeldung.
+def _signieren_hinweis(request, titel: str, text: str, status: int = 200):
+    return render(request, "geraete/signieren_hinweis.html", {"titel": titel, "text": text}, status=status)
 
-    Zeigt das PDF und ein Formular zum Eingeben des Einmalcodes.
-    POST /signieren/<token>/ – Einmalcode prüfen.
-    """
-    from .models import Protokoll
-    protokoll = Protokoll.objects.filter(
-        gegenzeichnung_token=token
-    ).select_related("person", "geraet").first()
+
+def _signieren_protokoll(request, token: str):
+    """Liefert (Protokoll, None) oder (None, Antwort), wenn der Link nicht gilt (F-136)."""
+    protokoll = None
+    if token:
+        protokoll = Protokoll.objects.filter(gegenzeichnung_token=token).select_related("person", "geraet").first()
     if protokoll is None:
-        return HttpResponse(
-            "<html><body><h1>Unbekannter Link</h1>"
-            "<p>Dieser Link ist ungültig oder abgelaufen.</p></body></html>",
-            status=404,
-        )
-
-    if protokoll.gegenzeichnung_abgelaufen:
-        return HttpResponse(
-            "<html><body><h1>Link abgelaufen</h1>"
-            "<p>Dieser Link ist nicht mehr gültig.</p>"
-            "<p>Bitte wenden Sie sich an die IT.</p></body></html>",
-            status=410,
-        )
-
+        return None, _signieren_hinweis(request, "Unbekannter Link", "Dieser Link ist ungültig oder durch einen neueren ersetzt.", 404)
     if protokoll.stand == Protokoll.STAND_ABGESCHLOSSEN:
-        return HttpResponse(
-            "<html><body><h1>Gegenzeichnung abgeschlossen</h1>"
-            f"<p>Protokoll {protokoll.nr} wurde bereits signiert.</p></body></html>",
-            status=200,
-        )
+        return None, _signieren_hinweis(request, "Gegenzeichnung abgeschlossen", f"Protokoll {protokoll.nr} ist bereits signiert. Das versiegelte PDF haben Sie per Mail erhalten.")
+    if protokoll.gegenzeichnung_abgelaufen:
+        return None, _signieren_hinweis(request, "Link abgelaufen", "Dieser Link ist nicht mehr gültig. Bitte wenden Sie sich an die IT, sie sendet Ihnen einen neuen.", 410)
+    return protokoll, None
 
-    # POST: Code prüfen (F-136).
+
+def signieren_link(request, token: str):
+    """F-136: GET /signieren/<token>/ – ohne Anmeldung; POST prüft den Einmalcode."""
+    protokoll, antwort = _signieren_protokoll(request, token)
+    if protokoll is None:
+        return antwort
+
     if request.method == "POST":
         code = request.POST.get("code", "").strip()
         if not code:
             return render(
-                request,
-                "geraete/signieren.html",
-                {"protokoll": protokoll, "token": token, "fehler": "Code fehlt."},
-                status=400,
+                request, "geraete/signieren.html",
+                {"protokoll": protokoll, "token": token, "fehler": "Code fehlt."}, status=400,
             )
-        from .services import protokoll_gegenzeichnen
-        protokoll_2, erfolg, meldung = protokoll_gegenzeichnen(token, code, request)
+        protokoll_2, erfolg, meldung = services.protokoll_gegenzeichnen(token, code, request)
         if protokoll_2 is None:
-            return HttpResponse(
-                "<html><body><h1>Unbekannter Link</h1></body></html>",
-                status=404,
-            )
+            return _signieren_hinweis(request, "Unbekannter Link", "Dieser Link ist ungültig.", 404)
         if erfolg:
-            return HttpResponse(
-                "<html><body><h1>Gegenzeichnung abgeschlossen</h1>"
-                f"<p>Vielen Dank. Ihr Protokoll {protokoll_2.nr} ist signiert.</p>"
-                "</body></html>",
-                status=200,
-            )
+            return _signieren_hinweis(request, "Gegenzeichnung abgeschlossen", f"Vielen Dank. Protokoll {protokoll_2.nr} ist signiert, das versiegelte PDF kommt per Mail.")
         return render(
-            request,
-            "geraete/signieren.html",
-            {
-                "protokoll": protokoll_2,
-                "token": token,
-                "fehler": meldung or "Code ungültig.",
-            },
-            status=400,
+            request, "geraete/signieren.html",
+            {"protokoll": protokoll_2, "token": token, "fehler": meldung or "Code ungültig."}, status=400,
         )
 
-    # GET: PDF und Code-Formular anzeigen.
-    from . import protokoll as protokoll_modul
-    from . import pdf as pdf_modul
-    try:
-        pdf_bytes = pdf_modul.pdf_bauen(protokoll)
-    except Exception:
-        pdf_bytes = b""
-
-    return render(
-        request,
-        "geraete/signieren.html",
-        {
-            "protokoll": protokoll,
-            "token": token,
-        },
-    )
+    return render(request, "geraete/signieren.html", {"protokoll": protokoll, "token": token})
 
 
 @require_POST
@@ -2057,27 +2050,10 @@ def signieren_code_senden(request, token: str):
 
     Schickt einen neuen Einmalcode per Mail an die Person.
     """
-    from .models import Protokoll
-    protokoll = Protokoll.objects.filter(
-        gegenzeichnung_token=token
-    ).select_related("person", "geraet").first()
+    protokoll, antwort = _signieren_protokoll(request, token)
     if protokoll is None:
-        return HttpResponse(
-            "<html><body><h1>Unbekannter Link</h1></body></html>",
-            status=404,
-        )
-    if protokoll.gegenzeichnung_abgelaufen:
-        return HttpResponse(
-            "<html><body><h1>Link abgelaufen</h1></body></html>",
-            status=410,
-        )
-    if protokoll.stand == Protokoll.STAND_ABGESCHLOSSEN:
-        return HttpResponse(
-            "<html><body><h1>Gegenzeichnung abgeschlossen</h1></body></html>",
-            status=200,
-        )
+        return antwort
 
-    from . import services
     erfolg, meldung = services.protokoll_code_senden(protokoll)
     if erfolg:
         return render(
@@ -2102,32 +2078,12 @@ def signieren_code_senden(request, token: str):
 
 
 def signieren_pdf(request, token: str):
-    """F-136: GET /signieren/<token>/pdf/ – ohne Anmeldung.
-
-    Liefert das PDF des Protokolls über den Token, ohne Anmeldung.
-    """
-    from .models import Protokoll
+    """F-136: GET /signieren/<token>/pdf/ – das Protokoll zum Ansehen, solange der Link gilt."""
     from . import pdf as pdf_modul
-    protokoll = Protokoll.objects.filter(
-        gegenzeichnung_token=token
-    ).select_related("person", "geraet").first()
+    protokoll, antwort = _signieren_protokoll(request, token)
     if protokoll is None:
-        return HttpResponse(
-            "<html><body><h1>Unbekannter Link</h1></body></html>",
-            status=404,
-        )
-    try:
-        pdf_bytes = pdf_modul.pdf_fertig_bauen(protokoll)
-    except Exception:
-        return HttpResponse(
-            "<html><body><h1>PDF konnte nicht erzeugt werden</h1></body></html>",
-            status=500,
-        )
-    response = HttpResponse(
-        pdf_bytes,
-        content_type="application/pdf",
-    )
-    response["Content-Disposition"] = (
-        f'inline; filename="Protokoll-{protokoll.nr}.pdf"'
-    )
+        return antwort
+    pdf_bytes = pdf_modul.pdf_fertig_bauen(protokoll, versiegeln=False)
+    response = HttpResponse(pdf_bytes, content_type="application/pdf")
+    response["Content-Disposition"] = f'inline; filename="Protokoll-{protokoll.nr}.pdf"'
     return response

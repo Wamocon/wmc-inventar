@@ -210,6 +210,15 @@ def gerat_ausgeben(
         raise GeratFehler("Ausgemusterte Geräte können nicht ausgegeben werden.")
     if gerat.status == Gerat.STATUS_IN_REPARATUR:
         raise GeratFehler("Geräte in Reparatur können nicht ausgegeben werden.")
+    # F-20, Kapitel 4: Nur „Auf Lager“; ein Personenwechsel läuft über die Rückgabe.
+    if gerat.status != Gerat.STATUS_AUF_LAGER:
+        raise GeratFehler("Nur Geräte „Auf Lager“ können ausgegeben werden. Bitte zuerst zurücknehmen.")
+    # F-21: Solange ein Entwurf offen ist, gibt es keine zweite Ausgabe.
+    if Protokoll.objects.filter(geraet=gerat, stand=Protokoll.STAND_BEARBEITER_OFFEN).exists():
+        raise GeratFehler(
+            "Für dieses Gerät steht bereits ein offenes Protokoll. "
+            "Eine weitere Ausgabe ist solange nicht möglich (F-21)."
+        )
 
     # F-20: Reservierte Geräte sind nicht wählbar
     if _gerat_ist_reserviert(gerat):
@@ -219,20 +228,20 @@ def gerat_ausgeben(
     ort = ziel if isinstance(ziel, Ort) else ziel_ort
     if person is None and ort is None:
         raise GeratFehler("Ausgabeziel muss eine Person oder ein Ort sein.")
+    # F-20: Ausgegeben wird an Arbeitsplätze und Räume, das Lager ist kein Ziel.
+    if ort is not None and ort.typ not in (Ort.TYP_ARBEITSPLATZ, Ort.TYP_RAUM):
+        raise GeratFehler("Ausgegeben wird an einen Arbeitsplatz oder Raum, nicht ans Lager.")
+    position = position_aus_gerat(
+        gerat,
+        zustand_ausgabe=int(zustand) if zustand is not None else None,
+        zubehoer_komplett=zubehoer_komplett,
+        bemerkung=anmerkung or "",
+    )
 
     # A-0127: Unterschrift „tool" – Gerät bleibt „Auf Lager",
     # Protokoll auf „bearbeiter-offen". Status, Person und Ort kommen
     # erst mit der Signatur in protokoll_bearbeiter_signieren.
     if person is not None and unterschrift == "tool":
-        # A-0128: Zweite Ausgabe abgelehnt, solange ein Protokoll
-        # auf "bearbeiter-offen" steht (F-21).
-        if Protokoll.objects.filter(
-            geraet=gerat, stand=Protokoll.STAND_BEARBEITER_OFFEN
-        ).exists():
-            raise GeratFehler(
-                "Für dieses Gerät steht bereits ein offenes Protokoll. "
-                "Eine weitere Ausgabe ist solange nicht möglich (F-21)."
-            )
         _protokoll_erstellen(
             person=person,
             gerat=gerat,
@@ -244,14 +253,15 @@ def gerat_ausgeben(
             stand=Protokoll.STAND_BEARBEITER_OFFEN,
             unterschrift_art="tool",
             ort_ziel=ort,
+            positionen=[position],
         )
-        gerat.save()
         return gerat
 
     # F-20: Status wird „In Benutzung"
     gerat.status = Gerat.STATUS_IN_BENUTZUNG
     gerat.person = person
     gerat.ort = ort
+    gerat.altbestand_ohne_protokoll = False
 
     # F-131 (A-0098): Zustand auf das Gerät; in den Vorgang geht er
     # über die Notiz wie bei der Rückgabe (F-50).
@@ -292,9 +302,40 @@ def gerat_ausgeben(
                 ausgefuehrt_von.bezeichnung() if ausgefuehrt_von is not None else ""
             ),
             erzeugt_von=ausgefuehrt_von,
+            ort_ziel=ort,
+            positionen=[position],
         )
     gerat.save()
     return gerat
+
+
+def position_aus_gerat(
+    gerat: Gerat,
+    *,
+    zustand_ausgabe=None,
+    zustand_rueckgabe=None,
+    zubehoer_komplett=True,
+    bemerkung: str = "",
+    ausgabe_protokoll: str = "",
+) -> dict:
+    """Eine Zeile der Gerätetabelle im Protokoll (F-21, F-50, F-131)."""
+    return {
+        "inventarnummer": gerat.inventarnummer,
+        "bezeichnung": f"{gerat.hersteller} {gerat.modell}".strip(),
+        "geraetename": gerat.geraetename,
+        "seriennummer": gerat.seriennummer,
+        "standardzubehoer": gerat.standardzuehoer,
+        "zustand_ausgabe": zustand_ausgabe if zustand_ausgabe is not None else gerat.zustand,
+        "zustand_rueckgabe": zustand_rueckgabe,
+        "zubehoer_komplett": zubehoer_komplett,
+        "bemerkung": bemerkung,
+        "ausgabe_protokoll": ausgabe_protokoll,
+    }
+
+
+def _absenderzeile() -> str:
+    from stammdaten.models import Einstellungen
+    return Einstellungen.aktuelles().absenderzeile
 
 
 def _protokoll_erstellen(
@@ -310,6 +351,7 @@ def _protokoll_erstellen(
     unterschrift_art: str = "papier",
     leihe: "Leihe | None" = None,
     ort_ziel: "Ort | None" = None,
+    positionen: list | None = None,
 ) -> Protokoll:
     """A-0123 (M6 Teil 1): Protokoll in der Service-Schicht anlegen (F-130).
 
@@ -333,11 +375,12 @@ def _protokoll_erstellen(
         datum=timezone.now().date(),
         stand=stand,
         art=art,
-        fassung="1.0",
+        fassung="1.1",
         formularnummer=(
             "FRM-002" if art == Protokoll.ART_RUECKNAHME else "FRM-001"
         ),
-        absenderzeile="Wamocon GmbH · IT",
+        absenderzeile=_absenderzeile(),
+        positionen=positionen if positionen is not None else [position_aus_gerat(gerat)],
         empfaenger_anschrift=str(person.anschrift).strip()
         if getattr(person, "anschrift", None)
         else "",
@@ -2091,11 +2134,41 @@ def leihen_ueberfaellig() -> list:
 
 
 def _client_ip(request) -> str:
-    """IP-Adresse aus der Request-Header (F-137)."""
-    xff = request.META.get("HTTP_X_FORWARDED_FOR", "")
-    if xff:
-        return xff.split(",")[0].strip()
+    """IP-Adresse für das Prüfprotokoll (F-137).
+
+    Ein Kopf ``X-Forwarded-For`` zählt nur hinter dem eigenen Reverse Proxy
+    (``INVENTAR_PROXY=1``), und dann nur der letzte Eintrag: den setzt der Proxy,
+    alle davor kann der Absender selbst schreiben.
+    """
+    if os.environ.get("INVENTAR_PROXY") == "1":
+        xff = request.META.get("HTTP_X_FORWARDED_FOR", "")
+        if xff:
+            return xff.split(",")[-1].strip()
     return request.META.get("REMOTE_ADDR", "127.0.0.1")
+
+
+def _nachweisnummer(jetzt) -> str:
+    """Nachweisnummer je Signatur: SIG-JJJJ-NNNN (F-137)."""
+    from .models import SignaturAufzeichnung
+    jahr = jetzt.year
+    laufend = SignaturAufzeichnung.objects.filter(nachweisnummer__startswith=f"SIG-{jahr}-").count() + 1
+    return f"SIG-{jahr}-{laufend:04d}"
+
+
+def _mail_absender() -> str:
+    from django.conf import settings
+    return settings.DEFAULT_FROM_EMAIL
+
+
+def _firmenname() -> str:
+    from stammdaten.models import Einstellungen
+    return Einstellungen.aktuelles().firmenname
+
+
+def _link_gegenzeichnung(token: str) -> str:
+    """Voller Link, damit der Empfänger ihn öffnen kann (F-136)."""
+    from django.conf import settings
+    return f"{settings.BASIS_URL}/signieren/{token}/"
 
 
 def _pdf_hash(pdf_bytes: bytes) -> str:
@@ -2104,127 +2177,129 @@ def _pdf_hash(pdf_bytes: bytes) -> str:
     return hashlib.sha256(pdf_bytes).hexdigest()
 
 
+@transaction.atomic
 def protokoll_bearbeiter_signieren(
     protokoll: Protokoll,
     password: str,
     request=None,
+    konto: Konto | None = None,
 ) -> tuple[Protokoll, bool]:
-    """F-135: Bearbeiter signiert das Protokoll.
+    """F-135: Der Bearbeiter signiert das Protokoll mit erneuter Passwortabfrage.
 
-    Passwort muss zum Konto des Bearbeiters passen. Danach:
-    - Inhalt gesperrt (bearbeiter_signiert_am gesetzt)
-    - Stand → gegenzeichnung-offen
-    - Token für die Gegenzeichnung erzeugt (14 Tage)
-    - Mail mit Link in die Mailablage (F-136)
-    - Prüfprotokoll-Eintrag (F-137)
+    Geprüft wird das Passwort des angemeldeten Kontos; ohne Anfrage das des
+    Erstellers. Danach ist der Inhalt gesperrt, das Protokoll wartet auf die
+    Gegenzeichnung und die Person bekommt den Link (F-136). Das Prüfprotokoll
+    bekommt einen Eintrag (F-137). Das Passwort wird nirgends gespeichert.
     """
-    from konten.models import Konto
     from konten.zeit import jetzt_wie_im_entwicklungsmodus
     from .models import SignaturAufzeichnung
 
     now = jetzt_wie_im_entwicklungsmodus()
     ip = _client_ip(request) if request else "127.0.0.1"
 
-    # Passwort prüfen: der Bearbeiter muss ein Konto mit diesem Passwort haben.
-    bearbeiter_name = protokoll.bearbeiter
-    konto = Konto.objects.filter(
-        email__iexact=bearbeiter_name
-    ).first() if bearbeiter_name else None
+    if konto is None and request is not None and getattr(request.user, "is_authenticated", False):
+        konto = request.user
     if konto is None:
-        # Fallback: Bearbeiter-Feld ist ein Name, kein E-Mail.
-        # Wir prüfen gegen die erzeugte Person.
         konto = protokoll.erzeugt_von
     if konto is None:
         return protokoll, False
+    if protokoll.stand != Protokoll.STAND_BEARBEITER_OFFEN:
+        return protokoll, False
+    # F-01: Die Sperre nach Fehlversuchen gilt auch hier.
+    if konto.ist_gesperrt(jetzt=now):
+        return protokoll, False
     if not konto.check_password(password):
+        konto.registriere_fehlversuch(jetzt=now)
         return protokoll, False
 
     # F-132: Signatur wird abgelehnt, solange die Checkliste noch offen ist.
-    offene = protokoll.checkliste_unbeantwortet()
-    if offene:
-        return protokoll, False
-
-    # Prüfprotokoll: PDF-Hash berechnen (F-137).
-    # F-132, F-135: pdf_bauen muss erfolgreich sein; bei offenem Inhalt
-    # wird die Signatur abgelehnt, statt leeren Inhalt zu signieren.
     from . import pdf as pdf_modul
-    try:
-        pdf_bytes = pdf_modul.pdf_bauen(protokoll)
-    except GeratFehler:
+    if pdf_modul._offene_punkte(protokoll):
         return protokoll, False
-    pdf_hash = _pdf_hash(pdf_bytes)
 
-    # Signatur setzen (F-135).
-    protokoll.bearbeiter_signatur = password[:6]  # nur als Hinweis, nicht das Passwort selbst
+    # F-135: Inhalt einfrieren; der Hash steht im Prüfprotokoll (F-137).
+    html, pdf_hash = pdf_modul.inhalt_einfrieren(protokoll)
+    protokoll.html_eingefroren = html
     protokoll.bearbeiter_signiert_am = now
     protokoll.bearbeiter_signiert_von = konto
     protokoll.bearbeiter_ip = ip
     protokoll.pdf_hash_bearbeiter = pdf_hash
+    protokoll.bearbeiter = konto.bezeichnung()
 
-    # F-137: Prüfprotokoll-Eintrag.
     SignaturAufzeichnung.objects.create(
         protokoll=protokoll,
         art=SignaturAufzeichnung.KIND_BEARBEITER,
-        name=konto.bezeichnung,
+        name=konto.bezeichnung(),
         email=konto.email,
         zeitpunkt=now,
-        nachweisnummer=protokoll.nr,
-        identifikationsmerkmal=f"Passwort-Abfrage ({konto.email})",
+        nachweisnummer=_nachweisnummer(now),
+        identifikationsmerkmal="Anmeldung und erneute Passwortabfrage",
         ip_adresse=ip,
         hashwert=pdf_hash,
     )
 
-    # A-0128: Bei Unterschrift „tool" entstehen Status, Person, Ort
-    # und der Vorgang mit der Signatur des Bearbeiters (F-21, F-135).
-    # Bei Verleih (F-30, F-33): Status Verliehen, Leihe wird weitergeführt.
-    if protokoll.unterschrift_art == "tool":
-        gerat = protokoll.geraet
-        if protokoll.leihe is not None:
-            # Verleih: Status Verliehen, Person gesetzt, Ort leer (F-30).
-            gerat.status = Gerat.STATUS_VERLIEHEN
-            gerat.person = protokoll.person
-            gerat.ort = None
-            gerat.save(update_fields=["status", "person", "ort"])
-            # Leihe weiterführen: Status bleibt „ausgegeben" (F-33).
-            # (Wurde beim Anlegen bereits gesetzt; hier sicherstellen.)
-            if protokoll.leihe.status != Leihe.STATUS_AUSGEGEBEN:
-                protokoll.leihe.status = Leihe.STATUS_AUSGEGEBEN
-                protokoll.leihe.save()
-        else:
-            # Ausgabe: Status In Benutzung, Person und Ort gesetzt (F-20, F-21).
-            gerat.status = Gerat.STATUS_IN_BENUTZUNG
-            gerat.person = protokoll.person
-            if protokoll.ort_ziel is not None:
-                gerat.ort = protokoll.ort_ziel
-            gerat.save(update_fields=["status", "person", "ort"])
-            # Vorgang „Ausgabe" in die Historie (F-21).
-            Vorgang.objects.create(
-                gerat=gerat,
-                typ=Vorgang.TYP_AUSGABE,
-                zeitpunkt=now,
-                erzeugt_von=konto,
-                leihgabe_an=protokoll.person,
-                notiz=f"Ausgabe per Protokoll {protokoll.nr} (F-21)",
-                abschliesst=True,
-            )
+    # F-21: Status und Verbleib gelten ab der Signatur des Bearbeiters.
+    # Eine Korrektur ändert am Gerät nichts mehr, das Original hat das schon getan.
+    if protokoll.art == Protokoll.ART_AUSGABE and protokoll.unterschrift_art == "tool" and not protokoll.ist_korrektur:
+        _ausgabe_wirksam_machen(protokoll, konto, now)
 
-    # F-136: Token für die Gegenzeichnung erzeugen (14 Tage gültig).
+    # F-136: Token für die Gegenzeichnung (14 Tage gültig).
     import secrets
     token = secrets.token_hex(32)
-    empfaenger = protokoll.person.email or protokoll.person.email_arbeit
+    empfaenger = protokoll.gegenzeichnung_empfaenger or protokoll.person.email or ""
     protokoll.gegenzeichnung_token = token
     protokoll.gegenzeichnung_token_erstellt = now
     protokoll.gegenzeichnung_empfaenger = empfaenger
     protokoll.stand = Protokoll.STAND_GEGENZEICHNUNG_OFFEN
     protokoll.save()
 
-    # Mail in die Mailablage (F-136, TESTSCHNITTSTELLE 4: code-senden).
-    _mail_gegenzeichnen_link(
-        protokoll, token, empfaenger,
-        bearbeiter_name=konto.bezeichnung,
-    )
-
+    _mail_gegenzeichnen_link(protokoll, token, empfaenger, bearbeiter_name=konto.bezeichnung())
     return protokoll, True
+
+
+def _ausgabe_wirksam_machen(protokoll: Protokoll, konto: Konto, now) -> None:
+    """F-21, F-30: Status, Person, Ort und Vorgang mit der Signatur des Bearbeiters."""
+    werte = {p.get("inventarnummer"): p for p in protokoll.positionen or []}
+    for gerat in protokoll.geraete_liste():
+        p = werte.get(gerat.inventarnummer, {})
+        if p.get("zustand_ausgabe"):
+            gerat.zustand = int(p["zustand_ausgabe"])
+        gerat.person = protokoll.person
+        gerat.altbestand_ohne_protokoll = False
+        if protokoll.leihe_id:
+            # Verleih: Status Verliehen, Person gesetzt, Ort leer (F-30).
+            gerat.status = Gerat.STATUS_VERLIEHEN
+            gerat.ort = None
+            if protokoll.leihe.status != Leihe.STATUS_AUSGEGEBEN:
+                protokoll.leihe.status = Leihe.STATUS_AUSGEGEBEN
+                protokoll.leihe.save()
+        else:
+            gerat.status = Gerat.STATUS_IN_BENUTZUNG
+            gerat.ort = protokoll.ort_ziel
+        gerat.save()
+        teile = [f"Protokoll {protokoll.nr}"]
+        if p.get("zustand_ausgabe"):
+            teile.append("Zustand: " + dict(Gerat.ZUSTAENDE).get(int(p["zustand_ausgabe"]), str(p["zustand_ausgabe"])))
+        if p.get("zubehoer_komplett") is not None:
+            teile.append("Zubehör komplett: " + ("Ja" if p["zubehoer_komplett"] else "Nein"))
+        if p.get("bemerkung"):
+            teile.append(p["bemerkung"])
+        Vorgang.objects.create(
+            gerat=gerat,
+            typ=Vorgang.TYP_AUSGABE,
+            zeitpunkt=now,
+            erzeugt_von=konto,
+            leihgabe_an=protokoll.person,
+            notiz=", ".join(teile),
+            abschliesst=True,
+        )
+
+
+def _anrede_mail(person) -> str:
+    anrede = str(getattr(person, "anrede", "") or "").lower()
+    if anrede.startswith("f"):
+        return f"Sehr geehrte Frau {person.nachname}"
+    return f"Sehr geehrter Herr {person.nachname}"
 
 
 def _mail_gegenzeichnen_link(
@@ -2233,27 +2308,21 @@ def _mail_gegenzeichnen_link(
     empfaenger: str,
     bearbeiter_name: str = "",
 ) -> None:
-    """Mail mit persönlichem Link in die Mailablage (F-136).
-
-    TESTSCHNITTSTELLE 4: POST /protokolle/<Nummer>/code-senden/
-    erzeugt eine Mail mit der Zeile „Einmalcode:".
-    """
+    """Mail mit persönlichem Link (F-136), 14 Tage gültig."""
     from django.core.mail import send_mail
 
-    link = f"/signieren/{token}/"
-    betref = f"Gegenzeichnung: Protokoll {protokoll.nr}"
+    if not empfaenger:
+        return
     inhalt = (
-        f"Sehr geehrte {protokoll.person.vorname} {protokoll.person.nachname},\n\n"
+        f"{_anrede_mail(protokoll.person)},\n\n"
         f"das Protokoll {protokoll.nr} steht zur Gegenzeichnung bereit.\n"
-        f"Öffnen Sie den folgenden Link, sehen Sie das PDF und signieren Sie "
-        f"mit dem Einmalcode, der Ihnen per Mail zugeht:\n\n"
-        f"Link: {link}\n\n"
-        f"Der Link ist 14 Tage gültig.\n\n"
-        f"Mit freundlichen Grüßen\n"
-        f"Wamocon GmbH · IT"
+        "Öffnen Sie den folgenden Link, sehen Sie das PDF an und signieren Sie "
+        "mit einem Einmalcode, den Sie dort per Mail anfordern:\n\n"
+        f"Link: {_link_gegenzeichnung(token)}\n\n"
+        "Der Link ist 14 Tage gültig.\n\n"
+        f"Mit freundlichen Grüßen\n{bearbeiter_name or _firmenname()}"
     )
-    if empfaenger:
-        send_mail(betref, inhalt, "it@wamocon.de", [empfaenger], fail_silently=True)
+    send_mail(f"Gegenzeichnung: Protokoll {protokoll.nr}", inhalt, _mail_absender(), [empfaenger])
 
 
 def protokoll_code_senden(
@@ -2261,115 +2330,40 @@ def protokoll_code_senden(
     empfaenger: str | None = None,
     request=None,
 ) -> tuple[bool, str]:
-    """F-136: Einmalcode erzeugen und per Mail senden.
+    """F-136: Einmalcode erzeugen und per Mail senden (N-05).
 
-    TESTSCHNITTSTELLE 4: POST /protokolle/<Nummer>/code-senden/
-    Erzeugt einen 6-stelligen Code (10 Min. gültig, 5 Versuche) und
-    schickt eine Mail mit der Zeile „Einmalcode: <code>".
-
-    Liefert (erfolgreich, meldung).
+    6-stellig, 10 Minuten gültig, höchstens 5 Versuche. Die Adresse kann die IT
+    im Dialog ändern (F-141, Rückgabe per Post); sie steht dann im Prüfprotokoll.
     """
     from .models import SignaturCode
     import secrets
-
-    now = jetzt_wie_im_entwicklungsmodus()
     from datetime import timedelta
+
+    if protokoll.stand != Protokoll.STAND_GEGENZEICHNUNG_OFFEN:
+        return False, "Dieses Protokoll wartet nicht auf eine Gegenzeichnung."
+    now = jetzt_wie_im_entwicklungsmodus()
+    empfaenger = (empfaenger or "").strip() or protokoll.gegenzeichnung_empfaenger or protokoll.person.email or ""
+    if not empfaenger:
+        return False, "Für diese Person ist keine E-Mail-Adresse hinterlegt. Bitte eine Adresse eintragen."
+
+    SignaturCode.objects.filter(protokoll=protokoll, gueltig=True).update(gueltig=False)
     code = f"{secrets.randbelow(10**6):06d}"
-    gueltig_bis = now + timedelta(minutes=10)
-
-    # Alte, noch gültige Codes ungültig machen.
-    SignaturCode.objects.filter(
-        protokoll=protokoll, gueltig=True
-    ).update(gueltig=False)
-
     SignaturCode.objects.create(
-        protokoll=protokoll,
-        code=code,
-        erstellt_am=now,
-        gueltig_bis=gueltig_bis,
+        protokoll=protokoll, code=code, erstellt_am=now, gueltig_bis=now + timedelta(minutes=10),
     )
-
-    empfaenger = empfaenger or protokoll.gegenzeichnung_empfaenger
-    empfaenger = empfaenger or protokoll.person.email or protokoll.person.email_arbeit
-    betref = f"Einmalcode für Protokoll {protokoll.nr}"
+    if empfaenger != protokoll.gegenzeichnung_empfaenger:
+        protokoll.gegenzeichnung_empfaenger = empfaenger
+        protokoll.save(update_fields=["gegenzeichnung_empfaenger"])
     inhalt = (
-        f"Sehr geehrte {protokoll.person.vorname} {protokoll.person.nachname},\n\n"
+        f"{_anrede_mail(protokoll.person)},\n\n"
         f"Ihr Einmalcode für die Gegenzeichnung des Protokolls {protokoll.nr}:\n\n"
         f"Einmalcode: {code}\n\n"
-        f"Der Code ist 10 Minuten gültig und darf 5-mal verwendet werden.\n\n"
-        f"Mit freundlichen Grüßen\n"
-        f"Wamocon GmbH · IT"
+        "Der Code ist 10 Minuten gültig, Sie haben höchstens 5 Versuche.\n\n"
+        f"Mit freundlichen Grüßen\n{_firmenname()}"
     )
-    if empfaenger:
-        from django.core.mail import send_mail
-        send_mail(betref, inhalt, "it@wamocon.de", [empfaenger], fail_silently=True)
-    return True, "Code gesendet."
-
-
-def _mail_versand_mit_anhang(
-    protokoll: Protokoll,
-    pdf_bytes: bytes,
-    dateiname: str,
-) -> None:
-    """F-139: Mail an Person und Bearbeiter mit dem PDF als Anhang.
-
-    Je eine Ausfertigung. Dateiname nach F-139.
-    """
-    from django.core.mail import EmailMessage
-
-    empfaenger = protokoll.person.email or protokoll.person.email_arbeit
-    if not empfaenger:
-        return
-
-    betref = f"Protokoll {protokoll.nr} – Gegenzeichnung abgeschlossen"
-    inhalt = (
-        f"Vielen Dank. Ihre Gegenzeichnung des Protokolls {protokoll.nr} "
-        f"ist abgeschlossen.\n\n"
-        f"Anbei erhalten Sie das versiegelte Protokoll-PDF "
-        f"({dateiname}).\n\n"
-        f"Wamocon GmbH · IT"
-    )
-
-    msg = EmailMessage(
-        subject=betref,
-        body=inhalt,
-        from_email="it@wamocon.de",
-        to=[empfaenger],
-    )
-    msg.attach(dateiname, pdf_bytes, "application/pdf")
-    msg.send(fail_silently=True)
-
-    # Bearbeiter-Kopie (falls vorhanden und anders als die Person).
-    bearbeiter_email = ""
-    if protokoll.erzeugt_von is not None:
-        bearbeiter_email = protokoll.erzeugt_von.email or ""
-    if bearbeiter_email and bearbeiter_email != empfaenger:
-        msg2 = EmailMessage(
-            subject=betref,
-            body=inhalt,
-            from_email="it@wamocon.de",
-            to=[bearbeiter_email],
-        )
-        msg2.attach(dateiname, pdf_bytes, "application/pdf")
-        msg2.send(fail_silently=True)
-
-
-def _mail_bestätigung(protokoll: Protokoll) -> None:
-    """Bestätigungsmail an die Person, wenn das Siegel nicht verfügbar ist."""
     from django.core.mail import send_mail
-
-    empfaenger = protokoll.person.email or protokoll.person.email_arbeit
-    if empfaenger:
-        send_mail(
-            f"Gegenzeichnung abgeschlossen: Protokoll {protokoll.nr}",
-            (
-                f"Vielen Dank. Ihre Gegenzeichnung des Protokolls {protokoll.nr} "
-                f"ist abgeschlossen.\n\nWamocon GmbH · IT"
-            ),
-            "it@wamocon.de",
-            [empfaenger],
-            fail_silently=True,
-        )
+    send_mail(f"Einmalcode für Protokoll {protokoll.nr}", inhalt, _mail_absender(), [empfaenger])
+    return True, "Code gesendet."
 
 
 def _ablage_mit_anhang(
@@ -2377,48 +2371,18 @@ def _ablage_mit_anhang(
     pdf_bytes: bytes,
     dateiname: str,
 ) -> None:
-    """F-139: Das fertige PDF ablegen und als Anhang senden.
+    """F-139: Das fertige PDF geht an Person und Bearbeiter, je eine Ausfertigung.
 
-    Ablageorte:
-    - Am Gerät: var/protokolle/<Gerat>/<dateiname>
-    - An der Person: var/personen/<person_id>/<dateiname>
-    - Unter /meine-geraete/: var/meine-geraete/<person_id>/<dateiname>
-
-    Mail: Person und Bearbeiter (falls vorhanden), je eine Ausfertigung
-    mit dem PDF als Anhang.
+    Abgelegt ist es im Protokoll selbst (``pdf_siegel``), und von dort kommt es am
+    Gerät, an der Person und im Self-Service.
     """
-    from pathlib import Path
-
-    from django.conf import settings
-
-    var_root = Path(settings.DATEIABLAGE)
-    person_id = str(protokoll.person_id)
-
-    # Am Gerät ablegen.
-    gerat_dir = var_root / "protokolle" / str(protokoll.geraet_id)
-    gerat_dir.mkdir(parents=True, exist_ok=True)
-    (gerat_dir / dateiname).write_bytes(pdf_bytes)
-
-    # An der Person ablegen.
-    person_dir = var_root / "personen" / person_id
-    person_dir.mkdir(parents=True, exist_ok=True)
-    (person_dir / dateiname).write_bytes(pdf_bytes)
-
-    # Unter /meine-geraete/ ablegen.
-    meine_geraete_dir = var_root / "meine-geraete" / person_id
-    meine_geraete_dir.mkdir(parents=True, exist_ok=True)
-    (meine_geraete_dir / dateiname).write_bytes(pdf_bytes)
-
-    # Mail an Person.
-    person_email = protokoll.person.email or protokoll.person.email_arbeit
+    person_email = protokoll.gegenzeichnung_empfaenger or protokoll.person.email or ""
     if person_email:
         _mail_anhang(protokoll, pdf_bytes, dateiname, person_email)
-
-    # Mail an Bearbeiter (falls vorhanden und anders als die Person).
-    if protokoll.erzeugt_von is not None:
-        bearbeiter_email = protokoll.erzeugt_von.email or ""
-        if bearbeiter_email and bearbeiter_email != person_email:
-            _mail_anhang(protokoll, pdf_bytes, dateiname, bearbeiter_email)
+    bearbeiter = protokoll.bearbeiter_signiert_von or protokoll.erzeugt_von
+    bearbeiter_email = bearbeiter.email if bearbeiter is not None else ""
+    if bearbeiter_email and bearbeiter_email != person_email:
+        _mail_anhang(protokoll, pdf_bytes, dateiname, bearbeiter_email)
 
 
 def _mail_anhang(
@@ -2427,256 +2391,186 @@ def _mail_anhang(
     dateiname: str,
     empfaenger: str,
 ) -> None:
-    """F-139: Mail mit dem PDF als Anhang an einen Empfänger."""
+    """F-139: Mail mit dem versiegelten PDF als Anhang an einen Empfänger."""
     from django.core.mail import EmailMessage
 
     msg = EmailMessage(
-        subject=f"Protokoll {protokoll.nr} – Gegenzeichnung abgeschlossen",
+        subject=f"Protokoll {protokoll.nr}: abgeschlossen",
         body=(
-            f"Vielen Dank. Die Gegenzeichnung des Protokolls {protokoll.nr} "
-            f"ist abgeschlossen.\n\n"
-            f"Anbei erhalten Sie das versiegelte Protokoll-PDF "
-            f"({dateiname}).\n\n"
-            f"Wamocon GmbH · IT"
+            f"Das Protokoll {protokoll.nr} ist von beiden Seiten signiert.\n\n"
+            f"Anbei erhalten Sie das versiegelte PDF ({dateiname}).\n\n"
+            f"{_firmenname()}"
         ),
-        from_email="it@wamocon.de",
+        from_email=_mail_absender(),
         to=[empfaenger],
     )
     msg.attach(dateiname, pdf_bytes, "application/pdf")
-    msg.send(fail_silently=True)
+    msg.send()
 
 
+@transaction.atomic
 def protokoll_link_neu_senden(
     protokoll: Protokoll,
+    empfaenger: str | None = None,
 ) -> tuple[Protokoll, bool, str]:
-    """F-140: Abgelaufener Link wird neu gesendet (neuer Token, neue Mail).
+    """F-140, F-141: Neuer Link, neue Frist; der alte Link gilt nicht mehr.
 
-    Erinnerung am dritten Tag kommt mit dem Tageslauf in M7.
+    Den Einmalcode fordert die Person auf der Seite an, er steht nie in dieser Mail.
     """
-    from datetime import timedelta
+    import secrets
     from konten.zeit import jetzt_wie_im_entwicklungsmodus
     from .models import SignaturCode
-    import secrets
 
+    if protokoll.stand != Protokoll.STAND_GEGENZEICHNUNG_OFFEN:
+        return protokoll, False, "Dieses Protokoll wartet nicht auf eine Gegenzeichnung."
     now = jetzt_wie_im_entwicklungsmodus()
+    empfaenger = (empfaenger or "").strip() or protokoll.gegenzeichnung_empfaenger or protokoll.person.email or ""
+    if not empfaenger:
+        return protokoll, False, "Für diese Person ist keine E-Mail-Adresse hinterlegt. Bitte eine Adresse eintragen."
 
-    # F-135: Bearbeiter muss schon signiert haben.
-    if protokoll.bearbeiter_signiert_am is None:
-        return protokoll, False, "Der Bearbeiter hat noch nicht signiert."
-
-    # Alte Codes ungültig machen.
-    SignaturCode.objects.filter(protokoll=protokoll, gueltig=True).update(
-        gueltig=False
-    )
-
-    # Neuer Token.
-    neuer_token = secrets.token_urlsafe(32)
-    protokoll.gegenzeichnung_token = neuer_token
+    SignaturCode.objects.filter(protokoll=protokoll, gueltig=True).update(gueltig=False)
+    protokoll.gegenzeichnung_token = secrets.token_hex(32)
     protokoll.gegenzeichnung_token_erstellt = now
+    protokoll.gegenzeichnung_erinnerung_gesendet = None
+    protokoll.gegenzeichnung_empfaenger = empfaenger
     protokoll.link_neu_gesendet_am = now
-    protokoll.stand = Protokoll.STAND_GEGENZEICHNUNG_OFFEN
     protokoll.save()
-
-    # Neue Mail mit Link und Code.
-    from django.core.mail import send_mail
-    empfaenger = protokoll.person.email or protokoll.person.email_arbeit
-    if empfaenger:
-        code = secrets.choice("23456789") + secrets.choice("23456789") + secrets.choice("23456789")
-        SignaturCode.objects.create(
-            protokoll=protokoll,
-            code=code,
-            erstellt_am=now,
-            gueltig_bis=now + timedelta(minutes=10),
-            gueltig=True,
-        )
-        basis = os.environ.get("INVENTAR_BASIS_URL", "http://127.0.0.1:8000")
-        link = f"{basis}/signieren/{neuer_token}/"
-        send_mail(
-            f"Protokoll {protokoll.nr} – neuer Link zur Gegenzeichnung",
-            (
-                f"Ihr alter Link zur Gegenzeichnung ist abgelaufen. "
-                f"Bitte nutzen Sie den neuen Link:\n\n"
-                f"{link}\n\n"
-                f"Einmalcode: {code}\n\n"
-                f"Wamocon GmbH · IT"
-            ),
-            "it@wamocon.de",
-            [empfaenger],
-            fail_silently=True,
-        )
-
-    return protokoll, True, "Neuer Link gesendet."
+    bearbeiter = protokoll.bearbeiter_signiert_von
+    _mail_gegenzeichnen_link(
+        protokoll, protokoll.gegenzeichnung_token, empfaenger,
+        bearbeiter_name=bearbeiter.bezeichnung() if bearbeiter is not None else "",
+    )
+    return protokoll, True, f"Neuer Link gesendet an {empfaenger}."
 
 
+@transaction.atomic
 def protokoll_gegenzeichnen(
     token: str,
     code: str,
     request=None,
 ) -> tuple[Protokoll | None, bool, str]:
-    """F-136: Person signiert per Token-Link mit Einmalcode.
+    """F-136: Die Person signiert per Link mit Einmalcode (N-05).
 
-    TESTSCHNITTSTELLE 3: GET /signieren/<token>/ ohne Anmeldung.
-    POST /signieren/<token>/ mit {"code": "..."}.
-
-    - Falscher Code: abgelehnt, Versuch gezählt.
-    - Nach 5 Fehlversuchen: kein Code mehr gültig (F-136, N-05).
-    - Code nach 10 Minuten: abgelaufen (TESTSCHNITTSTELLE 3).
-    - Token nach 14 Tagen: abgelaufen (TESTSCHNITTSTELLE 3).
+    Der Zähler der Versuche steht in der Datenbank. Nach der letzten Signatur
+    wird versiegelt und verschickt (F-138, F-139). Geht das Siegel nicht, bleibt das
+    Protokoll offen: Einen Abschluss ohne Siegel gibt es nicht.
 
     Liefert (protokoll, erfolg, meldung).
     """
+    import hmac
     from konten.zeit import jetzt_wie_im_entwicklungsmodus
     from .models import SignaturAufzeichnung, SignaturCode
 
-    protokoll = Protokoll.objects.filter(
-        gegenzeichnung_token=token
-    ).select_related("person", "geraet").first()
-    if protokoll is None:
+    protokoll = Protokoll.objects.filter(gegenzeichnung_token=token).select_related("person", "geraet").first()
+    if protokoll is None or not token:
         return None, False, "Unbekannter Link."
-
-    # F-136: Token abgelaufen nach 14 Tagen.
+    if protokoll.stand != Protokoll.STAND_GEGENZEICHNUNG_OFFEN:
+        return protokoll, False, "Dieses Protokoll wartet nicht auf eine Gegenzeichnung."
     if protokoll.gegenzeichnung_abgelaufen:
         return protokoll, False, "Der Link ist abgelaufen."
-
-    # F-135: Bearbeiter muss schon signiert haben.
     if protokoll.bearbeiter_signiert_am is None:
         return protokoll, False, "Der Bearbeiter hat noch nicht signiert."
 
-    # F-136: Code suchen.
-    code_objekt = SignaturCode.objects.filter(
-        protokoll=protokoll, code=code, gueltig=True
-    ).first()
-    if code_objekt is None:
-        # Code existiert nicht oder ist ungültig.
-        # Prüfen, ob es einen aktiven Code gibt, um den Versuch zu zählen.
-        aktiver = SignaturCode.objects.filter(
-            protokoll=protokoll, gueltig=True
-        ).order_by("-erstellt_am").first()
-        if aktiver is not None:
-            aktiver.versucht_anzahl += 1
-            if aktiver.versucht_anzahl >= 5:
-                aktiver.gueltig = False
-            aktiver.save()
-            if aktiver.ist_gesperrt():
-                return protokoll, False, (
-                    "Zu viele Fehlversuche. Der Code ist nicht mehr gültig."
-                )
+    aktiver = SignaturCode.objects.filter(protokoll=protokoll, gueltig=True).order_by("-erstellt_am").first()
+    if aktiver is None:
+        return protokoll, False, "Bitte fordern Sie zuerst einen Code an."
+    if not aktiver.ist_gueltig():
+        return protokoll, False, "Der Code ist abgelaufen. Bitte fordern Sie einen neuen an."
+    if not hmac.compare_digest(aktiver.code, str(code or "")):
+        aktiver.versucht_anzahl += 1
+        if aktiver.versucht_anzahl >= 5:
+            aktiver.gueltig = False
+        aktiver.save()
+        if not aktiver.gueltig:
+            return protokoll, False, "Zu viele Fehlversuche. Der Code ist nicht mehr gültig, bitte fordern Sie einen neuen an."
         return protokoll, False, "Code ungültig."
 
-    # Code-Prüfung: Zeitfenster.
-    if not code_objekt.ist_gueltig():
-        if code_objekt.ist_gesperrt():
-            return protokoll, False, (
-                "Zu viele Fehlversuche. Der Code ist nicht mehr gültig."
-            )
-        return protokoll, False, "Code abgelaufen."
-
-    # Code korrekt: Signatur setzen (F-136, F-137).
     now = jetzt_wie_im_entwicklungsmodus()
     ip = _client_ip(request) if request else "127.0.0.1"
+    empfaenger = protokoll.gegenzeichnung_empfaenger or protokoll.person.email or ""
 
-    # F-138: Siegel erst nach der letzten Signatur – Zeitpunkt vor
-    # pdf_fertig_bauen setzen, damit die Bedingung greift.
-    protokoll.gegenzeichnung_signiert_am = now
-
-    from . import pdf as pdf_modul
-    try:
-        # F-137, F-138: Fertiges PDF mit Prüfprotokoll und Siegel.
-        pdf_bytes = pdf_modul.pdf_fertig_bauen(protokoll)
-    except Exception:
-        pdf_bytes = b""
-    pdf_hash = _pdf_hash(pdf_bytes)
-
-    code_objekt.verifiziert_am = now
-    code_objekt.verifiziert_von_ip = ip
-    code_objekt.save()
-
-    protokoll.gegenzeichnung_ip = ip
-    protokoll.pdf_hash_gegenzeichnung = pdf_hash
-    protokoll.stand = Protokoll.STAND_ABGESCHLOSSEN
-
-    # F-141: Bei Rücknahme – Geräte sofort im Lager.
-    if protokoll.art == Protokoll.ART_RUECKNAHME:
-        protokoll.ruecknahme_geraet_im_lager = True
-
-    protokoll.save()
-
-    # F-137: Prüfprotokoll-Eintrag für die Gegenzeichnung.
+    aktiver.verifiziert_am = now
+    aktiver.verifiziert_von_ip = ip
+    aktiver.gueltig = False
+    aktiver.save()
+    # Die Person bestätigt denselben Inhalt wie der Bearbeiter, deshalb derselbe Hash.
+    pdf_hash = protokoll.pdf_hash_bearbeiter
     SignaturAufzeichnung.objects.create(
         protokoll=protokoll,
         art=SignaturAufzeichnung.KIND_GEGENZEICHNUNG,
         name=f"{protokoll.person.vorname} {protokoll.person.nachname}",
-        email=protokoll.person.email or protokoll.person.email_arbeit,
+        email=empfaenger,
         zeitpunkt=now,
-        nachweisnummer=protokoll.nr,
-        identifikationsmerkmal=f"Einmalcode ({code[:2]}…)",
+        nachweisnummer=_nachweisnummer(now),
+        identifikationsmerkmal=f"Einmalcode an {empfaenger}",
         ip_adresse=ip,
         hashwert=pdf_hash,
     )
+    protokoll.gegenzeichnung_signiert_am = now
+    protokoll.gegenzeichnung_ip = ip
+    protokoll.pdf_hash_gegenzeichnung = pdf_hash
 
-    # --- A-0126 M6 Teil 3: Siegel (F-138) und Versand (F-139) --------------
-    # F-137, F-138: pdf_fertig_bauen hat bereits das Siegel angelegt.
-    # F-139: Das fertige PDF geht als Anhang an Person und Bearbeiter.
-    if pdf_bytes:
-        dateiname = pdf_modul.dateiname_protokoll(protokoll)
-        protokoll.pdf_siegel = pdf_bytes
-        protokoll.pdf_dateiname = dateiname
-        protokoll.save()
-        _ablage_mit_anhang(protokoll, pdf_bytes, dateiname)
-    else:
-        _mail_bestätigung(protokoll)
+    from . import pdf as pdf_modul
+    try:
+        pdf_bytes = pdf_modul.pdf_fertig_bauen(protokoll, versiegeln=True)
+    except GeratFehler as fehler:
+        transaction.set_rollback(True)
+        return protokoll, False, str(fehler)
 
+    protokoll.stand = Protokoll.STAND_ABGESCHLOSSEN
+    if protokoll.art == Protokoll.ART_RUECKNAHME:
+        protokoll.ruecknahme_geraet_im_lager = True
+    dateiname = pdf_modul.dateiname_protokoll(protokoll)
+    protokoll.pdf_siegel = pdf_bytes
+    protokoll.pdf_dateiname = dateiname
+    protokoll.save()
+    _ablage_mit_anhang(protokoll, pdf_bytes, dateiname)
     return protokoll, True, "Gegenzeichnung abgeschlossen."
 
 
+@transaction.atomic
 def protokoll_korrigieren(
     protokoll: Protokoll,
     bearbeiter_konto=None,
 ) -> tuple[Protokoll, bool]:
-    """F-135: Korrektur erzeugt eine neue Fassung mit neuer Nummer.
+    """F-135: Eine Korrektur erzeugt eine neue Fassung mit neuer Nummer.
 
-    Das Original wird gesperrt; die neue Fassung erhält eine neue Nummer
-    (UP-JJJJ-NNNN, NNNN+1) und dieselben Daten.
+    Das alte Protokoll ist danach ersetzt, sein Link gilt nicht mehr. Die neue
+    Fassung ist wieder bearbeitbar und wird neu signiert.
     """
-    from konten.zeit import jetzt_wie_im_entwicklungsmodus
+    from .models import SignaturCode
 
-    if protokoll.bearbeiter_signiert_am is None:
-        # F-135: Nur signierte Protokolle können korrigiert werden.
+    if protokoll.bearbeiter_signiert_am is None or protokoll.stand == Protokoll.STAND_ERSETZT:
         return protokoll, False
 
-    # Neue Nummer: NNNN+1 (F-135).
-    neue_nr = _naechste_protokollnummer()
-    jetzt = jetzt_wie_im_entwicklungsmodus()
-
-    # Original: Korrekturen markieren.
-    # (Das Original bleibt bearbeitbar bis die neue Fassung signiert ist.)
-
-    from .models import SignaturCode, SignaturAufzeichnung
     neue = Protokoll.objects.create(
-        nr=neue_nr,
+        nr=_naechste_protokollnummer(),
         person=protokoll.person,
         geraet=protokoll.geraet,
         datum=protokoll.datum,
         stand=Protokoll.STAND_BEARBEITER_OFFEN,
-        erzeugt_von=protokoll.erzeugt_von,
+        erzeugt_von=bearbeiter_konto or protokoll.erzeugt_von,
         fotos=protokoll.fotos,
         art=protokoll.art,
-        fassung="2.0",
+        fassung=protokoll.fassung,
         formularnummer=protokoll.formularnummer,
         absenderzeile=protokoll.absenderzeile,
         empfaenger_anschrift=protokoll.empfaenger_anschrift,
         bearbeiter=protokoll.bearbeiter,
         checkliste=dict(protokoll.checkliste or {}),
+        checkliste_bemerkung=dict(protokoll.checkliste_bemerkung or {}),
         offboarding=dict(protokoll.offboarding or {}),
+        positionen=list(protokoll.positionen or []),
         anhaenge=list(protokoll.anhaenge or []),
         rueckgabe_zu_protokoll=protokoll.rueckgabe_zu_protokoll,
         ist_korrektur=True,
         korrigiert_zu_protokoll=protokoll,
+        unterschrift_art="tool",
+        leihe=protokoll.leihe,
+        ort_ziel=protokoll.ort_ziel,
     )
-
-    # Alte Codes ungültig machen.
-    SignaturCode.objects.filter(protokoll=protokoll, gueltig=True).update(
-        gueltig=False
-    )
-
+    SignaturCode.objects.filter(protokoll=protokoll, gueltig=True).update(gueltig=False)
+    protokoll.stand = Protokoll.STAND_ERSETZT
+    protokoll.gegenzeichnung_token = ""
+    protokoll.save(update_fields=["stand", "gegenzeichnung_token"])
     return neue, True

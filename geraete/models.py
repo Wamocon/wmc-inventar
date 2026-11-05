@@ -357,11 +357,14 @@ class Protokoll(models.Model):
     # A-0125 M6 Teil 2: Stände für die Signatur-Kette (F-135, F-136).
     STAND_BEARBEITER_OFFEN = "bearbeiter-offen"
     STAND_GEGENZEICHNUNG_OFFEN = "gegenzeichnung-offen"
+    # F-135: Eine Korrektur ersetzt das alte Protokoll, sein Link gilt nicht mehr.
+    STAND_ERSETZT = "ersetzt"
     STAENDE = [
         (STAND_SCAN_OFFEN, "Unterschrift offen: Scan fehlt"),
         (STAND_BEARBEITER_OFFEN, "Bearbeiter-Signatur offen (F-135)"),
         (STAND_GEGENZEICHNUNG_OFFEN, "Gegenzeichnung offen (F-136)"),
         (STAND_ABGESCHLOSSEN, "Abgeschlossen"),
+        (STAND_ERSETZT, "Ersetzt durch eine neue Fassung"),
     ]
 
     nr = models.CharField("Protokollnummer", max_length=24, blank=True, default="")
@@ -391,7 +394,7 @@ class Protokoll(models.Model):
     art = models.CharField(
         "Art", max_length=16, choices=ARTEN, default=ART_AUSGABE
     )
-    fassung = models.CharField("Fassung", max_length=8, default="1.0")
+    fassung = models.CharField("Fassung", max_length=8, default="1.1")
     formularnummer = models.CharField(
         "Formularnummer (Fußzeile)", max_length=24, default="FRM-001"
     )
@@ -409,12 +412,17 @@ class Protokoll(models.Model):
     checkliste = models.JSONField(
         "Checkliste Zugänge", default=dict, blank=True
     )
+    checkliste_bemerkung = models.JSONField(
+        "Bemerkungen zur Checkliste", default=dict, blank=True
+    )
+    # F-20, F-52: Alle Geräte des Protokolls mit Zustand, Zubehör und Bemerkung
+    # aus dem Dialog. ``geraet`` bleibt das erste Gerät.
+    positionen = models.JSONField("Geräte des Protokolls", default=list, blank=True)
+    # F-135: Der Inhalt, wie er signiert wurde. Danach ändert er sich nicht mehr.
+    html_eingefroren = models.TextField("Inhalt, eingefroren mit der Signatur", blank=True, default="")
 
     # --- A-0125 M6 Teil 2: Signatur, Gegenzeichnung (F-135, F-136, F-137, F-141) ---
-    # F-135: Signatur des Bearbeiters (Passwort, Zeitpunkt, IP).
-    bearbeiter_signatur = models.CharField(
-        "Bearbeiter-Signatur (Passwort-Code)", max_length=6, blank=True, default=""
-    )
+    # F-135: Signatur des Bearbeiters (Zeitpunkt, IP). Ein Passwort wird nie gespeichert.
     bearbeiter_signiert_am = models.DateTimeField(
         "Bearbeiter signierte am", null=True, blank=True
     )
@@ -551,6 +559,8 @@ class Protokoll(models.Model):
             return "Unterschrift offen: Gegenzeichnung"
         if stand == self.STAND_ABGESCHLOSSEN:
             return "abgeschlossen"
+        if stand == self.STAND_ERSETZT:
+            return "ersetzt"
         return stand
 
     @property
@@ -618,7 +628,11 @@ class Protokoll(models.Model):
         """F-132: Punkte, die noch nicht ja/nein beantwortet sind.
 
         Liefert die Textbezeichnung der offenen Punkte (F-132, F-130).
+        Die Checkliste Zugänge gehört nur zur Ausgabe, nicht zur Leihe und nicht
+        zur Rücknahme (FRM-001 Varianten, FRM-002).
         """
+        if self.art != self.ART_AUSGABE or self.leihe_id:
+            return []
         werte = self.checkliste or {}
         offene = []
         for schluessel, text in self.CHECKLISTE_PUNKTE:
@@ -664,6 +678,14 @@ class Protokoll(models.Model):
 
     def anhaenge_liste(self) -> list[dict]:
         return list(self.anhaenge or [])
+
+    def geraete_liste(self) -> list:
+        """Alle Geräte des Protokolls in der Reihenfolge der Positionen."""
+        nummern = [p.get("inventarnummer") for p in (self.positionen or []) if p.get("inventarnummer")]
+        if not nummern:
+            return [self.geraet]
+        nach_nummer = {g.inventarnummer: g for g in Gerat.objects.filter(inventarnummer__in=nummern)}
+        return [nach_nummer[n] for n in nummern if n in nach_nummer]
 
 
 class Leihe(models.Model):
@@ -795,7 +817,7 @@ class SignaturCode(models.Model):
     protokoll = models.ForeignKey(
         Protokoll, on_delete=models.CASCADE, related_name="codes"
     )
-    code = models.CharField("Code", max_length=6, unique=True)
+    code = models.CharField("Code", max_length=6)
     erstellt_am = models.DateTimeField("Erstellt am", default=timezone.now)
     gueltig_bis = models.DateTimeField("Gültig bis")
     versucht_anzahl = models.PositiveIntegerField("Versucht (Anzahl)", default=0)

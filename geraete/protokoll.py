@@ -32,8 +32,21 @@ ERLAUBTE_FOTO_TYPEN = {
 }
 MAX_FOTO_GROESSE = 10 * 1024 * 1024  # 10 MB
 
-# Verkleinerung: Kantenlänge (Punkt) der Anlage im PDF.
-PDF_KANTE_PUNKT = 140
+# F-134: verkleinert gespeichert, längste Kante in Pixel.
+PDF_KANTE_PUNKT = 1600
+
+
+def _typ_am_inhalt(roh: bytes) -> str | None:
+    """N-02: Der Dateityp wird am Inhalt erkannt, nicht an Endung oder Absenderangabe."""
+    if roh[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if roh[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if roh[:5] == b"%PDF-":
+        return "application/pdf"
+    if roh[4:8] == b"ftyp" and roh[8:12] in (b"heic", b"heix", b"hevc", b"hevx", b"mif1", b"msf1"):
+        return "image/heic"
+    return None
 
 # --- F-132: Checkliste Zugänge ------------------------------------------------
 
@@ -42,7 +55,7 @@ def _stand_beantwortbar(protokoll: Protokoll) -> bool:
     noch nicht signiert ist: ``scan-offen`` und ``bearbeiter-offen`` (F-22).
     Nach der Signatur sind sie gesperrt.
     """
-    return protokoll.stand in (
+    return protokoll.bearbeiter_signiert_am is None and protokoll.stand in (
         Protokoll.STAND_SCAN_OFFEN,
         Protokoll.STAND_BEARBEITER_OFFEN,
     )
@@ -56,7 +69,8 @@ def _stand_anhaenge_erlaubt(protokoll: Protokoll) -> bool:
 
 
 def checkliste_beantworten(
-    protokoll: Protokoll, werte: dict, ausgefuehrt_von: Konto | None = None
+    protokoll: Protokoll, werte: dict, ausgefuehrt_von: Konto | None = None,
+    bemerkungen: dict | None = None,
 ) -> Protokoll:
     """F-132: Checkliste mit Ja (1) / Nein (0) beantworten.
 
@@ -79,7 +93,11 @@ def checkliste_beantworten(
     if not bereinigt:
         raise GeratFehler("Keine Antwort der Checkliste übergeben (F-132).")
     protokoll.checkliste = {**(protokoll.checkliste or {}), **bereinigt}
-    protokoll.save(update_fields=["checkliste"])
+    protokoll.checkliste_bemerkung = {
+        **(protokoll.checkliste_bemerkung or {}),
+        **{k: str(v).strip() for k, v in (bemerkungen or {}).items() if k in erlaubt},
+    }
+    protokoll.save(update_fields=["checkliste", "checkliste_bemerkung"])
     return protokoll
 
 
@@ -156,9 +174,7 @@ def offboarding_beantworten(
         kuerzel = (werte or {}).get(f"{schluessel}.kuerzel") or (
             bearbeiter_kuerzel if status == "erledigt" else ""
         )
-        bemerkung = (werte or {}).get(f"{schluessel}.bemerkung") or (
-            "in Klärung" if status == "in_klaerung" else ""
-        )
+        bemerkung = (werte or {}).get(f"{schluessel}.bemerkung") or ""
         bereinigt[schluessel] = {
             "status": status,
             "datum": datum,
@@ -175,7 +191,7 @@ def offboarding_beantworten(
     bereinigt[p13_schluessel] = {
         "status": "erledigt",
         "datum": heute.strftime("%d.%m.%Y"),
-        "kuerzel": "",
+        "kuerzel": bearbeiter_kuerzel,
         "bemerkung": "",
     }
 
@@ -189,6 +205,20 @@ def offboarding_beantworten(
 def _foto_erweitern(dateiname: str, content_type: str) -> str | None:
     """Dateinamen-Erweiterung für ein zulässiges Fotoformat."""
     return ERLAUBTE_FOTO_TYPEN.get((content_type or "").lower())
+
+
+def _heic_als_jpeg(roh: bytes) -> bytes | None:
+    """HEIC in JPEG wandeln, damit das Foto im PDF erscheint; ohne Bibliothek ``None``."""
+    try:
+        import pillow_heif
+        from PIL import Image
+        pillow_heif.register_heif_opener()
+        bild = Image.open(io.BytesIO(roh)).convert("RGB")
+        puffer = io.BytesIO()
+        bild.save(puffer, format="JPEG", quality=88)
+        return puffer.getvalue()
+    except Exception:  # pragma: no cover - je nach Installation
+        return None
 
 
 def _kleiner_bild_punkt(content: bytes, content_type: str) -> bytes:
@@ -248,18 +278,23 @@ def foto_hochladen(
             "möglich (F-22)."
         )
     dateiname = getattr(datei, "name", "") or ""
-    content_type = getattr(datei, "content_type", "") or ""
+    roh = datei.read(MAX_FOTO_GROESSE + 1)
+    if len(roh) > MAX_FOTO_GROESSE:
+        raise GeratFehler("Das Foto ist größer als 10 MB (F-134).")
+    content_type = _typ_am_inhalt(roh) or ""
     erweiterung = _foto_erweitern(dateiname, content_type)
     if erweiterung is None:
         raise GeratFehler(
             "Fotoformat nicht erlaubt: JPG, PNG oder HEIC bis 10 MB (F-134)."
         )
-    roh = datei.read()
-    if len(roh) > MAX_FOTO_GROESSE:
-        raise GeratFehler(
-            f"Das Foto ist größer als 10 MB ({len(roh) // (1024 * 1024)} MB) (F-134)."
-        )
-    verkleinert = _kleiner_bild_punkt(roh, content_type)
+    if content_type == "image/heic":
+        gewandelt = _heic_als_jpeg(roh)
+        if gewandelt is not None:
+            roh, content_type, erweiterung = gewandelt, "image/jpeg", ".jpg"
+    try:
+        verkleinert = _kleiner_bild_punkt(roh, content_type)
+    except Exception as fehler:
+        raise GeratFehler("Die Datei ist kein lesbares Bild (F-134).") from fehler
 
     # F-134: verkleinert in der DATEIABLAGE gespeichert; der Pfad steht
     # in anhaenge, das PDF lädt das Bild von dort.
@@ -267,7 +302,7 @@ def foto_hochladen(
 
     zeitstempel = timezone.now().strftime("%Y%m%d-%H%M%S")
     pfad = f"protokolle/{protokoll.id or 'neu'}/foto-{zeitstempel}{erweiterung}"
-    default_storage.save(pfad, ContentFile(verkleinert))
+    pfad = default_storage.save(pfad, ContentFile(verkleinert))
     anhaenge = protokoll.anhaenge_liste()
     anhaenge.append(
         {
@@ -304,15 +339,17 @@ def scan_hochladen(
             "Nur ein Protokoll im Stand 'scan-offen' kann abgeschlossen "
             "werden (F-22)."
         )
-    dateiname = getattr(datei, "name", "") or ""
-    roh = datei.read()
+    roh = datei.read(MAX_FOTO_GROESSE + 1)
     if not roh:
         raise GeratFehler("Der Scan ist leer.")
+    if len(roh) > MAX_FOTO_GROESSE:
+        raise GeratFehler("Der Scan ist größer als 10 MB (N-02).")
+    typ = _typ_am_inhalt(roh)
+    if typ is None:
+        raise GeratFehler("Scan nicht erlaubt: PDF, JPG, PNG oder HEIC bis 10 MB (N-02).")
+    erweiterung = {"application/pdf": ".pdf", **ERLAUBTE_FOTO_TYPEN}[typ]
     zeitstempel = timezone.now().strftime("%Y%m%d-%H%M%S")
-    erweiterung = _foto_erweitern(dateiname, "image/pdf")
-    pfad = (
-        f"protokolle/{protokoll.id}/scan-{zeitstempel}{erweiterung or '.pdf'}"
-    )
+    pfad = f"protokolle/{protokoll.id}/scan-{zeitstempel}{erweiterung}"
     protokoll.scan_datei.save(pfad, ContentFile(roh), save=False)
     protokoll.scan_am = timezone.now()
     protokoll.scan_von = ausgefuehrt_von
@@ -340,7 +377,7 @@ def protokoll_anlegen(
     das Ausgabeprotokoll. Stand beginnt immer „scan-offen" (F-22).
     Nummer UP-JJJJ-NNNN (F-131).
     """
-    from .services import _naechste_protokollnummer
+    from .services import _absenderzeile, _naechste_protokollnummer, position_aus_gerat
 
     now = datum or timezone.now()
     if art == Protokoll.ART_RUECKNAHME:
@@ -362,9 +399,10 @@ def protokoll_anlegen(
         datum=now.date() if hasattr(now, "date") else now,
         stand=Protokoll.STAND_SCAN_OFFEN,
         art=art,
-        fassung="1.0",
+        fassung="1.1",
         formularnummer=formular,
-        absenderzeile="Wamocon GmbH · IT",
+        absenderzeile=_absenderzeile(),
+        positionen=[position_aus_gerat(gerat)],
         empfaenger_anschrift=empfaenger,
         bearbeiter=bearbeiter_name,
         checkliste=checkliste or {},
