@@ -12,8 +12,9 @@ from django.contrib.messages import info as meldung_info
 from django.contrib.messages import success as meldung_success
 from django.core.exceptions import PermissionDenied
 from django.conf import settings
+from django.db import transaction
 from django.db.models import Q
-from django.http import HttpResponse
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -260,6 +261,8 @@ def detail(request, inventarnummer: str):
     kann_loeschen = (
         request.user.ist_admin
         and gerat.vorgaenge.exclude(typ=Vorgang.TYP_AUFNAHME).count() == 0
+        and not gerat.alle_protokolle().exists()
+        and not gerat.leihen.exists()
     )
     return render(
         request,
@@ -277,6 +280,12 @@ def detail(request, inventarnummer: str):
             "qr_inhalt": f"{settings.BASIS_URL}/g/{gerat.inventarnummer}",
             "qr_svg": _qr_svg(gerat),
             "kann_etikett_sehen": request.user.ist_admin or request.user.ist_leser,
+            "protokolle": gerat.alle_protokolle(),
+            "reparatur_offen": gerat.vorgaenge.filter(typ=Vorgang.TYP_REPARATUR, abschliesst=False).order_by("-id").first()
+            if gerat.status == Gerat.STATUS_IN_REPARATUR else None,
+            "ausmusterung": gerat.vorgaenge.filter(typ=Vorgang.TYP_AUSMUSTERUNG).order_by("-id").first()
+            if gerat.status == Gerat.STATUS_AUSGEMUSTERT else None,
+            "loeschung_arten": services.LOESCHUNG_ARTEN,
         },
     )
 
@@ -297,64 +306,66 @@ def _stammdaten_aus_form(daten: dict) -> dict:
 
 
 def _seriennummern_auetzen(request) -> list[str]:
-    """Seriennummern aus dem POST auetzen (F-11, A-0112).
+    """Seriennummern aus dem POST (F-11, A-0112).
 
-    Das Textfeld ``seriennummern`` enthält zeilenweise die Seriennummern.
-    Leere Zeilen werden verworfen. Fehlt das Feld, fällt man auf das
-    Einzel-Feld ``seriennummer`` zurück (ein Element oder leere Liste).
+    Das Textfeld ``seriennummern`` enthält zeilenweise die Seriennummern, leere
+    Zeilen zählen nicht. Steht dazu etwas im Einzelfeld ``seriennummer``, kommt
+    es als erste Nummer dazu, statt ohne Hinweis zu verschwinden.
     """
-    roh = (request.POST.get("seriennummern") or "").strip()
-    if roh:
-        zeilen = [z.strip() for z in roh.splitlines()]
-        return [z for z in zeilen if z]
+    zeilen = [z.strip() for z in (request.POST.get("seriennummern") or "").splitlines()]
+    liste = [z for z in zeilen if z]
     einzeilig = (request.POST.get("seriennummer") or "").strip()
-    return [einzeilig] if einzeilig else []
+    if einzeilig and einzeilig not in liste:
+        liste.insert(0, einzeilig)
+    return liste
 
 
 @login_required
 @require_POST
 def neu_anlegen(request):
-    """Speichern (F-11, F-12, F-13, F-14, A-0112).
+    """Speichern (F-10 bis F-13).
 
-    F-11: Das Textfeld ``seriennummern`` trägt zeilenweise Seriennummern;
-    es entstehen so viele Geräte wie Zeilen, je mit eigener Inventarnummer
-    und Vorgang Aufnahme. Ohne Seriennummer entsteht ein Gerät wie bisher.
-    F-13: Die Stammdaten werden aus der Vorlage übernommen (``?vorlage=``).
+    F-11: Es entstehen so viele Geräte wie Zeilen, oder bei einem Fehler gar keins;
+    die Eingaben bleiben im Formular stehen. F-12: „Speichern und Etikett drucken“
+    liefert das PDF für alle neuen Geräte.
     """
     if not _darf_ändern(request.user):
         raise PermissionDenied("Zugriff verweigert: Anlegen ist Ihnen nicht erlaubt.")
     form = GeratForm(request.POST, request.FILES)
-    if form.is_valid():
-        daten = _stammdaten_aus_form(dict(form.cleaned_data))
-        serienliste = _seriennummern_auetzen(request)
-        try:
-            erstellte = []
-            for seriennummer in (serienliste if serienliste else [""]):
-                gerat = services.gerat_anlegen(
-                    erzeugt_von=request.user,
-                    pruefen=True,
-                    seriennummer=seriennummer,
-                    **daten,
+    if not form.is_valid():
+        return render(request, "geraete/neu.html", {"form": form})
+    daten = _stammdaten_aus_form(dict(form.cleaned_data))
+    # Kapitel 4: Auf Lager heißt Lagerort.
+    daten["ort"] = daten.get("ort") or services.standard_lager()
+    serienliste = _seriennummern_auetzen(request)
+    try:
+        with transaction.atomic():
+            erstellte = [
+                services.gerat_anlegen(
+                    erzeugt_von=request.user, pruefen=True, seriennummer=seriennummer, **daten,
                 )
-                erstellte.append(gerat)
-        except services.GeratFehler as fehler:
-            meldung_error(request, str(fehler))
-            return redirect("/geraete/neu/")
-        if len(erstellte) == 1:
-            meldung_success(request, f"Gerät {erstellte[0].inventarnummer} angelegt.")
-            # F-12: "Speichern und Etikett drucken" — Button-Name im POST prüfen.
-            if request.POST.get("aktion") == "etikett":
-                from .etiketten import etikett_pdf
-                pdf = etikett_pdf(erstellte[0])
-                response = HttpResponse(pdf, content_type="application/pdf")
-                response["Content-Disposition"] = (
-                    f'inline; filename="etikett-{erstellte[0].inventarnummer}.pdf"'
-                )
-                return response
-            return redirect("/geraete/" + erstellte[0].inventarnummer + "/")
+                for seriennummer in (serienliste or [""])
+            ]
+    except services.GeratFehler as fehler:
+        form.add_error(None, str(fehler))
+        return render(request, "geraete/neu.html", {"form": form})
+    etikett = request.POST.get("aktion") == "etikett"
+    if len(erstellte) == 1:
+        meldung_success(request, f"Gerät {erstellte[0].inventarnummer} angelegt.")
+    else:
         meldung_success(request, f"{len(erstellte)} Geräte angelegt.")
-        return redirect("/geraete/")
-    return render(request, "geraete/neu.html", {"form": form})
+    if etikett:
+        from .etiketten import bogen_pdf, etikett_pdf
+        if len(erstellte) == 1:
+            pdf, name = etikett_pdf(erstellte[0]), f"etikett-{erstellte[0].inventarnummer}.pdf"
+        else:
+            pdf, name = bogen_pdf(erstellte, startposition=1), f"etiketten-bogen-{len(erstellte)}.pdf"
+        response = HttpResponse(pdf, content_type="application/pdf")
+        response["Content-Disposition"] = f'inline; filename="{name}"'
+        return response
+    if len(erstellte) == 1:
+        return redirect("/geraete/" + erstellte[0].inventarnummer + "/")
+    return redirect("/geraete/")
 
 
 @login_required
@@ -378,8 +389,7 @@ def neu_anzeigen(request):
                 "seriennummer": "",
                 "zustand": vorlage.zustand,
                 "leihpool": vorlage.leihpool,
-                "person": None,
-                "ort": vorlage.ort,
+                "ort": vorlage.ort if vorlage.ort and vorlage.ort.typ == Ort.TYP_LAGER else None,
                 "geraetename": vorlage.geraetename,
                 "standardzuehoer": vorlage.standardzuehoer,
                 "technische_daten": vorlage.technische_daten,
@@ -414,8 +424,6 @@ def bearbeiten(request, inventarnummer: str):
         if form.is_valid():
             try:
                 werte = dict(form.cleaned_data)
-                werte.pop("status", None)
-                werte.pop("seriennummern", None)
                 # A-0112 (F-40): form.is_valid() schreibt die neuen Werte schon
                 # in die Instanz (construct_instance). Wir holen ein frisches
                 # Exemplar aus der Datenbank, damit gerat_bearbeiten den alten
@@ -732,11 +740,15 @@ def notiz_zeigen(request, inventarnummer: str):
     gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
     if not _darf_ändern(request.user):
         raise PermissionDenied("Zugriff verweigert: Vorgänge macht die IT.")
+    if gerat.status == Gerat.STATUS_AUSGEMUSTERT:
+        meldung_error(request, "Ausgemusterte Geräte sind nicht mehr änderbar.")
+        return redirect("/geraete/" + gerat.inventarnummer + "/")
     if request.method == "POST":
         form = GeratNotizForm(request.POST)
         if form.is_valid():
-            gerat.notiz = form.cleaned_data.get("notiz", "")
-            gerat.save(update_fields=["notiz"])
+            services.gerat_bearbeiten(
+                gerat, werte={"notiz": form.cleaned_data.get("notiz", "")}, erzeugt_von=request.user,
+            )
             meldung_success(request, f"Notiz für {gerat.inventarnummer} gespeichert.")
             return redirect("/geraete/" + gerat.inventarnummer + "/")
     else:
@@ -753,7 +765,11 @@ def pruefen(request, inventarnummer: str):
     gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
     if not _darf_ändern(request.user):
         raise PermissionDenied("Zugriff verweigert: Vorgänge macht die IT.")
-    services.gerat_pruefen(gerat, request.user)
+    try:
+        services.gerat_pruefen(gerat, request.user)
+    except services.GeratFehler as fehler:
+        meldung_error(request, str(fehler))
+        return redirect("/geraete/" + gerat.inventarnummer + "/")
     meldung_success(request, f"Prüfung für {gerat.inventarnummer} erfasst.")
     return redirect("/geraete/" + gerat.inventarnummer + "/")
 
@@ -802,9 +818,6 @@ def ausgeben(request, inventarnummer: str):
         if form.is_valid():
             ziel_person = form.cleaned_data.get("ziel_person")
             ziel_ort = form.cleaned_data.get("ziel_ort")
-            if ziel_person is None and ziel_ort is None:
-                meldung_error(request, "Ziel muss eine Person oder ein Ort sein.")
-                return redirect("/geraete/" + gerat.inventarnummer + "/")
             try:
                 services.gerat_ausgeben(
                     gerat,
@@ -819,6 +832,8 @@ def ausgeben(request, inventarnummer: str):
             except services.GeratFehler as fehler:
                 meldung_error(request, str(fehler))
                 return redirect("/geraete/" + gerat.inventarnummer + "/")
+            if ziel_person is not None:
+                _fotos_anhaengen(request, gerat.alle_protokolle().first(), gerat)
             meldung_success(request, "Gerät ausgegeben.")
             return redirect("/geraete/" + gerat.inventarnummer + "/")
     else:
@@ -826,32 +841,108 @@ def ausgeben(request, inventarnummer: str):
     return render(request, "geraete/ausgabe.html", {"gerat": gerat, "form": form})
 
 
+def _fotos_anhaengen(request, protokoll, gerat=None) -> None:
+    """Fotos aus dem Dialog (F-134). Ein abgelehntes Foto hält den Vorgang nicht auf."""
+    from . import protokoll as protokoll_services
+
+    if protokoll is None:
+        return
+    for datei in request.FILES.getlist("fotos"):
+        try:
+            protokoll_services.foto_hochladen(
+                protokoll, datei, request.user,
+                inventarnummer=gerat.inventarnummer if gerat is not None else "",
+            )
+        except services.GeratFehler as fehler:
+            meldung_error(request, f"{datei.name}: {fehler}")
+
+
+@login_required
+def sammelausgabe(request):
+    """Mehrere Geräte aus der Liste ausgeben, mit einem Protokoll (F-20, F-24)."""
+    if not _darf_ändern(request.user):
+        raise PermissionDenied("Zugriff verweigert: Vorgänge macht die IT.")
+    daten = request.POST if request.method == "POST" else request.GET
+    gewaehlt = list(
+        Gerat.objects.filter(inventarnummer__in=daten.getlist("auswahl"))
+        .select_related("kategorie").order_by("inventarnummer")
+    )
+    geraete = [g for g in gewaehlt if not services.ausgabe_sperrgrund(g)]
+    gesperrt = [(g, services.ausgabe_sperrgrund(g)) for g in gewaehlt if services.ausgabe_sperrgrund(g)]
+    form = GeratAusgabeForm(request.POST or None, initial={
+        "ziel_person": request.GET.get("person"), "ziel_ort": request.GET.get("ort"),
+    })
+    # Die Zeilen tragen Zustand, Zubehör und Bemerkung je Gerät, nicht die Felder des Einzeldialogs.
+    del form.fields["zustand"], form.fields["zubehoer_komplett"], form.fields["anmerkung"]
+    if request.method == "POST" and form.is_valid():
+        ziel_person = form.cleaned_data.get("ziel_person")
+        ziel_ort = form.cleaned_data.get("ziel_ort")
+        eingaben = {
+            g.inventarnummer: {
+                "zustand": request.POST.get(f"zustand-{g.inventarnummer}") or g.zustand,
+                "zubehoer_komplett": request.POST.get(f"zubehoer-{g.inventarnummer}", "ja") == "ja",
+                "anmerkung": request.POST.get(f"anmerkung-{g.inventarnummer}", ""),
+            }
+            for g in geraete
+        }
+        try:
+            protokoll = services.geraete_ausgeben(
+                geraete,
+                ziel_person or ziel_ort,
+                ziel_ort=ziel_ort,
+                eingaben=eingaben,
+                ausgefuehrt_von=request.user,
+                unterschrift=form.cleaned_data.get("unterschrift", "papier"),
+            )
+        except services.GeratFehler as fehler:
+            form.add_error(None, str(fehler))
+        else:
+            meldung_success(request, f"{len(geraete)} Geräte ausgegeben.")
+            if protokoll is not None:
+                return redirect(f"/protokolle/{protokoll.nr}/")
+            return redirect("/geraete/")
+    return render(request, "geraete/sammelausgabe.html", {
+        "form": form,
+        "geraete": geraete,
+        "gesperrt": gesperrt,
+        "zustaende": Gerat.ZUSTAENDE,
+    })
+
+
 @login_required
 def rueckgeben(request, inventarnummer: str):
-    """Gerät zurückgeben (F-50, M3)."""
+    """Gerät zurückgeben (F-50, F-51, F-141)."""
     if not _darf_ändern(request.user):
         raise PermissionDenied("Zugriff verweigert: Vorgänge macht die IT.")
     gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
     if request.method == "POST":
-        form = GeratRueckgabeForm(request.POST)
+        form = GeratRueckgabeForm(request.POST, gerat=gerat)
         if form.is_valid():
+            # F-50, F-57: „Fehlt“ führt in den Dialog, die Meldung bestätigt dort ein Mensch.
+            if form.cleaned_data.get("fehlend"):
+                return redirect(f"/geraete/{gerat.inventarnummer}/ausmustern/?grund=verloren")
+            person = gerat.person
             try:
                 services.gerat_rueckgeben(
                     gerat,
                     zustand_rueckgabe=form.cleaned_data.get("zustand_rueckgabe", 2),
-                    zubesehoer_komplett=form.cleaned_data.get("zubehoer_komplett", True),
+                    zubesehoer_komplett=form.cleaned_data.get("zubehoer_komplett") == "ja",
                     maengel=form.cleaned_data.get("maengel", ""),
                     ziel=form.cleaned_data.get("ziel", "lager"),
-                    fehlend=form.cleaned_data.get("fehlend", False),
                     ausgefuehrt_von=request.user,
+                    unterschrift=form.cleaned_data.get("unterschrift") or "tool",
+                    empfaenger=form.cleaned_data.get("empfaenger", ""),
+                    lagerort=form.cleaned_data.get("lager_ort"),
                 )
             except services.GeratFehler as fehler:
                 meldung_error(request, str(fehler))
                 return redirect("/geraete/" + gerat.inventarnummer + "/")
+            if person is not None:
+                _fotos_anhaengen(request, gerat.alle_protokolle().first(), gerat)
             meldung_success(request, "Gerät zurückgegeben.")
             return redirect("/geraete/" + gerat.inventarnummer + "/")
     else:
-        form = GeratRueckgabeForm()
+        form = GeratRueckgabeForm(gerat=gerat)
     return render(request, "geraete/rueckgabe.html", {"gerat": gerat, "form": form})
 
 
@@ -924,6 +1015,7 @@ def reparatur_fertig(request, inventarnummer: str):
                     kosten=form.cleaned_data.get("kosten"),
                     beleg=form.cleaned_data.get("beleg", ""),
                     ausgefuehrt_von=request.user,
+                    lagerort=form.cleaned_data.get("lager_ort"),
                 )
             except services.GeratFehler as fehler:
                 meldung_error(request, str(fehler))
@@ -952,6 +1044,7 @@ def ausmustern(request, inventarnummer: str):
                     disposition=form.cleaned_data.get("disposition"),
                     loeschung_art=form.cleaned_data.get("loeschung_art", ""),
                     loeschung_nachweis=form.cleaned_data.get("loeschung_nachweis", ""),
+                    loeschung_datei=form.cleaned_data.get("loeschung_datei"),
                     bestaetigt_gemeldt=form.cleaned_data.get("bestaetigt_gemeldt", False),
                     ausgefuehrt_von=request.user,
                 )
@@ -961,8 +1054,24 @@ def ausmustern(request, inventarnummer: str):
             meldung_success(request, "Gerät ausgemustert.")
             return redirect("/geraete/" + gerat.inventarnummer + "/")
     else:
-        form = GeratAusmusterungForm(gerat=gerat)
+        form = GeratAusmusterungForm(gerat=gerat, initial={"grund": request.GET.get("grund", "")})
     return render(request, "geraete/ausmusterung.html", {"gerat": gerat, "form": form})
+
+
+@login_required
+def nachweis_zeigen(request, inventarnummer: str, vorgang_id: int):
+    """Löschnachweis am Gerät (F-56), für Admin und Leser."""
+    if not _darf_sehen(request.user):
+        raise PermissionDenied("Zugriff verweigert.")
+    vorgang = get_object_or_404(Vorgang, pk=vorgang_id, gerat__inventarnummer=inventarnummer)
+    if not vorgang.nachweis_datei:
+        raise Http404
+    from .protokoll import _typ_am_inhalt
+    with vorgang.nachweis_datei.open("rb") as handle:
+        roh = handle.read()
+    antwort = HttpResponse(roh, content_type=_typ_am_inhalt(roh) or "application/octet-stream")
+    antwort["Content-Disposition"] = f'attachment; filename="{vorgang.nachweis_datei.name.rsplit("/", 1)[-1]}"'
+    return antwort
 
 
 # --- F-14 (A-0099): Löschen ----------------------------------------------------
@@ -990,6 +1099,10 @@ def loeschen(request, inventarnummer: str):
     gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
     if gerat.vorgaenge.exclude(typ=Vorgang.TYP_AUFNAHME).count() > 0:
         meldung_error(request, "Das Gerät hat schon Vorgänge und kann nicht gelöscht werden.")
+        return redirect("/geraete/" + gerat.inventarnummer + "/")
+    # Ein offener Entwurf oder eine Anfrage darf nicht still mitverschwinden.
+    if gerat.alle_protokolle().exists() or gerat.leihen.exists():
+        meldung_error(request, "Für das Gerät gibt es ein Protokoll oder eine Leihe. Bitte zuerst dort klären.")
         return redirect("/geraete/" + gerat.inventarnummer + "/")
     gerat.delete()
     meldung_success(request, f"Gerät {inventarnummer} gelöscht.")
@@ -1818,7 +1931,9 @@ def protokoll_foto_hochladen(request, protokoll_nr):
         meldung_error(request, "Kein Foto übergeben (F-134).")
         return redirect(f"/protokolle/{protokoll_nr}/")
     try:
-        protokoll_services.foto_hochladen(protokoll, datei, request.user)
+        protokoll_services.foto_hochladen(
+            protokoll, datei, request.user, inventarnummer=request.POST.get("inventarnummer", ""),
+        )
     except services.GeratFehler as fehler:
         meldung_error(request, str(fehler))
     else:

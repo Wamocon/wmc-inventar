@@ -17,8 +17,7 @@
     <div class="field full"><label for="id_seriennummern">Seriennummern (eine pro Zeile)</label>{{ form.seriennummern }}{% if form.seriennummern.errors %}<div class="meldung error">{% for e in form.seriennummern.errors %}{{ e }}{% endfor %}</div>{% endif %}<small class="help">F-11: Eine Zeile pro Gerät. Leer lassen, wenn keine Seriennummer vorliegt.</small></div>
     <div class="field"><label for="id_zustand">Zustand</label>{{ form.zustand }}</div>
     <div class="field"><label class="check"><input type="checkbox" name="leihpool" id="id_leihpool" value="on" {% if form.leihpool.value %}checked{% endif %} data-test="leihpool"> Leihpool</label></div>
-    <div class="field"><label for="id_person">Person (optional)</label>{{ form.person }}<small class="help">Person aus dem Verzeichnis oder später beim Verliehen.</small></div>
-    <div class="field"><label for="id_ort">Ort (optional)</label>{{ form.ort }}</div>
+    <div class="field"><label for="id_ort">Lagerort (optional)</label>{{ form.ort }}</div>
     <div class="field full"><label for="id_geraetename">Gerätename (optional)</label>{{ form.geraetename }}</div>
     <div class="field full"><label for="id_standardzuehoer">Standardzubehör</label>{{ form.standardzuehoer }}<small class="help">Eintrag pro Zeile (F-17).</small></div>
     <div class="field full"><label for="id_technische_daten">Technische Daten</label>{{ form.technische_daten }}</div>

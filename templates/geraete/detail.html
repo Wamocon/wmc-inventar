@@ -32,14 +32,18 @@
   <div class="actions" data-test="lebenszyklus">
     <a href="/geraete/{{ gerat.inventarnummer }}/rueckgeben/" class="btn primary" data-test="aktion-rueckgabe">Rückgabe</a>
     <a href="/geraete/{{ gerat.inventarnummer }}/umziehen/" class="btn" data-test="aktion-umzug">Umziehen</a>
+    <a href="/geraete/{{ gerat.inventarnummer }}/reparatur/start/" class="btn" data-test="aktion-reparatur">Reparatur starten</a>
+    <a href="/geraete/{{ gerat.inventarnummer }}/ausmustern/?grund=verloren" class="btn" data-test="aktion-ausmustern">Verloren oder gestohlen</a>
   </div>
   {% elif gerat.status == "verliehen" %}
   <div class="actions" data-test="lebenszyklus">
     <a href="/geraete/{{ gerat.inventarnummer }}/rueckgeben/" class="btn primary" data-test="aktion-rueckgabe">Rückgabe</a>
+    <a href="/geraete/{{ gerat.inventarnummer }}/ausmustern/?grund=verloren" class="btn" data-test="aktion-ausmustern">Verloren oder gestohlen</a>
   </div>
   {% elif gerat.status == "in-reparatur" %}
   <div class="actions" data-test="lebenszyklus">
     <a href="/geraete/{{ gerat.inventarnummer }}/reparatur/fertig/" class="btn primary" data-test="aktion-reparatur-abschliessen">Reparatur abschließen</a>
+    <a href="/geraete/{{ gerat.inventarnummer }}/ausmustern/" class="btn" data-test="aktion-ausmustern">Ausmustern</a>
   </div>
   {% endif %}
 {% endif %}
@@ -90,11 +94,34 @@
 <section class="card">
   <div class="card-head"><h2>Verbleib</h2></div>
   <dl class="kv">
-    <dt>Verbleib</dt><dd data-test="verbleib">{% if gerat.person %}Bei {{ gerat.person.voller_name }}{% elif gerat.ort %}An {{ gerat.ort.kennung }}{% else %}Lager{% endif %}</dd>
+    <dt>Verbleib</dt><dd data-test="verbleib">{% if gerat.person %}Bei {{ gerat.person.voller_name }}{% elif gerat.ort.typ == "lager" %}Lager {{ gerat.ort.kennung }}{% elif gerat.ort %}An {{ gerat.ort.kennung }}{% elif gerat.status == "ausgemustert" %}Ausgemustert{% else %}Lager{% endif %}</dd>
     {% if gerat.person %}<dt>Person</dt><dd>{{ gerat.person.voller_name }}</dd>{% endif %}
     {% if gerat.ort %}<dt>Ort</dt><dd>{{ gerat.ort.kennung }}</dd>{% endif %}
   </dl>
 </section>
+
+{% if reparatur_offen %}
+<section class="card" data-test="reparatur-angaben">
+  <div class="card-head"><h2>Reparatur</h2></div>
+  <div class="card-text">
+    <p>{{ reparatur_offen.reperatur_anleitung }}</p>
+    <p class="muted small">Gestartet am {{ reparatur_offen.zeitpunkt|date:"d.m.Y H:i" }}. Bisherige Zuordnung: {% if gerat.person %}{{ gerat.person.voller_name }}{% if gerat.ort %}, {{ gerat.ort.kennung }}{% endif %}{% elif gerat.ort %}{{ gerat.ort.kennung }}{% else %}Lager{% endif %}</p>
+  </div>
+</section>
+{% endif %}
+
+{% if ausmusterung %}
+<section class="card" data-test="ausmusterung-angaben">
+  <div class="card-head"><h2>Ausmusterung</h2></div>
+  <dl class="kv">
+    <dt>Grund</dt><dd data-test="ausmusterung-grund">{{ ausmusterung.ausmusterung_grund }}</dd>
+    <dt>Datum</dt><dd>{{ ausmusterung.ausmusterung_datum|date:"d.m.Y" }}</dd>
+    <dt>Verbleib</dt><dd data-test="ausmusterung-verbleib">{{ ausmusterung.ausmusterung_disposition }}</dd>
+    {% if ausmusterung.notiz %}<dt>Nachweis</dt><dd data-test="ausmusterung-nachweis">{{ ausmusterung.notiz }}</dd>{% endif %}
+    {% if ausmusterung.nachweis_datei %}<dt>Anhang</dt><dd><a href="/geraete/{{ gerat.inventarnummer }}/nachweis/{{ ausmusterung.pk }}/" data-test="ausmusterung-anhang">Nachweis öffnen</a></dd>{% endif %}
+  </dl>
+</section>
+{% endif %}
 
 <section class="card">
   <div class="card-head"><h2>Stammdaten</h2></div>
@@ -172,9 +199,9 @@
 
 <section class="card">
   <div class="card-head"><h2>Protokolle</h2></div>
-  {% if gerat.protokolle.exists %}
+  {% if protokolle %}
   <ul class="worklist" data-test="protokolle">
-    {% for p in gerat.protokolle.all %}
+    {% for p in protokolle %}
     <li data-test="protokoll" data-id="{{ p.nr }}" data-stand="{{ p.stand }}">
       <span class="what"><a href="/protokolle/{{ p.nr }}/" data-test="protokoll-link">{{ p.nr }}</a></span>
       <span class="chip-status {{ p.stand_class }}">{{ p.stand_anzeige }}</span>
@@ -197,7 +224,11 @@
       <span class="t" data-test="vorgang" data-typ="{{ v.get_typ_display }}"{% if v.get_typ_display == "Änderung" %} data-feld="{{ v.aenderung_feld }}" data-alt="{{ v.aenderung_alter_wert }}" data-neu="{{ v.aenderung_neuer_wert }}"{% endif %}>{{ v.get_typ_display }}</span>
       <span class="d" data-test="zeitpunkt">{{ v.zeitpunkt|date:"d.m.Y H:i" }}</span>{% if v.erzeugt_von %}<span class="d" data-test="erzeugt-von">{{ v.erzeugt_von.bezeichnung }}</span>{% endif %}
       {% if v.get_typ_display == "Änderung" %}<p data-test="aenderung-detail">{{ v.aenderung_feld }}: {{ v.aenderung_alter_wert|default:"(leer)" }} → {{ v.aenderung_neuer_wert|default:"(leer)" }}</p>{% endif %}
+      {% for zeile in v.wechsel_anzeige %}<p data-test="wechsel">{{ zeile }}</p>{% endfor %}
+      {% if v.reperatur_anleitung %}<p data-test="reparatur-detail">{{ v.reperatur_anleitung }}</p>{% endif %}
+      {% if v.ausmusterung_grund %}<p data-test="ausmusterung-detail">Grund: {{ v.ausmusterung_grund }}, Verbleib: {{ v.ausmusterung_disposition|default:"–" }}</p>{% endif %}
       {% if v.notiz %}<p data-test="notiz-vorgang">{{ v.notiz }}</p>{% endif %}
+      {% if v.protokoll %}<p><a href="/protokolle/{{ v.protokoll.nr }}/" data-test="vorgang-protokoll">{{ v.protokoll.nr }}</a></p>{% endif %}
     </li>
     {% endfor %}
   </ul>

@@ -263,6 +263,7 @@ def foto_hochladen(
     protokoll: Protokoll,
     datei,
     ausgefuehrt_von: Konto | None = None,
+    inventarnummer: str = "",
 ) -> Protokoll:
     """F-134: Foto (JPG, PNG oder HEIC bis 10 MB) als Anlage hinter dem
     Protokoll speichern.
@@ -307,6 +308,7 @@ def foto_hochladen(
     anhaenge.append(
         {
             "pfad": pfad,
+            "inventarnummer": inventarnummer,
             "name": dateiname or f"foto{erweiterung}",
             "groesse": len(verkleinert),
             "typ": content_type,

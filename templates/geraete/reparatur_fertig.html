@@ -21,6 +21,7 @@
         {% endfor %}
         {% if form.ziel.errors %}<div class="meldung error">{% for e in form.ziel.errors %}{{ e }}{% endfor %}</div>{% endif %}
       </div>
+      <div class="field"><label for="id_lager_ort">Lagerort, falls ins Lager</label>{{ form.lager_ort }}</div>
       <div class="field"><label for="id_kosten">Kosten (EUR, optional)</label>{{ form.kosten }}{% if form.kosten.errors %}<div class="meldung error">{% for e in form.kosten.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
       <div class="field"><label for="id_beleg">Beleg (optional)</label>{{ form.beleg }}{% if form.beleg.errors %}<div class="meldung error">{% for e in form.beleg.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
     </div>

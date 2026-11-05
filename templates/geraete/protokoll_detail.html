@@ -115,6 +115,7 @@
   {% if editierbar %}
   <form method="post" action="/protokolle/{{ protokoll.nr }}/foto/" enctype="multipart/form-data" data-test="foto-formular" class="toolbar">
     {% csrf_token %}
+    {% if positionen|length > 1 %}<select name="inventarnummer" aria-label="Gerät zum Foto" data-test="foto-geraet">{% for p in positionen %}<option value="{{ p.inventarnummer }}">{{ p.inventarnummer }}</option>{% endfor %}</select>{% elif positionen %}<input type="hidden" name="inventarnummer" value="{{ positionen.0.inventarnummer }}">{% endif %}
     <input type="file" name="foto" accept="image/jpeg,image/png,image/heic" aria-label="Foto" data-test="foto-datei">
     <button class="btn" type="submit" data-test="foto-speichern">Foto hinzufügen</button>
     <span class="muted small">JPG, PNG oder HEIC bis 10 MB</span>

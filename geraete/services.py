@@ -188,41 +188,80 @@ def gerat_ausgeben(
     ausgefuehrt_von: Konto | None = None,
     unterschrift: str = "papier",
 ) -> Gerat:
-    """Gerät ausgeben (F-20 bis F-23, F-131, M3).
+    """Ein Gerät ausgeben (F-20 bis F-23, F-131). Siehe ``geraete_ausgeben``."""
+    geraete_ausgeben(
+        [gerat],
+        ziel,
+        ziel_ort=ziel_ort,
+        eingaben={gerat.inventarnummer: {
+            "zustand": zustand,
+            "zubehoer_komplett": zubehoer_komplett,
+            "anmerkung": anmerkung,
+        }},
+        ausgefuehrt_von=ausgefuehrt_von,
+        unterschrift=unterschrift,
+    )
+    return gerat
 
-    Ziel ist eine Person oder ein Ort (Arbeitsplatz, Raum). Das Gerät steht „Auf Lager“.
-    Status wird „In Benutzung", Person und/oder Ort werden gesetzt.
-    Ein Vorgang wird geschrieben.
 
-    F-131 (A-0098): Der Dialog trägt „Zustand", „Zubehör komplett" und
-    „Bemerkung". Der Zustand geht in den Vorgang „Ausgabe" und auf das
-    Gerät. Protokoll und Signatur bleiben M6, das Protokoll-PDF folgt
-    mit F-130.
-
-    A-0127: Unterschrift. Bei „tool" bleibt das Gerät „Auf Lager",
-    Protokoll auf „bearbeiter-offen"; Status, Person und Ort kommen
-    erst mit der Signatur. Bei „papier" wie bisher: sofort „In Benutzung".
-
-    A-0128 (F-20): ``ziel_ort`` ist der Arbeitsplatz, wenn ``ziel``
-    eine Person ist. Beides zusammen ist erlaubt.
-    """
+def ausgabe_sperrgrund(gerat: Gerat) -> str:
+    """Warum dieses Gerät nicht ausgegeben werden kann (F-20, F-21); leer, wenn es geht."""
     if gerat.status == Gerat.STATUS_AUSGEMUSTERT:
-        raise GeratFehler("Ausgemusterte Geräte können nicht ausgegeben werden.")
+        return "Ausgemusterte Geräte können nicht ausgegeben werden."
     if gerat.status == Gerat.STATUS_IN_REPARATUR:
-        raise GeratFehler("Geräte in Reparatur können nicht ausgegeben werden.")
-    # F-20, Kapitel 4: Nur „Auf Lager“; ein Personenwechsel läuft über die Rückgabe.
+        return "Geräte in Reparatur können nicht ausgegeben werden."
+    # Kapitel 4: Nur „Auf Lager“; ein Personenwechsel läuft über die Rückgabe.
     if gerat.status != Gerat.STATUS_AUF_LAGER:
-        raise GeratFehler("Nur Geräte „Auf Lager“ können ausgegeben werden. Bitte zuerst zurücknehmen.")
-    # F-21: Solange ein Entwurf offen ist, gibt es keine zweite Ausgabe.
-    if Protokoll.objects.filter(geraet=gerat, stand=Protokoll.STAND_BEARBEITER_OFFEN).exists():
-        raise GeratFehler(
+        return "Nur Geräte „Auf Lager“ können ausgegeben werden. Bitte zuerst zurücknehmen."
+    if gerat.alle_protokolle().filter(stand=Protokoll.STAND_BEARBEITER_OFFEN).exists():
+        return (
             "Für dieses Gerät steht bereits ein offenes Protokoll. "
             "Eine weitere Ausgabe ist solange nicht möglich (F-21)."
         )
-
-    # F-20: Reservierte Geräte sind nicht wählbar
     if _gerat_ist_reserviert(gerat):
-        raise GeratFehler("Gerät ist reserviert und kann nicht ausgegeben werden (F-20).")
+        return "Gerät ist reserviert und kann nicht ausgegeben werden (F-20)."
+    return ""
+
+
+def _ausgabe_notiz(nummer: str, position: dict) -> str:
+    """Text des Vorgangs „Ausgabe“: Protokoll, Zustand, Zubehör, Bemerkung (F-131)."""
+    teile = [f"Protokoll {nummer}"] if nummer else []
+    if position.get("zustand_ausgabe"):
+        stufe = int(position["zustand_ausgabe"])
+        teile.append("Zustand: " + dict(Gerat.ZUSTAENDE).get(stufe, str(stufe)))
+    if position.get("zubehoer_komplett") is not None:
+        teile.append("Zubehör komplett: " + ("Ja" if position["zubehoer_komplett"] else "Nein"))
+    if position.get("bemerkung"):
+        teile.append(position["bemerkung"])
+    return ", ".join(teile)
+
+
+@transaction.atomic
+def geraete_ausgeben(
+    geraete: list,
+    ziel: Person | Ort,
+    *,
+    ziel_ort: Ort | None = None,
+    eingaben: dict | None = None,
+    ausgefuehrt_von: Konto | None = None,
+    unterschrift: str = "papier",
+) -> Protokoll | None:
+    """Ein oder mehrere Geräte ausgeben, mit einem Protokoll (F-20 bis F-23, F-131).
+
+    Ziel ist eine Person, dazu optional ein Arbeitsplatz, oder nur ein Ort vom Typ
+    Arbeitsplatz oder Raum. ``eingaben`` trägt je Inventarnummer ``zustand``,
+    ``zubehoer_komplett`` und ``anmerkung`` aus dem Dialog.
+
+    Unterschrift „tool“: Die Geräte bleiben „Auf Lager“, das Protokoll steht auf
+    „bearbeiter-offen“; Status, Person und Ort kommen mit der Signatur (F-21).
+    Unterschrift „papier“: sofort „In Benutzung“ (F-22). Ohne Person kein Protokoll (F-23).
+    """
+    if not geraete:
+        raise GeratFehler("Kein Gerät gewählt.")
+    for gerat in geraete:
+        grund = ausgabe_sperrgrund(gerat)
+        if grund:
+            raise GeratFehler(f"{gerat.inventarnummer}: {grund}" if len(geraete) > 1 else grund)
 
     person = ziel if isinstance(ziel, Person) else None
     ort = ziel if isinstance(ziel, Ort) else ziel_ort
@@ -231,82 +270,54 @@ def gerat_ausgeben(
     # F-20: Ausgegeben wird an Arbeitsplätze und Räume, das Lager ist kein Ziel.
     if ort is not None and ort.typ not in (Ort.TYP_ARBEITSPLATZ, Ort.TYP_RAUM):
         raise GeratFehler("Ausgegeben wird an einen Arbeitsplatz oder Raum, nicht ans Lager.")
-    position = position_aus_gerat(
-        gerat,
-        zustand_ausgabe=int(zustand) if zustand is not None else None,
-        zubehoer_komplett=zubehoer_komplett,
-        bemerkung=anmerkung or "",
-    )
 
-    # A-0127: Unterschrift „tool" – Gerät bleibt „Auf Lager",
-    # Protokoll auf „bearbeiter-offen". Status, Person und Ort kommen
-    # erst mit der Signatur in protokoll_bearbeiter_signieren.
-    if person is not None and unterschrift == "tool":
-        _protokoll_erstellen(
-            person=person,
-            gerat=gerat,
-            art=Protokoll.ART_AUSGABE,
-            bearbeiter=(
-                ausgefuehrt_von.bezeichnung() if ausgefuehrt_von is not None else ""
-            ),
-            erzeugt_von=ausgefuehrt_von,
-            stand=Protokoll.STAND_BEARBEITER_OFFEN,
-            unterschrift_art="tool",
-            ort_ziel=ort,
-            positionen=[position],
-        )
-        return gerat
+    positionen = []
+    for gerat in geraete:
+        werte = (eingaben or {}).get(gerat.inventarnummer, {})
+        zustand = werte.get("zustand")
+        positionen.append(position_aus_gerat(
+            gerat,
+            zustand_ausgabe=int(zustand) if zustand else None,
+            zubehoer_komplett=werte.get("zubehoer_komplett", True),
+            bemerkung=(werte.get("anmerkung") or "").strip(),
+        ))
 
-    # F-20: Status wird „In Benutzung"
-    gerat.status = Gerat.STATUS_IN_BENUTZUNG
-    gerat.person = person
-    gerat.ort = ort
-    gerat.altbestand_ohne_protokoll = False
-
-    # F-131 (A-0098): Zustand auf das Gerät; in den Vorgang geht er
-    # über die Notiz wie bei der Rückgabe (F-50).
-    if zustand is not None:
-        gerat.zustand = int(zustand)
-
-    teile = []
-    if zustand is not None:
-        stufe = int(zustand)
-        zustaende = dict(Gerat.ZUSTAENDE)
-        teile.append("Zustand: " + zustaende.get(stufe, str(stufe)))
-    if zubehoer_komplett is not None:
-        teile.append("Zubehör komplett: " + ("Ja" if zubehoer_komplett else "Nein"))
-    if anmerkung:
-        teile.append(anmerkung)
-    bemerkt = ", ".join(teile)
-
-    # F-20 bis F-23: Ausgabe – Vorgang „Ausgabe" steht in der Historie.
-    Vorgang.objects.create(
-        gerat=gerat,
-        typ=Vorgang.TYP_AUSGABE,
-        zeitpunkt=timezone.now(),
-        erzeugt_von=ausgefuehrt_von,
-        leihgabe_an=person,
-        zurueck_am=None,
-        notiz=bemerkt,
-        abschliesst=True,
-    )
-    # A-0123 (M6 Teil 1): F-130, F-131, F-22 — Protokoll in der
-    # Service-Schicht bei Ausgabe an eine Person. Stand ist „scan-offen";
-    # das PDF entsteht erst, wenn die Checkliste beantwortet ist (F-132).
+    protokoll = None
     if person is not None:
-        _protokoll_erstellen(
+        tool = unterschrift == "tool"
+        protokoll = _protokoll_erstellen(
             person=person,
-            gerat=gerat,
+            gerat=geraete[0],
             art=Protokoll.ART_AUSGABE,
-            bearbeiter=(
-                ausgefuehrt_von.bezeichnung() if ausgefuehrt_von is not None else ""
-            ),
+            bearbeiter=ausgefuehrt_von.bezeichnung() if ausgefuehrt_von is not None else "",
             erzeugt_von=ausgefuehrt_von,
+            stand=Protokoll.STAND_BEARBEITER_OFFEN if tool else Protokoll.STAND_SCAN_OFFEN,
+            unterschrift_art="tool" if tool else "papier",
             ort_ziel=ort,
-            positionen=[position],
+            positionen=positionen,
         )
-    gerat.save()
-    return gerat
+        protokoll.weitere_geraete.set(geraete[1:])
+        if tool:
+            return protokoll
+
+    for gerat, position in zip(geraete, positionen):
+        gerat.status = Gerat.STATUS_IN_BENUTZUNG
+        gerat.person = person
+        gerat.ort = ort
+        gerat.altbestand_ohne_protokoll = False
+        gerat.zustand = int(position["zustand_ausgabe"])
+        Vorgang.objects.create(
+            gerat=gerat,
+            typ=Vorgang.TYP_AUSGABE,
+            zeitpunkt=timezone.now(),
+            erzeugt_von=ausgefuehrt_von,
+            leihgabe_an=person,
+            notiz=_ausgabe_notiz(protokoll.nr if protokoll else "", position),
+            protokoll=protokoll,
+            abschliesst=True,
+        )
+        gerat.save()
+    return protokoll
 
 
 def position_aus_gerat(
@@ -404,57 +415,224 @@ def ausmustern(
     disposition: str = "",
     loeschung_art: str = "",
     loeschung_nachweis: str = "",
+    loeschung_datei=None,
     bestaetigt_gemeldt: bool = False,
     ausgefuehrt_von: Konto | None = None,
 ) -> Gerat:
-    """Gerät ausmustern (F-55 bis F-58, M3).
+    """Gerät ausmustern (F-55 bis F-58, Kapitel 4).
 
-    F-55: Grund (defekt, veraltet, verkauft, verloren, gestohlen), Datum, Verbleib.
-    F-56: Löschnachweis bei Datenträgern (Art der Löschung, Nachweis).
-    F-57: Verlust und Diebstahl (Pflichtbestätigung, dass der Vorfall gemeldet wurde).
-    F-58: Archiv (Ausgemusterte Geräte bleiben lesbar und sind nicht mehr änderbar).
+    F-55: Grund, Datum und Verbleib sind immer Pflicht. Ausgemustert wird nur aus
+    „Auf Lager“ oder „In Reparatur“; „verloren“ und „gestohlen“ gehen aus jedem Status.
+    F-56: Bei Datenträgern Art der Löschung und Nachweis (Datei oder Nummer).
+    F-57: Bei Verlust und Diebstahl statt dessen die Bestätigung der Meldung.
+    F-58: Danach bleibt das Gerät lesbar und ist nicht mehr änderbar.
     """
     if gerat.status == Gerat.STATUS_AUSGEMUSTERT:
         raise GeratFehler("Gerät ist bereits ausgemustert.")
-
-    # F-55: Grund, Datum, Verbleib.
     if not grund:
         raise GeratFehler("Grund der Ausmusterung muss angegeben werden.")
     if not datum:
         raise GeratFehler("Datum der Ausmusterung muss angegeben werden.")
-    verloren = grund in ("verloren", "gestohlen")
-    if not verloren and not disposition:
+    if not (disposition or "").strip():
         raise GeratFehler("Verbleib muss angegeben werden.")
-
-    # F-56: Löschnachweis bei Datenträgern (Fehlt das Gerät, entfällt er.)
+    verloren = grund in AUSMUSTERUNG_VERLOREN
+    if not verloren and gerat.status not in (Gerat.STATUS_AUF_LAGER, Gerat.STATUS_IN_REPARATUR):
+        raise GeratFehler(
+            "Aus diesem Status lässt sich nur mit Grund „verloren“ oder „gestohlen“ ausmustern (Kapitel 4). "
+            "Bitte zuerst zurücknehmen."
+        )
     if gerat.kategorie.hat_datentraeger and not verloren:
         if not loeschung_art:
             raise GeratFehler("Art der Löschung muss angegeben werden (F-56).")
-        if not loeschung_nachweis:
+        if not loeschung_nachweis and not loeschung_datei:
             raise GeratFehler("Nachweis der Löschung muss angegeben werden (F-56).")
+    if verloren and not bestaetigt_gemeldt:
+        raise GeratFehler("Pflichtbestätigung, dass der Vorfall gemeldet wurde (F-57).")
 
-    # F-57: Verlust und Diebstahl
-    if grund in ("verloren", "gestohlen"):
-        if not bestaetigt_gemeldt:
-            raise GeratFehler("Pflichtbestätigung, dass der Vorfall gemeldet wurde (F-57).")
+    teile = []
+    if not verloren and loeschung_art:
+        teile.append("Löschung: " + LOESCHUNG_ARTEN.get(loeschung_art, loeschung_art))
+    if not verloren and loeschung_nachweis:
+        teile.append("Nachweis: " + loeschung_nachweis)
+    if verloren:
+        teile.append("Vorfall an Datenschutz bzw. Informationssicherheit gemeldet")
 
+    _leihe_schliessen(gerat)
     gerat.status = Gerat.STATUS_AUSGEMUSTERT
     gerat.person = None
     gerat.ort = None
-
-    Vorgang.objects.create(
+    vorgang = Vorgang(
         gerat=gerat,
         typ=Vorgang.TYP_AUSMUSTERUNG,
         zeitpunkt=timezone.now(),
         erzeugt_von=ausgefuehrt_von,
         ausmusterung_grund=grund,
         ausmusterung_datum=datum,
-        ausmusterung_disposition=disposition,
-        notiz=f"Löschen: {loeschung_art}, Nachweis: {loeschung_nachweis}, Gemeldet: {bestaetigt_gemeldt}",
+        ausmusterung_disposition=disposition.strip(),
+        loeschung_art="" if verloren else loeschung_art,
+        loeschung_nachweis="" if verloren else loeschung_nachweis,
+        vorfall_gemeldet=bool(verloren and bestaetigt_gemeldt),
+        notiz=", ".join(teile),
         abschliesst=True,
     )
+    if loeschung_datei and not verloren:
+        vorgang.nachweis_datei.save(*_nachweis_pruefen(loeschung_datei), save=False)
+    vorgang.save()
     gerat.save()
     return gerat
+
+
+AUSMUSTERUNG_VERLOREN = ("verloren", "gestohlen")
+LOESCHUNG_ARTEN = {
+    "nist": "Gelöscht durch die IT nach NIST SP 800-88",
+    "zerstoert": "Physisch zerstört durch Dienstleister",
+}
+_ANHANG_ENDUNGEN = {"application/pdf": ".pdf", "image/jpeg": ".jpg", "image/png": ".png"}
+_ANHANG_GROESSE = 10 * 1024 * 1024
+
+
+def _nachweis_pruefen(datei) -> tuple:
+    """Anhang: PDF, JPG oder PNG bis 10 MB, am Inhalt geprüft (Kapitel 3.1, N-02)."""
+    from django.core.files.base import ContentFile
+    from .protokoll import _typ_am_inhalt
+
+    roh = datei.read(_ANHANG_GROESSE + 1)
+    if len(roh) > _ANHANG_GROESSE:
+        raise GeratFehler("Der Nachweis ist größer als 10 MB.")
+    endung = _ANHANG_ENDUNGEN.get(_typ_am_inhalt(roh) or "")
+    if endung is None:
+        raise GeratFehler("Nachweis nicht erlaubt: PDF, JPG oder PNG bis 10 MB.")
+    return f"nachweis-{timezone.now():%Y%m%d-%H%M%S}{endung}", ContentFile(roh)
+
+
+def standard_lager() -> Ort | None:
+    """Der Lagerort, wenn der Dialog keinen nennt (Kapitel 4: Auf Lager heißt Lagerort)."""
+    return Ort.objects.filter(typ=Ort.TYP_LAGER).order_by("kennung").first()
+
+
+def _leihe_schliessen(gerat: Gerat) -> None:
+    """Das Gerät ist zurück oder weg: Seine ausgegebene Leihe ist damit zu Ende (F-35)."""
+    Leihe.objects.filter(gerat=gerat, status=Leihe.STATUS_AUSGEGEBEN).update(
+        status=Leihe.STATUS_ZURUECKGEGEBEN, genehmigt=False,
+    )
+
+
+def _ausgabeprotokoll_fuer(gerat: Gerat, person: Person) -> Protokoll | None:
+    return (
+        gerat.alle_protokolle()
+        .filter(person=person, art=Protokoll.ART_AUSGABE)
+        .exclude(stand=Protokoll.STAND_ERSETZT)
+        .first()
+    )
+
+
+def zustand_bei_ausgabe(gerat: Gerat):
+    """Zustand laut Ausgabeprotokoll (F-50, F-131); ohne Protokoll leer."""
+    if gerat.person_id is None:
+        return ""
+    quelle = _ausgabeprotokoll_fuer(gerat, gerat.person)
+    if quelle is None:
+        return ""
+    for position in quelle.positionen or []:
+        if position.get("inventarnummer") == gerat.inventarnummer and position.get("zustand_ausgabe"):
+            return position["zustand_ausgabe"]
+    return gerat.zustand
+
+
+def _ja(wert) -> bool:
+    """Der Dialog liefert „ja“ und „nein“, Aufrufer im Code True und False."""
+    return wert == "ja" if isinstance(wert, str) else bool(wert)
+
+
+@transaction.atomic
+def geraete_zuruecknehmen(
+    person: Person | None,
+    posten: list,
+    *,
+    ausgefuehrt_von: Konto | None = None,
+    unterschrift: str = "tool",
+    empfaenger: str = "",
+) -> Protokoll | None:
+    """Ein oder mehrere Geräte zurücknehmen, mit einem Protokoll (F-50, F-51, F-52, F-141).
+
+    Je Posten ``gerat``, ``zustand_rueckgabe``, ``zubehoer_komplett``, ``maengel``,
+    ``ziel`` („lager“ oder „reparatur“) und optional ``lagerort``. Die Geräte sind sofort
+    im Lager, das Protokoll wartet auf beide Signaturen (F-141), beim Papierweg auf den
+    Scan (F-22). ``empfaenger`` ist die Adresse für den Link bei Rückgabe per Post.
+    """
+    if not posten:
+        raise GeratFehler("Kein Gerät gewählt.")
+    positionen = []
+    grundlage = None
+    for eintrag in posten:
+        gerat = eintrag["gerat"]
+        if gerat.status not in (
+            Gerat.STATUS_IN_BENUTZUNG, Gerat.STATUS_VERLIEHEN, Gerat.STATUS_IN_REPARATUR,
+        ):
+            raise GeratFehler("Nur Geräte in Benutzung oder verliehen können zurückgegeben werden.")
+        quelle = _ausgabeprotokoll_fuer(gerat, person) if person is not None else None
+        grundlage = grundlage or quelle
+        positionen.append(position_aus_gerat(
+            gerat,
+            zustand_ausgabe=zustand_bei_ausgabe(gerat),
+            zustand_rueckgabe=int(eintrag["zustand_rueckgabe"]),
+            zubehoer_komplett=_ja(eintrag.get("zubehoer_komplett", True)),
+            bemerkung=(eintrag.get("maengel") or "").strip(),
+            ausgabe_protokoll=quelle.nr if quelle is not None else "",
+        ))
+
+    protokoll = None
+    if person is not None:
+        tool = unterschrift == "tool"
+        protokoll = _protokoll_erstellen(
+            person=person,
+            gerat=posten[0]["gerat"],
+            art=Protokoll.ART_RUECKNAHME,
+            bearbeiter=ausgefuehrt_von.bezeichnung() if ausgefuehrt_von is not None else "",
+            erzeugt_von=ausgefuehrt_von,
+            stand=Protokoll.STAND_BEARBEITER_OFFEN if tool else Protokoll.STAND_SCAN_OFFEN,
+            unterschrift_art="tool" if tool else "papier",
+            rueckgabe_zu_protokoll=grundlage,
+            offboarding=_offboarding_vorbelegung(posten[0]["gerat"], person, ausgefuehrt_von),
+            positionen=positionen,
+        )
+        protokoll.weitere_geraete.set([e["gerat"] for e in posten[1:]])
+        if empfaenger.strip():
+            protokoll.gegenzeichnung_empfaenger = empfaenger.strip()
+            protokoll.save(update_fields=["gegenzeichnung_empfaenger"])
+
+    for eintrag, position in zip(posten, positionen):
+        gerat = eintrag["gerat"]
+        gerat.zustand = position["zustand_rueckgabe"]
+        _leihe_schliessen(gerat)
+        if gerat.status == Gerat.STATUS_IN_REPARATUR:
+            # Bleibt beim Dienstleister, die gemerkte Zuordnung endet hier.
+            gerat.ort = None
+        elif eintrag.get("ziel") == "reparatur":
+            gerat.status = Gerat.STATUS_IN_REPARATUR
+            gerat.ort = None
+        else:
+            gerat.status = Gerat.STATUS_AUF_LAGER
+            gerat.ort = eintrag.get("lagerort") or standard_lager()
+        gerat.person = None
+        gerat.altbestand_ohne_protokoll = False
+        teile = [f"Protokoll {protokoll.nr}"] if protokoll is not None else []
+        teile += [
+            f"Zustand: {position['zustand_rueckgabe']}",
+            "Zubehör komplett: " + ("Ja" if position["zubehoer_komplett"] else "Nein"),
+            f"Mängel: {position['bemerkung']}",
+        ]
+        Vorgang.objects.create(
+            gerat=gerat,
+            typ=Vorgang.TYP_RUECKGABE,
+            zeitpunkt=timezone.now(),
+            erzeugt_von=ausgefuehrt_von,
+            notiz=", ".join(teile),
+            protokoll=protokoll,
+            abschliesst=True,
+        )
+        gerat.save()
+    return protokoll
 
 
 @transaction.atomic
@@ -467,93 +645,67 @@ def gerat_rueckgeben(
     ziel: str = "lager",  # "lager" oder "reparatur"
     fehlend: bool = False,
     ausgefuehrt_von: Konto | None = None,
+    unterschrift: str = "tool",
+    empfaenger: str = "",
+    lagerort: Ort | None = None,
 ) -> Gerat:
-    """Gerät zurückgeben (F-50, F-58, M3).
+    """Ein Gerät zurücknehmen (F-50). Siehe ``geraete_zuruecknehmen``.
 
-    Status wird „Auf Lager", Person wird entfernt.
-    Wenn fehlend=True, startet die Ausmusterung mit Grund „verloren".
+    „Fehlt“ führt in den Dialog Ausmustern mit Grund „verloren“; die Meldung
+    an den Datenschutz bestätigt dort ein Mensch (F-57), nicht dieser Aufruf.
     """
     if gerat.status not in (Gerat.STATUS_IN_BENUTZUNG, Gerat.STATUS_VERLIEHEN):
         raise GeratFehler("Nur Geräte in Benutzung oder verliehen können zurückgegeben werden.")
-
-    # F-50: Zustand bei Rückgabe, Zubehör komplett, Mängel
-    gerat.zustand = zustand_rueckgabe
-
     if fehlend:
-        # F-50 (A-0097): „fehlt, Ausmusterung starten" aus der Auswahl „Danach"
-        # startet die Ausmusterung mit Grund „verloren" (wie bisher, fehlend=True).
-        return ausmustern(
-            gerat,
-            grund="verloren",
-            datum=date.today(),
-            disposition="Verlust",
-            bestaetigt_gemeldt=True,
-            ausgefuehrt_von=ausgefuehrt_von,
-        )
-
-    if ziel == "reparatur":
-        # F-50: Ziel Reparatur
-        gerat.status = Gerat.STATUS_IN_REPARATUR
-    else:
-        # F-50: Ziel Lager
-        gerat.status = Gerat.STATUS_AUF_LAGER
-
-    # A-0123 (M6 Teil 1): F-130, F-131, F-22 — Protokoll in der
-    # Service-Schicht bei Rücknahme. Stand ist „scan-offen"; der Bezug
-    # auf das Ausgabeprotokoll trägt die Nummer (FRM-002, Kapitel 5).
-    person = gerat.person
-    if person is not None:
-        ausgabe_protokoll = (
-            Protokoll.objects.filter(
-                geraet=gerat, person=person, art=Protokoll.ART_AUSGABE
-            )
-            .order_by("-datum", "-id")
-            .first()
-        )
-        _protokoll_erstellen(
-            person=person,
-            gerat=gerat,
-            art=Protokoll.ART_RUECKNAHME,
-            bearbeiter=(
-                ausgefuehrt_von.bezeichnung() if ausgefuehrt_von is not None else ""
-            ),
-            erzeugt_von=ausgefuehrt_von,
-            rueckgabe_zu_protokoll=ausgabe_protokoll,
-            offboarding=_offboarding_vorbelegung(gerat, person),
-        )
-
-    gerat.person = None
-    gerat.ort = None
-
-    Vorgang.objects.create(
-        gerat=gerat,
-        typ=Vorgang.TYP_RUECKGABE,
-        zeitpunkt=timezone.now(),
-        erzeugt_von=ausgefuehrt_von,
-        notiz=f"Zustand: {zustand_rueckgabe}, Zubehör komplett: {zubesehoer_komplett}, Mängel: {maengel}",
-        abschliesst=True,
+        raise GeratFehler("Ein fehlendes Gerät läuft über den Dialog Ausmustern mit Grund „verloren“ (F-50).")
+    geraete_zuruecknehmen(
+        gerat.person,
+        [{
+            "gerat": gerat,
+            "zustand_rueckgabe": zustand_rueckgabe,
+            "zubehoer_komplett": zubesehoer_komplett,
+            "maengel": maengel,
+            "ziel": ziel,
+            "lagerort": lagerort,
+        }],
+        ausgefuehrt_von=ausgefuehrt_von,
+        unterschrift=unterschrift,
+        empfaenger=empfaenger,
     )
-    gerat.save()
     return gerat
 
 
-def _offboarding_vorbelegung(gerat: Gerat, person: Person) -> dict:
+def _bearbeiter_kuerzel(konto: Konto | None) -> str:
+    if konto is None:
+        return ""
+    person = getattr(konto, "person", None)
+    if person is not None:
+        return person.kuerzel
+    return "".join(teil[0] for teil in konto.bezeichnung().replace("@", " ").split()[:2]).upper()
+
+
+def _offboarding_vorbelegung(gerat: Gerat, person: Person, konto: Konto | None = None) -> dict:
     """FRM-002 Abschnitt 3: Vorbelegung der 13 Prüfpunkte IT-Offboarding.
 
-    Rücknahme bei Austritt (Person hat ein Austrittsdatum): keine Option,
-    außer Punkt 13 „Rückgabe im Hardware-Inventar dokumentiert" = erledigt.
-    Jede andere Rückgabe: Punkt 1 = erledigt, Punkt 13 = erledigt,
-    alle übrigen = nicht zutreffend.
+    Bei Austritt (Person hat ein Austrittsdatum) ist nur Punkt 13 gesetzt, den Rest
+    beantwortet die IT. Jede andere Rückgabe: Punkte 1 und 13 erledigt, die übrigen
+    nicht zutreffend.
     """
-    punkte = dict(Protokoll.OFFBOARDING_PUNKTE)
-    schluessel = list(punkte)
-    # Alle 13 Punkte anlegen, Standard: nicht abgehakt (False)
-    vorbelegung: dict[str, bool] = {k: False for k in schluessel}
-    if person is not None and getattr(person, "austritt", None):
-        vorbelegung[schluessel[-1]] = True  # Punkt 13: erledigt
-    else:
-        vorbelegung[schluessel[0]] = True   # Punkt 1: erledigt
-        vorbelegung[schluessel[-1]] = True  # Punkt 13: erledigt
+    schluessel = [k for k, _text in Protokoll.OFFBOARDING_PUNKTE]
+    erledigt = {
+        "status": "erledigt",
+        "datum": timezone.now().strftime("%d.%m.%Y"),
+        "kuerzel": _bearbeiter_kuerzel(konto),
+        "bemerkung": "",
+    }
+    if getattr(person, "austritt", None):
+        return {schluessel[-1]: erledigt}
+    vorbelegung = {
+        k: {"status": "nicht_zutreffend", "datum": "", "kuerzel": "", "bemerkung": ""}
+        for k in schluessel
+    }
+    vorbelegung[schluessel[0]] = dict(erledigt)
+    vorbelegung[schluessel[-1]] = dict(erledigt)
     return vorbelegung
 
 
@@ -630,6 +782,7 @@ def gerat_reparatur_fertig(
     kosten: float | None = None,
     beleg: str = "",
     ausgefuehrt_von: Konto | None = None,
+    lagerort: Ort | None = None,
 ) -> Gerat:
     """Reparatur abschließen (F-42, M3).
 
@@ -642,16 +795,17 @@ def gerat_reparatur_fertig(
 
     if ziel == "zuordnung":
         # F-42: Ziel „Bisherige Zuordnung" – Gerät geht zurück zu Person/Ort.
-        if gerat.person is None and gerat.ort is None:
-            # Kein vorheriger Verbleib bekannt – Gerät geht ins Lager.
+        # Ein Gerät, das vor der Reparatur im Lager stand, ist danach wieder „Auf Lager“.
+        if gerat.person is None and (gerat.ort is None or gerat.ort.typ == Ort.TYP_LAGER):
             gerat.status = Gerat.STATUS_AUF_LAGER
+            gerat.ort = gerat.ort or standard_lager()
         else:
             gerat.status = Gerat.STATUS_IN_BENUTZUNG
     else:
         # F-42: Ziel „Lager"
         gerat.status = Gerat.STATUS_AUF_LAGER
         gerat.person = None
-        gerat.ort = None
+        gerat.ort = lagerort or standard_lager()
 
     Vorgang.objects.create(
         gerat=gerat,
@@ -684,7 +838,7 @@ def gerat_bearbeiten(
         raise GeratFehler("Ausgemusterte Geräte sind nicht mehr änderbar.")
     zulassig = {
         "kategorie", "hersteller", "modell", "seriennummer", "zustand",
-        "leihpool", "person", "ort", "geraetename", "standardzuehoer",
+        "leihpool", "geraetename", "standardzuehoer",
         "technische_daten", "kaufdatum", "kaufpreis_netto", "lieferant",
         "rechnungsnummer", "garantie_bis", "notiz",
         "kaufdatum_nicht_ermittelbar", "garantie_nicht_ermittelbar",
@@ -699,9 +853,6 @@ def gerat_bearbeiten(
                     "lieferant", "rechnungsnummer", "standardzuehoer",
                     "technische_daten", "notiz") and wert is not None:
             werte[name] = wert.strip() if isinstance(wert, str) else wert
-    if werte.get("person") is not None and werte.get("ort") is not None and \
-            werte.get("person") and werte.get("ort"):
-        raise GeratFehler("Ein Gerät steht bei einer Person oder an einem Ort, nicht beides.")
     # F-10 (A-0097): dieselbe Seriennummer beim selben Hersteller wird abgelehnt.
     if "seriennummer" in werte or "hersteller" in werte:
         neue_seriennummer = werte.get("seriennummer", gerat.seriennummer) or ""
@@ -787,6 +938,8 @@ def gerat_pruefen(gerat: Gerat, geprueft_von: Konto) -> Gerat:
     Schreibt auch den Vorgang „Geprüft" (F-89, AUFTRAG M4), damit
     „Zuletzt geprüft" Datum und Konto trägt.
     """
+    if gerat.status == Gerat.STATUS_AUSGEMUSTERT:
+        raise GeratFehler("Ausgemusterte Geräte sind nicht mehr änderbar.")
     gerat.zuletzt_geprueft_am = timezone.now()
     gerat.zuletzt_geprueft_von = geprueft_von
     gerat.save()
@@ -880,31 +1033,30 @@ def gerate_der_person(person: Person) -> list[Gerat]:
 def person_alle_zuruecknehmen(
     person: Person, *, ausgefuehrt_von: Konto | None = None
 ) -> int:
-    """Alle Geräte einer Person zurücknehmen (F-52, A-0099).
+    """Alle Geräte einer Person zurücknehmen, mit einem Protokoll (F-52).
 
-    Jedes Gerät, das noch bei der Person liegt („In Benutzung" oder
-    „Verliehen"), wird ins Lager zurückgenommen: Status „Auf Lager",
-    Person wird entfernt, Vorgang „Rückgabe" entsteht je Gerät.
-    „Auf Lager" bleibt unverändert (dort ist die Person nicht zugeordnet).
-    Gibt die Anzahl der zurückgenommenen Geräte zurück.
+    Ohne Eingaben je Gerät: Der Zustand bleibt, Zubehör gilt als komplett.
+    Liefert die Anzahl der zurückgenommenen Geräte.
     """
-    gerate = list(
-        Gerat.objects.filter(
-            person=person,
-            status__in=[Gerat.STATUS_IN_BENUTZUNG, Gerat.STATUS_VERLIEHEN],
-        ).order_by("inventarnummer")
-    )
-    for gerat in gerate:
-        gerat_rueckgeben(
-            gerat,
-            zustand_rueckgabe=gerat.zustand,
-            zubesehoer_komplett=True,
-            maengel="",
-            ziel="lager",
-            fehlend=False,
+    gerate = geraete_fuers_offboarding(person)
+    if gerate:
+        geraete_zuruecknehmen(
+            person,
+            [{"gerat": g, "zustand_rueckgabe": g.zustand, "zubehoer_komplett": True, "maengel": "", "ziel": "lager"}
+             for g in gerate],
             ausgefuehrt_von=ausgefuehrt_von,
         )
     return len(gerate)
+
+
+def geraete_fuers_offboarding(person: Person) -> list[Gerat]:
+    """F-52: Alles, was noch bei der Person liegt, auch Geräte in Reparatur."""
+    return list(
+        Gerat.objects.filter(
+            person=person,
+            status__in=[Gerat.STATUS_IN_BENUTZUNG, Gerat.STATUS_VERLIEHEN, Gerat.STATUS_IN_REPARATUR],
+        ).select_related("kategorie").order_by("inventarnummer")
+    )
 
 
 def soll_zahlen(ort: Ort) -> list[tuple[Kategorie, int]]:
@@ -2276,23 +2428,17 @@ def _ausgabe_wirksam_machen(protokoll: Protokoll, konto: Konto, now) -> None:
         else:
             gerat.status = Gerat.STATUS_IN_BENUTZUNG
             gerat.ort = protokoll.ort_ziel
-        gerat.save()
-        teile = [f"Protokoll {protokoll.nr}"]
-        if p.get("zustand_ausgabe"):
-            teile.append("Zustand: " + dict(Gerat.ZUSTAENDE).get(int(p["zustand_ausgabe"]), str(p["zustand_ausgabe"])))
-        if p.get("zubehoer_komplett") is not None:
-            teile.append("Zubehör komplett: " + ("Ja" if p["zubehoer_komplett"] else "Nein"))
-        if p.get("bemerkung"):
-            teile.append(p["bemerkung"])
         Vorgang.objects.create(
             gerat=gerat,
             typ=Vorgang.TYP_AUSGABE,
             zeitpunkt=now,
             erzeugt_von=konto,
             leihgabe_an=protokoll.person,
-            notiz=", ".join(teile),
+            notiz=_ausgabe_notiz(protokoll.nr, p),
+            protokoll=protokoll,
             abschliesst=True,
         )
+        gerat.save()
 
 
 def _anrede_mail(person) -> str:

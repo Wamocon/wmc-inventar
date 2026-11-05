@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from django import forms
 
-from stammdaten.models import Kategorie, Person
+from stammdaten.models import Kategorie, Ort, Person
 
 from . import services
 from .models import Gerat, Leihe
@@ -33,18 +33,6 @@ class GeratForm(forms.ModelForm):
     die Seriennummer bleibt leer.
     """
 
-    status = forms.CharField(
-        required=False,
-        widget=forms.Select(choices=STATUS_WAHL),
-        label="Status",
-    )
-    person = forms.ModelChoiceField(
-        queryset=Person.objects.all(),
-        required=False,
-        label="Zuweisende Person",
-        widget=forms.Select(attrs={"data-test": "person-wahl"}),
-        help_text="Person aus dem Verzeichnis oder später beim Verliehen.",
-    )
     # F-11 (A-0112): zeilenweise Seriennummern für die Mehrfacherfassung.
     seriennummern = forms.CharField(
         required=False,
@@ -63,7 +51,7 @@ class GeratForm(forms.ModelForm):
         model = Gerat
         fields = [
             "kategorie", "hersteller", "modell", "seriennummer",
-            "zustand", "leihpool", "person", "ort", "geraetename",
+            "zustand", "leihpool", "ort", "geraetename",
             "standardzuehoer", "technische_daten",
             "kaufdatum", "kaufpreis_netto", "lieferant", "rechnungsnummer",
             "garantie_bis", "notiz",
@@ -82,13 +70,15 @@ class GeratForm(forms.ModelForm):
         self.fields["kategorie"].label = "Kategorie"
         self.fields["zustand"].label = "Zustand"
         self.fields["leihpool"].label = "Leihpool"
-        self.fields["person"].label = "Zuweisende Person (optional)"
-        self.fields["ort"].label = "Ort (optional)"
-        if not kwargs.get("instance", None):
-            self.fields["status"].widget.attrs.pop("data-ke-status", None)
-        else:
-            # A-0112 (F-11): Das Feld seriennummern gilt nur fürs Anlegen.
+        if kwargs.get("instance", None):
+            # F-40: Beim Ändern bleiben Status, Person und Ort unberührt. Sie wechseln
+            # nur über Ausgabe, Rückgabe und Umzug (Kapitel 4). seriennummern gilt nur fürs Anlegen.
             del self.fields["seriennummern"]
+            del self.fields["ort"]
+        else:
+            # F-10, Kapitel 4: Ein neues Gerät steht auf Lager, an einem Lagerort.
+            self.fields["ort"].label = "Lagerort (optional)"
+            self.fields["ort"].queryset = Ort.objects.filter(typ=Ort.TYP_LAGER).order_by("kennung")
 
     def clean(self) -> dict:
         daten = super().clean()
@@ -109,13 +99,6 @@ class GeratForm(forms.ModelForm):
             self.add_error(
                 "seriennummer", "Diese Kategorie verlangt eine Seriennummer."
             )
-        person = daten.get("person")
-        ort = daten.get("ort")
-        if person and ort and not (self.instance and self.instance.pk):
-            # Neu anlegen: Person UND Ort ist kein gültiger Anfangszustand.
-            self.add_error(
-                None, "Ein Gerät steht bei einer Person oder an einem Ort, nicht beides."
-            )
         return daten
 
 
@@ -127,7 +110,7 @@ class GeratBearbeitungsForm(GeratForm):
         # (Kapitel 4), hier nur Stammdaten.
         fields = [
             "kategorie", "hersteller", "modell", "seriennummer",
-            "zustand", "leihpool", "person", "ort", "geraetename",
+            "zustand", "leihpool", "geraetename",
             "standardzuehoer", "technische_daten",
             "kaufdatum", "kaufpreis_netto", "lieferant", "rechnungsnummer",
             "garantie_bis", "notiz",
@@ -194,7 +177,10 @@ class GeratAusgabeForm(forms.Form):
     def __init__(self, *args, gerat: Gerat | None = None, **kwargs):
         super().__init__(*args, **kwargs)
         from stammdaten.models import Ort
-        self.fields["ziel_ort"].queryset = Ort.objects.all().order_by("kennung")
+        # F-20: Ziel ist ein Arbeitsplatz oder Raum, das Lager ist keins.
+        self.fields["ziel_ort"].queryset = Ort.objects.filter(
+            typ__in=[Ort.TYP_ARBEITSPLATZ, Ort.TYP_RAUM]
+        ).order_by("kennung")
         if gerat is not None:
             self.fields["zustand"].initial = gerat.zustand
 
@@ -246,6 +232,35 @@ class GeratRueckgabeForm(forms.Form):
         label="Danach",
         widget=forms.Select(attrs={"data-test": "danach"}),
     )
+    lager_ort = forms.ModelChoiceField(
+        queryset=None,
+        required=False,
+        empty_label=None,
+        label="Lagerort",
+        widget=forms.Select(attrs={"data-test": "lager-ort"}),
+    )
+    unterschrift = forms.ChoiceField(
+        choices=GeratAusgabeForm.UNTERSCHRIFT,
+        required=False,
+        initial="tool",
+        label="Unterschrift",
+        widget=forms.RadioSelect,
+    )
+    empfaenger = forms.EmailField(
+        required=False,
+        label="Adresse für den Link, bei Rückgabe per Post",
+        widget=forms.EmailInput(attrs={"data-test": "code-senden-empfaenger"}),
+    )
+
+    def __init__(self, *args, gerat: Gerat | None = None, **kwargs):
+        super().__init__(*args, **kwargs)
+        from stammdaten.models import Ort
+        self.fields["lager_ort"].queryset = Ort.objects.filter(typ=Ort.TYP_LAGER).order_by("kennung")
+        if gerat is not None:
+            from .services import zustand_bei_ausgabe
+            self.zustand_bei_ausgabe = zustand_bei_ausgabe(gerat)
+            # F-50: Vorgeschlagen ist der Zustand von damals, nicht „neuwertig“.
+            self.fields["zustand_rueckgabe"].initial = self.zustand_bei_ausgabe or gerat.zustand
 
     def clean(self) -> dict:
         daten = super().clean()
@@ -311,6 +326,13 @@ class GeratReparaturFertigForm(forms.Form):
         label="Ziel",
         widget=forms.RadioSelect(attrs={"data-test": "reparatur-ziel"}),
     )
+    lager_ort = forms.ModelChoiceField(
+        queryset=Ort.objects.filter(typ=Ort.TYP_LAGER).order_by("kennung"),
+        required=False,
+        empty_label=None,
+        label="Lagerort",
+        widget=forms.Select(attrs={"data-test": "lager-ort"}),
+    )
     kosten = forms.DecimalField(
         required=False,
         label="Kosten (EUR)",
@@ -328,7 +350,7 @@ class GeratAusmusterungForm(forms.Form):
 
     A-0097 nach dem Prototyp (Dialog „Gerät ausmustern“):
     „Grund“ beginnt mit „Bitte wählen“; „Datum“ ist Pflicht;
-    „Verbleib“ ist Pflicht, außer bei verloren/gestohlen;
+    „Verbleib“ ist immer Pflicht (F-55);
     bei Verlust/Diebstahl: Bestätigung „Der Vorfall ist an Datenschutz
     bzw. Informationssicherheit gemeldet.“;
     bei Datenträgern und nicht bei Verlust: zwei Optionsfelder für die
@@ -353,6 +375,11 @@ class GeratAusmusterungForm(forms.Form):
         super().__init__(*args, **kwargs)
         self._datentraeger = bool(gerat and gerat.kategorie and gerat.kategorie.hat_datentraeger)
         self._verloren = False
+        # Kapitel 4: Aus „In Benutzung“ und „Verliehen“ nur verloren oder gestohlen.
+        if gerat is not None and gerat.status not in (Gerat.STATUS_AUF_LAGER, Gerat.STATUS_IN_REPARATUR):
+            self.fields["grund"].choices = [
+                wahl for wahl in self.GRUENDE if wahl[0] in ("", *self.VERLOREN)
+            ]
 
     grund = forms.ChoiceField(
         choices=GRUENDE,
@@ -400,8 +427,8 @@ class GeratAusmusterungForm(forms.Form):
         daten["grund"] = grund
         verloren = grund in self.VERLOREN
         self._verloren = verloren
-        # Verbleib: Pflicht außer bei verloren/gestohlen (dort entfällt das Feld).
-        if not verloren and not daten.get("disposition"):
+        # F-55: Verbleib ist immer Pflicht, auch bei verloren und gestohlen.
+        if not (daten.get("disposition") or "").strip():
             self.add_error("disposition", "Verbleib muss angegeben werden.")
         # Bestätigung: Pflicht bei verloren/gestohlen.
         if verloren and not daten.get("bestaetigt_gemeldt"):

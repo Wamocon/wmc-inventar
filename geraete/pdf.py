@@ -75,7 +75,7 @@ _ANLAGEN = """
 {% for anhang in anhaenge %}
 <div class="anhang">
   {% if anhang.url %}<img src="{{ anhang.url }}" alt="{{ anhang.name }}">{% else %}<p class="hinweis">{{ anhang.name }}: Für dieses Bildformat gibt es keine Vorschau.</p>{% endif %}
-  <div class="unterschrift-bild">{{ geraetename_kurz }} · {{ anlass }} · {{ protokoll.datum|date:"d.m.Y" }}</div>
+  <div class="unterschrift-bild">{{ anhang.geraet_name|default:geraetename_kurz }} · {{ anlass }} · {{ protokoll.datum|date:"d.m.Y" }}</div>
 </div>
 {% endfor %}
 """
@@ -352,12 +352,16 @@ def _anhaenge(protokoll: Protokoll) -> list[dict]:
     """Fotos als Anlage (F-134); der Pfad kommt aus der Dateiablage."""
     from django.core.files.storage import default_storage
 
+    namen = {
+        p.get("inventarnummer"): p.get("geraetename") or p.get("bezeichnung", "")
+        for p in protokoll.positionen or []
+    }
     ergebnis = []
     for anhang in protokoll.anhaenge_liste():
         pfad = anhang.get("pfad")
         if not pfad:
             continue
-        eintrag = {**anhang, "url": ""}
+        eintrag = {**anhang, "url": "", "geraet_name": namen.get(anhang.get("inventarnummer"), "")}
         try:
             if default_storage.exists(pfad) and not pfad.lower().endswith(".heic"):
                 eintrag["url"] = Path(default_storage.path(pfad)).as_uri()

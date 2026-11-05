@@ -4,32 +4,64 @@
 <div class="page-head">
   <div>
     <h1>Offboarding</h1>
-    <p class="muted lead">{{ person.nachname }} {{ person.vorname }} (F-52)</p>
+    <p class="muted lead">{{ person.nachname }} {{ person.vorname }}{% if person.austritt %} · Austritt {{ person.austritt|date:"d.m.Y" }}{% endif %}</p>
   </div>
 </div>
-<div class="abschnitt" data-test="offboarding-ansicht">
-  <h2>Geräte der Person</h2>
+<section class="card" data-test="offboarding-ansicht">
+  <div class="card-head"><h2>Geräte der Person</h2><span class="count">{{ gerate|length }}</span></div>
   {% if gerate %}
-  <div class="liste" data-test="liste" data-liste="offboarding-geraete">
-  <div data-test="offboarding-geraete"></div>
-  {% for g in gerate %}
-    <div class="zeile" data-test="zeile" data-id="{{ g.inventarnummer }}" data-offboarding-geraet="1">
-      <span data-test="offboarding-inventarnummer">{{ g.inventarnummer }}</span>
-      <span data-test="offboarding-modell">{{ g.geraetename|default:g.modell }}</span>
-      <span data-test="offboarding-status">{{ g.status_anzeige }}</span>
+  <form method="post" action="/personen/{{ person.pk }}/offboarding/zuruecknehmen/" data-test="dialog" data-name="rueckgabe">
+    {% csrf_token %}
+    <div class="tbl-wrap">
+      <table data-test="liste" data-liste="offboarding-geraete">
+        <thead><tr><th>Wahl</th><th>Gerät</th><th>Status</th><th>Zustand bei Ausgabe</th><th>Zustand bei Rückgabe</th><th>Zubehör komplett</th><th>Bemerkung, Mängel</th><th>Danach</th><th></th></tr></thead>
+        <tbody>
+          {% for g in gerate %}
+          <tr data-test="zeile" data-id="{{ g.inventarnummer }}" data-offboarding-geraet="1">
+            <td><input type="checkbox" name="auswahl" value="{{ g.inventarnummer }}" data-test="auswahl" aria-label="{{ g.inventarnummer }} wählen"></td>
+            <td><a class="inv" href="/geraete/{{ g.inventarnummer }}/" data-test="offboarding-inventarnummer">{{ g.inventarnummer }}</a> <span data-test="offboarding-modell">{{ g.geraetename|default:g.modell }}</span></td>
+            <td data-test="offboarding-status">{{ g.status_anzeige }}</td>
+            <td data-test="zustand-ausgabe">{{ g.zustand_damals|default:"–" }}</td>
+            <td><select name="zustand-{{ g.inventarnummer }}" aria-label="Zustand bei Rückgabe">
+              {% for wert, text in zustaende %}<option value="{{ wert }}"{% if wert == g.zustand %} selected{% endif %}>{{ text }}</option>{% endfor %}
+            </select></td>
+            <td><select name="zubehoer-{{ g.inventarnummer }}" aria-label="Zubehör komplett"><option value="ja">Ja</option><option value="nein">Nein</option></select></td>
+            <td><input type="text" name="maengel-{{ g.inventarnummer }}" aria-label="Bemerkung, Mängel"></td>
+            <td>{% if g.status == "in-reparatur" %}<span class="muted">bleibt in Reparatur</span>{% else %}<select name="ziel-{{ g.inventarnummer }}" aria-label="Danach"><option value="lager">ins Lager</option><option value="reparatur">in Reparatur</option></select>{% endif %}</td>
+            <td>{% if user.ist_admin %}<a class="btn sm" href="/geraete/{{ g.inventarnummer }}/ausmustern/?grund=verloren" data-test="aktion-fehlt">Fehlt</a>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
-    {% endfor %}
-  </div>
-  {% if user.ist_admin %}
-  <div class="actions">
-    <form method="post" action="/personen/{{ person.pk }}/offboarding/zuruecknehmen/" data-test="alle-zuruecknehmen-formular">
-      {% csrf_token %}
-      <button type="submit" class="btn primary" data-test="alle-zuruecknehmen">Alle zurücknehmen</button>
-    </form>
-  </div>
-  {% endif %}
+    {% if user.ist_admin %}
+    <div class="form-grid">
+      <div class="field"><label for="lager_ort">Lagerort</label><select name="lager_ort" id="lager_ort" data-test="lager-ort">{% for o in lagerorte %}<option value="{{ o.pk }}">{{ o.kennung }}</option>{% endfor %}</select></div>
+      <div class="field" data-test="unterschrift"><label>Unterschrift</label>
+        {% for wert, text in unterschriften %}<label class="radio"><input type="radio" name="unterschrift" value="{{ wert }}"{% if forloop.first %} checked{% endif %}> {{ text }}</label>{% endfor %}
+      </div>
+      <div class="field full"><label for="empfaenger">Adresse für den Link, bei Rückgabe per Post</label><input type="email" name="empfaenger" id="empfaenger" data-test="code-senden-empfaenger"></div>
+    </div>
+    <div class="actions">
+      <button type="submit" name="aktion" value="alle" class="btn primary" data-test="alle-zuruecknehmen">Alle Geräte zurücknehmen</button>
+      <button type="submit" name="aktion" value="auswahl" class="btn" data-test="auswahl-zuruecknehmen">Gewählte Geräte zurücknehmen</button>
+    </div>
+    {% endif %}
+  </form>
   {% else %}
-  <p class="muted">Keine Geräte zugeordnet.</p>
+  <p class="leer-text">Keine Geräte zugeordnet.</p>
   {% endif %}
-</div>
+</section>
+<section class="card" data-test="offboarding-leihen">
+  <div class="card-head"><h2>Offene Leihen</h2><span class="count">{{ leihen|length }}</span></div>
+  {% if leihen %}
+  <ul class="worklist">
+    {% for l in leihen %}
+    <li data-test="zeile" data-id="{{ l.nr }}" data-stand="{{ l.stand_anzeige }}"><span class="what"><a href="/verleih/">{{ l.nr }}</a> {% if l.gerat %}{{ l.gerat.inventarnummer }}{% elif l.kat %}{{ l.kat.name }}{% endif %}</span><span class="chip-status">{{ l.stand_anzeige }}</span></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="leer-text">Keine offenen Leihen.</p>
+  {% endif %}
+</section>
 {% endblock %}

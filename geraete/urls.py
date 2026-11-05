@@ -20,11 +20,13 @@ urlpatterns = [
     path("<slug:inventarnummer>/konflikt/<int:konflikt_id>/loesen/", views.konflikt_loesen, name="konflikt-loesen"),
     # M3 Lebenszyklus
     path("<slug:inventarnummer>/ausgeben/", views.ausgeben, name="ausgeben"),
+    path("sammelausgabe/", views.sammelausgabe, name="sammelausgabe"),
     path("<slug:inventarnummer>/rueckgeben/", views.rueckgeben, name="rueckgeben"),
     path("<slug:inventarnummer>/umziehen/", views.umziehen, name="umziehen"),
     path("<slug:inventarnummer>/reparatur/start/", views.reparatur_start, name="reparatur-start"),
     path("<slug:inventarnummer>/reparatur/fertig/", views.reparatur_fertig, name="reparatur-fertig"),
     path("<slug:inventarnummer>/ausmustern/", views.ausmustern, name="ausmustern"),
+    path("<slug:inventarnummer>/nachweis/<int:vorgang_id>/", views.nachweis_zeigen, name="nachweis"),
     path("<slug:inventarnummer>/loeschen/", views.loeschen_zeigen, name="loeschen-zeigen"),
     path("<slug:inventarnummer>/loeschen/bestaetigen/", views.loeschen, name="loeschen"),
     # QR-Code und Etiketten (F-12, F-70 bis F-73, F-89)

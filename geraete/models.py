@@ -179,6 +179,12 @@ class Gerat(models.Model):
         ).exists()
 
     # --- F-84: Hinweise auf doppelte Namen ----------------------------------
+    def alle_protokolle(self):
+        """Alle Protokolle des Geräts, auch wenn es darin nicht das erste Gerät ist."""
+        return Protokoll.objects.filter(
+            models.Q(geraet=self) | models.Q(weitere_geraete=self)
+        ).distinct().order_by("-datum", "-id")
+
     def doppelte_namen(self) -> list["Gerat"]:
         """Geräte mit gleichem Gerätenamen (Hinweis im Detail, F-84)."""
         if not self.geraetename:
@@ -329,6 +335,22 @@ class Vorgang(models.Model):
     # --- Abschließend ---------------------------------------------------------
     abschliesst = models.BooleanField("Abschließend", default=False)
     notiz = models.TextField("Notiz", blank=True, default="")
+    # --- Kapitel 3.2: Status, Person und Ort vorher und nachher, Protokoll -----
+    status_vorher = models.CharField("Status vorher", max_length=24, blank=True, default="")
+    status_nachher = models.CharField("Status nachher", max_length=24, blank=True, default="")
+    person_vorher = models.CharField("Person vorher", max_length=200, blank=True, default="")
+    person_nachher = models.CharField("Person nachher", max_length=200, blank=True, default="")
+    ort_vorher = models.CharField("Ort vorher", max_length=160, blank=True, default="")
+    ort_nachher = models.CharField("Ort nachher", max_length=160, blank=True, default="")
+    protokoll = models.ForeignKey(
+        "geraete.Protokoll", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="vorgaenge_des_protokolls", verbose_name="Protokoll",
+    )
+    # --- F-56, F-57: Löschnachweis und Meldung --------------------------------
+    loeschung_art = models.CharField("Art der Löschung", max_length=32, blank=True, default="")
+    loeschung_nachweis = models.CharField("Nachweisnummer", max_length=240, blank=True, default="")
+    nachweis_datei = models.FileField("Nachweis (Datei)", upload_to="nachweise/", blank=True)
+    vorfall_gemeldet = models.BooleanField("Vorfall gemeldet", default=False)
 
     class Meta:
         verbose_name = "Vorgang"
@@ -341,6 +363,38 @@ class Vorgang(models.Model):
     @property
     def ist_offen(self) -> bool:
         return not self.abschliesst
+
+    def save(self, *args, **kwargs):
+        if self._state.adding and not self.status_nachher:
+            self._stand_festhalten()
+        super().save(*args, **kwargs)
+
+    def _stand_festhalten(self) -> None:
+        """Kapitel 3.2: „vorher“ ist das „nachher“ des letzten Vorgangs am Gerät."""
+        gerat = self.gerat
+        letzter = Vorgang.objects.filter(gerat=gerat).order_by("-id").first()
+        if letzter is not None:
+            self.status_vorher = letzter.status_nachher
+            self.person_vorher = letzter.person_nachher
+            self.ort_vorher = letzter.ort_nachher
+        self.status_nachher = gerat.status
+        self.person_nachher = gerat.person.voller_name if gerat.person_id else ""
+        self.ort_nachher = gerat.ort.kennung if gerat.ort_id else ""
+
+    @property
+    def wechsel_anzeige(self) -> list[str]:
+        """Für die Historie (F-43): was sich an Status, Person und Ort geändert hat."""
+        namen = dict(Gerat.STATUSES)
+        zeilen = []
+        for titel, alt, neu in (
+            ("Status", namen.get(self.status_vorher, self.status_vorher),
+             namen.get(self.status_nachher, self.status_nachher)),
+            ("Person", self.person_vorher, self.person_nachher),
+            ("Ort", self.ort_vorher, self.ort_nachher),
+        ):
+            if neu and alt != neu or alt and alt != neu:
+                zeilen.append(f"{titel}: {alt or '–'} → {neu or '–'}")
+        return zeilen
 
 
 # --- M5 Verleih (Kapitel 3.2, F-30, F-36, F-133) ------------------------------
@@ -418,6 +472,9 @@ class Protokoll(models.Model):
     # F-20, F-52: Alle Geräte des Protokolls mit Zustand, Zubehör und Bemerkung
     # aus dem Dialog. ``geraet`` bleibt das erste Gerät.
     positionen = models.JSONField("Geräte des Protokolls", default=list, blank=True)
+    weitere_geraete = models.ManyToManyField(
+        Gerat, blank=True, related_name="weitere_protokolle", verbose_name="Weitere Geräte",
+    )
     # F-135: Der Inhalt, wie er signiert wurde. Danach ändert er sich nicht mehr.
     html_eingefroren = models.TextField("Inhalt, eingefroren mit der Signatur", blank=True, default="")
 

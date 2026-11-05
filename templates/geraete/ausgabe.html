@@ -8,17 +8,18 @@
   </div>
 </div>
 <div data-test="dialog" data-name="ausgabe">
-  <form method="post" novalidate data-test="ausgabe-formular">
+  <form method="post" novalidate enctype="multipart/form-data" data-test="ausgabe-formular">
     {% csrf_token %}
     <div class="meldungen">
       {% include "fragmente/fehler.html" %}
     </div>
     <div class="form-grid">
       <div class="field"><label for="id_ziel_person">Person</label>{{ form.ziel_person }}{% if form.ziel_person.errors %}<div class="meldung error">{% for e in form.ziel_person.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
-      <div class="field"><label for="id_ziel_ort">Arbeitsplatz</label>{{ form.ziel_ort }}{% if form.ziel_ort.errors %}<div class="meldung error">{% for e in form.ziel_ort.errors %}{{ e }}{% endfor %}</div>{% endif %}<small class="help">Person, Arbeitsplatz oder beides</small></div>
+      <div class="field"><label for="id_ziel_ort">Arbeitsplatz oder Raum</label>{{ form.ziel_ort }}{% if form.ziel_ort.errors %}<div class="meldung error">{% for e in form.ziel_ort.errors %}{{ e }}{% endfor %}</div>{% endif %}<small class="help">Person, Arbeitsplatz oder beides</small></div>
       <div class="field"><label for="id_zustand">Zustand</label>{{ form.zustand }}{% if form.zustand.errors %}<div class="meldung error">{% for e in form.zustand.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
       <div class="field"><label for="id_zubehoer_komplett">Zubehör komplett</label>{{ form.zubehoer_komplett }}{% if form.zubehoer_komplett.errors %}<div class="meldung error">{% for e in form.zubehoer_komplett.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
       <div class="field full"><label for="id_anmerkung">Bemerkung</label>{{ form.anmerkung }}{% if form.anmerkung.errors %}<div class="meldung error">{% for e in form.anmerkung.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+      <div class="field full"><label for="id_fotos">Fotos (JPG, PNG oder HEIC bis 10 MB)</label><input type="file" name="fotos" id="id_fotos" multiple accept="image/jpeg,image/png,image/heic" data-test="foto-datei"></div>
       <div class="field full" data-test="unterschrift">
         <label>Unterschrift</label>
         {% for radio in form.unterschrift %}

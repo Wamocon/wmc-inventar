@@ -166,11 +166,7 @@ def personen_detail(request, pk):
 
 
 def offboarding(request, pk):
-    """Offboarding-Ansicht (F-52, A-0099).
-
-    Zeigt alle Geräte der Person (Inventarnummer und Modell oder
-    Gerätename) und deren offene Leihen.
-    """
+    """Offboarding-Ansicht (F-52): alle Geräte und offenen Leihen der Person."""
     if not _darf_lesen(request):
         return _keine_berechtigung(request)
     try:
@@ -178,20 +174,33 @@ def offboarding(request, pk):
     except Person.DoesNotExist:
         from django.http import Http404
         raise Http404
-    from geraete.services import gerate_der_person
-    gerate = gerate_der_person(person)
+    from geraete import services
+    from geraete.forms import GeratAusgabeForm
+    from geraete.models import Gerat, Leihe
+    gerate = services.geraete_fuers_offboarding(person)
+    for gerat in gerate:
+        gerat.zustand_damals = services.zustand_bei_ausgabe(gerat)
+    leihen = Leihe.objects.filter(
+        person=person,
+        status__in=[Leihe.STATUS_ANGEFRAGT, Leihe.STATUS_GENEHMIGT, Leihe.STATUS_AUSGEGEBEN],
+    ).select_related("gerat", "kat").order_by("-id")
     return render(
         request,
         "stammdaten/offboarding.html",
-        {"person": person, "gerate": gerate},
+        {
+            "person": person,
+            "gerate": gerate,
+            "leihen": leihen,
+            "zustaende": Gerat.ZUSTAENDE,
+            "unterschriften": GeratAusgabeForm.UNTERSCHRIFT,
+            "lagerorte": Ort.objects.filter(typ=Ort.TYP_LAGER).order_by("kennung"),
+        },
     )
 
 
+@require_POST
 def offboarding_zuruecknehmen(request, pk):
-    """Alle Geräte der Person zurücknehmen (F-52, A-0099).
-
-    POST-Handler für den Button „Alle zurücknehmen“.
-    """
+    """Geräte der Person zurücknehmen, in einem Vorgang mit einem Protokoll (F-52, F-141)."""
     if not request.user.is_authenticated or not request.user.ist_admin:
         return _keine_berechtigung(request)
     try:
@@ -199,11 +208,40 @@ def offboarding_zuruecknehmen(request, pk):
     except Person.DoesNotExist:
         from django.http import Http404
         raise Http404
+    from django.contrib.messages import error as meldung_error, success as meldung_success
     from geraete import services
-    anzahl = services.person_alle_zuruecknehmen(person, ausgefuehrt_von=request.user)
-    from django.contrib.messages import success as meldung_success
-    meldung_success(request, f"{anzahl} Gerät(e) zurückgenommen.")
-    return redirect(reverse("stammdaten:personen-detail", kwargs={"pk": pk}))
+    gerate = services.geraete_fuers_offboarding(person)
+    if request.POST.get("aktion") == "auswahl":
+        gewaehlt = set(request.POST.getlist("auswahl"))
+        gerate = [g for g in gerate if g.inventarnummer in gewaehlt]
+    lagerort = Ort.objects.filter(pk=request.POST.get("lager_ort") or None, typ=Ort.TYP_LAGER).first()
+    posten = [
+        {
+            "gerat": g,
+            "zustand_rueckgabe": request.POST.get(f"zustand-{g.inventarnummer}") or g.zustand,
+            "zubehoer_komplett": request.POST.get(f"zubehoer-{g.inventarnummer}", "ja"),
+            "maengel": request.POST.get(f"maengel-{g.inventarnummer}", ""),
+            "ziel": request.POST.get(f"ziel-{g.inventarnummer}", "lager"),
+            "lagerort": lagerort,
+        }
+        for g in gerate
+    ]
+    if not posten:
+        meldung_error(request, "Kein Gerät gewählt.")
+        return redirect(reverse("stammdaten:offboarding", kwargs={"pk": pk}))
+    try:
+        protokoll = services.geraete_zuruecknehmen(
+            person,
+            posten,
+            ausgefuehrt_von=request.user,
+            unterschrift=request.POST.get("unterschrift") or "tool",
+            empfaenger=request.POST.get("empfaenger", ""),
+        )
+    except services.GeratFehler as fehler:
+        meldung_error(request, str(fehler))
+        return redirect(reverse("stammdaten:offboarding", kwargs={"pk": pk}))
+    meldung_success(request, f"{len(posten)} Gerät(e) zurückgenommen, Protokoll {protokoll.nr}.")
+    return redirect(f"/protokolle/{protokoll.nr}/")
 
 
 def austritt_eintragen(request, pk):

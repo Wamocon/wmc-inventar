@@ -8,7 +8,7 @@
   </div>
 </div>
 <div data-test="dialog" data-name="ausmustern">
-  <form method="post" novalidate data-test="ausmusterung-formular">
+  <form method="post" novalidate enctype="multipart/form-data" data-test="ausmusterung-formular">
     {% csrf_token %}
     <div class="meldungen">
       {% include "fragmente/fehler.html" %}
