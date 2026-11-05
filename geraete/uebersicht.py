@@ -47,6 +47,20 @@ def uebersicht(request):
         {**kz, "delta": delta.get(kz["data_id"]), "delta_abs": abs(delta.get(kz["data_id"], 0) or 0)}
         for kz in _kz.kennzahlen(heute)
     ]
+    # Bestand nach Status (Prototyp: stock-bar)
+    from .models import Gerat
+    _STATUS_ORDNUNG = (
+        (Gerat.STATUS_IN_BENUTZUNG, "In Benutzung"),
+        (Gerat.STATUS_VERLIEHEN, "Verliehen"),
+        (Gerat.STATUS_AUF_LAGER, "Auf Lager"),
+        (Gerat.STATUS_IN_REPARATUR, "In Reparatur"),
+    )
+    status_zahlen = [
+        {"code": code, "label": label, "zahl": _kz._aktive_geraete().filter(status=code).count()}
+        for code, label in _STATUS_ORDNUNG
+    ]
+    aktive_zahl = sum(e["zahl"] for e in status_zahlen)
+    archiv_zahl = Gerat.objects.filter(status=Gerat.STATUS_AUSGEMUSTERT).count()
     return render(
         request,
         "uebersicht.html",
@@ -55,6 +69,9 @@ def uebersicht(request):
             "kennzahlen": kennzahlen,
             "arbeitslisten": _kz.arbeitslisten(heute),
             "inventarwert": _kz.inventarwert(),
+            "status_zahlen": status_zahlen,
+            "aktive_zahl": aktive_zahl,
+            "archiv_zahl": archiv_zahl,
         },
     )
 

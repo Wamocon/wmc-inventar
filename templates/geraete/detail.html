@@ -149,68 +149,25 @@
 
 {% if ist_admin %}
   {% if gerat.status == "auf-lager" %}
-  <div class="abschnitt" data-test="lebenszyklus">
-    <h2>Lebenszyklus</h2>
-    <p class="muted">Gerät ausgeben, umziehen, reparieren oder ausmustern.</p>
-    <div class="liste">
-      <div class="zeile">
-        <strong>Ausgabe</strong>
-        <a href="/geraete/{{ gerat.inventarnummer }}/ausgeben/" class="btn" data-test="aktion-ausgabe">Ausgeben</a>
-      </div>
-      <div class="zeile">
-        <strong>Verleih</strong>
-        <a href="/geraete/{{ gerat.inventarnummer }}/verleih/" class="btn" data-test="aktion-verleih">Verleihen</a>
-      </div>
-      <div class="zeile">
-        <strong>Umziehen</strong>
-        <a href="/geraete/{{ gerat.inventarnummer }}/umziehen/" class="btn" data-test="aktion-umzug">Umziehen</a>
-      </div>
-      <div class="zeile">
-        <strong>Reparatur starten</strong>
-        <a href="/geraete/{{ gerat.inventarnummer }}/reparatur/start/" class="btn" data-test="aktion-reparatur">Reparatur starten</a>
-      </div>
-      <div class="zeile">
-        <strong>Ausmustern</strong>
-        <a href="/geraete/{{ gerat.inventarnummer }}/ausmustern/" class="btn" data-test="aktion-ausmustern">Ausmustern</a>
-      </div>
-    </div>
+  <div class="actions" data-test="lebenszyklus">
+    <a href="/geraete/{{ gerat.inventarnummer }}/ausgeben/" class="btn primary" data-test="aktion-ausgabe">Ausgeben</a>
+    <a href="/geraete/{{ gerat.inventarnummer }}/verleih/" class="btn" data-test="aktion-verleih">Verleihen</a>
+    <a href="/geraete/{{ gerat.inventarnummer }}/umziehen/" class="btn" data-test="aktion-umzug">Umziehen</a>
+    <a href="/geraete/{{ gerat.inventarnummer }}/reparatur/start/" class="btn" data-test="aktion-reparatur">Reparatur starten</a>
+    <a href="/geraete/{{ gerat.inventarnummer }}/ausmustern/" class="btn" data-test="aktion-ausmustern">Ausmustern</a>
   </div>
   {% elif gerat.status == "in-benutzung" %}
-  <div class="abschnitt" data-test="lebenszyklus">
-    <h2>Lebenszyklus</h2>
-    <p class="muted">Gerät zurückgeben oder umziehen.</p>
-    <div class="liste">
-      <div class="zeile">
-        <strong>Rückgabe</strong>
-        <a href="/geraete/{{ gerat.inventarnummer }}/rueckgeben/" class="btn" data-test="aktion-rueckgabe">Rückgabe</a>
-      </div>
-      <div class="zeile">
-        <strong>Umziehen</strong>
-        <a href="/geraete/{{ gerat.inventarnummer }}/umziehen/" class="btn" data-test="aktion-umzug">Umziehen</a>
-      </div>
-    </div>
+  <div class="actions" data-test="lebenszyklus">
+    <a href="/geraete/{{ gerat.inventarnummer }}/rueckgeben/" class="btn primary" data-test="aktion-rueckgabe">Rückgabe</a>
+    <a href="/geraete/{{ gerat.inventarnummer }}/umziehen/" class="btn" data-test="aktion-umzug">Umziehen</a>
   </div>
   {% elif gerat.status == "verliehen" %}
-  <div class="abschnitt" data-test="lebenszyklus">
-    <h2>Lebenszyklus</h2>
-    <p class="muted">Gerät zurückgeben.</p>
-    <div class="liste">
-      <div class="zeile">
-        <strong>Rückgabe</strong>
-        <a href="/geraete/{{ gerat.inventarnummer }}/rueckgeben/" class="btn" data-test="aktion-rueckgabe">Rückgabe</a>
-      </div>
-    </div>
+  <div class="actions" data-test="lebenszyklus">
+    <a href="/geraete/{{ gerat.inventarnummer }}/rueckgeben/" class="btn primary" data-test="aktion-rueckgabe">Rückgabe</a>
   </div>
   {% elif gerat.status == "in-reparatur" %}
-  <div class="abschnitt" data-test="lebenszyklus">
-    <h2>Lebenszyklus</h2>
-    <p class="muted">Reparatur abschließen.</p>
-    <div class="liste">
-      <div class="zeile">
-        <strong>Reparatur abschließen</strong>
-        <a href="/geraete/{{ gerat.inventarnummer }}/reparatur/fertig/" class="btn" data-test="aktion-reparatur-abschliessen">Reparatur abschließen</a>
-      </div>
-    </div>
+  <div class="actions" data-test="lebenszyklus">
+    <a href="/geraete/{{ gerat.inventarnummer }}/reparatur/fertig/" class="btn primary" data-test="aktion-reparatur-abschliessen">Reparatur abschließen</a>
   </div>
   {% endif %}
 {% endif %}

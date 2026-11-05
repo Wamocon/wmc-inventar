@@ -221,3 +221,53 @@ form .actions{margin-top:8px}
 .seg-btn.aktiv{background:var(--btn);color:var(--on-btn);border-color:var(--btn)}
 .plan-orte .orte.raum{border-style:dashed;background:var(--surface-2);padding:3px 8px;min-height:24px;font-size:11px}
 .plan-orte .orte.raum .raum-name{font-size:11px;font-weight:600;max-width:100px;overflow:hidden;text-overflow:ellipsis}
+
+/* Bestand nach Status (Prototyp: stock) */
+.stock{margin-bottom:24px}
+.stock-bar{display:flex;height:10px;border-radius:999px;overflow:hidden;background:var(--surface-2);margin-bottom:10px}
+.stock-segment{display:block;height:100%}
+.stock-segment.in-benutzung{background:var(--signal)}
+.stock-segment.verliehen{background:var(--red)}
+.stock-segment.auf-lager{background:var(--ok)}
+.stock-segment.in-reparatur{background:var(--info)}
+.stock-legend{display:flex;flex-wrap:wrap;gap:14px;list-style:none;margin:0 0 8px;padding:0;font-size:12px;font-weight:500}
+.stock-legend li{display:flex;align-items:center;gap:6px}
+.stock-legend b{font-weight:700}
+.stock-dot{display:inline-block;width:10px;height:10px;border-radius:50%}
+.stock-dot.in-benutzung{background:var(--signal)}
+.stock-dot.verliehen{background:var(--red)}
+.stock-dot.auf-lager{background:var(--ok)}
+.stock-dot.in-reparatur{background:var(--info)}
+.stock-meta{display:flex;flex-wrap:wrap;gap:16px;font-size:12px;color:var(--fg-2);margin:0}
+.stock-meta b{font-weight:700;color:var(--fg)}
+
+/* Übersicht: Kennzahlen links, Arbeitslisten rechts */
+.dash{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:24px;align-items:start}
+@media(max-width:900px){.dash{grid-template-columns:1fr}}
+
+/* Arbeitslisten-Karten */
+.worklists{display:flex;flex-direction:column;gap:16px}
+.worklist{border:1px solid var(--line);border-radius:6px;background:var(--surface);overflow:hidden}
+.worklist-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--surface-2)}
+.worklist-head h3{font-size:14px;font-weight:700;margin:0;display:flex;align-items:center;gap:8px}
+.worklist-head .count{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-size:12px;font-weight:700}
+.worklist-head .actions{display:flex;gap:6px}
+.worklist-items{list-style:none;margin:0;padding:0}
+.worklist-items li{border-bottom:1px solid var(--line)}
+.worklist-items li:last-child{border-bottom:0}
+.worklist-link{display:block;padding:10px 16px;text-decoration:none;font-size:13px;font-weight:600;color:var(--fg)}
+.worklist-link:hover{background:var(--surface-2);color:var(--red)}
+.worklist-sub{display:block;padding:0 16px 10px;font-size:12px;color:var(--fg-2)}
+
+/* Detail: Aktionen als Knöpfe in einer Reihe */
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 24px}
+.actions .btn{flex:none}
+
+/* Kennzahlen-Tabelle */
+table.ledger{width:100%;border-collapse:collapse}
+table.ledger tr{border-bottom:1px solid var(--line)}
+table.ledger tr:last-child{border-bottom:0}
+table.ledger td{padding:10px 12px;font-size:13px}
+table.ledger .k-name{font-weight:600}
+table.ledger .k-val{text-align:right;font-variant-numeric:tabular-nums}
+table.ledger .delta{text-align:right;font-size:12px;color:var(--fg-2)}
