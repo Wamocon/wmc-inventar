@@ -2,7 +2,7 @@
 {% block titel %}{{ person.nachname }} {{ person.vorname }} · WMC Inventar{% endblock %}
 {% block inhalt %}
 <div class="page-head">
-  <div><h1>{{ person.nachname }} {{ person.vorname }}</h1><p class="muted lead">Person (F-121)</p></div>
+  <div><h1>{{ person.nachname }} {{ person.vorname }}</h1><p class="muted lead">Person</p></div>
   {% if user.ist_admin %}<div class="actions">
     <a class="btn" href="/personen/{{ person.pk }}/aendern/" data-test="person-aendern">Ändern</a>
     <a class="btn" href="/personen/{{ person.pk }}/offboarding/" data-test="offboarding">Offboarding</a>
@@ -18,13 +18,25 @@
   <dt>Eintritt</dt><dd>{% if person.eintritt %}{{ person.eintritt|date:"d.m.Y" }}{% else %}—{% endif %}</dd>
   <dt>Austritt</dt><dd data-test="austritt">{% if person.austritt %}{{ person.austritt|date:"d.m.Y" }}{% else %}—{% endif %}</dd>
   <dt>Arbeitsplatz</dt><dd data-test="arbeitsplatz">{% for o in plaetze %}<a href="/arbeitsplaetze/{{ o.kennung }}/">{{ o.kennung }}</a>{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}</dd>
-  <dt>Anschrift</dt><dd>{{ person.anschrift|default:"—" }}</dd>
+  {% if user.ist_admin %}<dt>Anschrift</dt><dd>{{ person.anschrift|default:"—" }}</dd>{% endif %}
   <dt>Status</dt><dd>{% if person.aktiv %}aktiv{% else %}inaktiv{% endif %}</dd>
 </dl>
 {% if person.austritt and gerate %}
 <div class="meldung warning" data-test="austritt-hinweis">Austritt am {{ person.austritt|date:"d.m.Y" }}: {{ gerate|length }} Gerät(e) sind noch zugeordnet und müssen zurückkommen.</div>
 {% endif %}
 <div class="abschnitt">
+  {% if vorschlag %}
+  <div data-test="ausstattung-vorschlag">
+    <h2>Fehlt an {{ vorschlag.ort.kennung }}</h2>
+    <ul class="worklist">
+      {% for z in vorschlag.zeilen %}
+      <li data-test="vorschlag-zeile" data-id="{{ z.kategorie.name }}"><span class="what">{{ z.anzahl }} × {{ z.kategorie.name }}</span>
+        <span>{% for g in z.geraete %}<a class="inv" href="/geraete/{{ g.inventarnummer }}/">{{ g.inventarnummer }}</a>{% if not forloop.last %}, {% endif %}{% empty %}<span class="muted">nichts auf Lager</span>{% endfor %}</span></li>
+      {% endfor %}
+    </ul>
+    {% if vorschlag.nummern %}<p class="actions"><a class="btn primary" href="/geraete/sammelausgabe/?{{ vorschlag.abfrage }}" data-test="vorschlag-ausgeben">Vorschlag ausgeben</a></p>{% endif %}
+  </div>
+  {% endif %}
   <h2>Zugewiesene Geräte</h2>
   {% if gerate %}
   <div class="liste" data-test="person-geraete">

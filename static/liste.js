@@ -4,7 +4,7 @@
   var formular = document.querySelector('[data-test="etiketten-formular"]');
   if (!formular) return;
   var alle = formular.querySelector('[data-test="auswahl-alle"]');
-  var knoepfe = formular.querySelectorAll('[data-test="etiketten-drucken"],[data-test="etiketten-vorschau"]');
+  var knoepfe = formular.querySelectorAll('[data-test="etiketten-drucken"],[data-test="etiketten-vorschau"],[data-test="sammel-ausgabe"]');
   var anzahl = formular.querySelector('[data-test="auswahl-anzahl"]');
   var leiste = formular.querySelector('.bulk');
   var felder = formular.querySelectorAll('[data-test="auswahl"]');

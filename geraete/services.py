@@ -137,7 +137,7 @@ def gerat_anlegen(
         zustand_ungeprueft=zustand_ungeprueft,
         kaufdatum_nicht_ermittelbar=kaufdatum_nicht_ermittelbar,
         garantie_nicht_ermittelbar=garantie_nicht_ermittelbar,
-        erstellt_am=timezone.now(),
+        erstellt_am=jetzt_aware(),
         erstellt_von=erzeugt_von,
     )
     erstellten = gerat.erstellt_am
@@ -217,10 +217,10 @@ def ausgabe_sperrgrund(gerat: Gerat) -> str:
     if gerat.alle_protokolle().filter(stand=Protokoll.STAND_BEARBEITER_OFFEN).exists():
         return (
             "Für dieses Gerät steht bereits ein offenes Protokoll. "
-            "Eine weitere Ausgabe ist solange nicht möglich (F-21)."
+            "Eine weitere Ausgabe ist solange nicht möglich."
         )
     if _gerat_ist_reserviert(gerat):
-        return "Gerät ist reserviert und kann nicht ausgegeben werden (F-20)."
+        return "Gerät ist reserviert und kann nicht ausgegeben werden."
     return ""
 
 
@@ -310,7 +310,7 @@ def geraete_ausgeben(
         Vorgang.objects.create(
             gerat=gerat,
             typ=Vorgang.TYP_AUSGABE,
-            zeitpunkt=timezone.now(),
+            zeitpunkt=jetzt_aware(),
             erzeugt_von=ausgefuehrt_von,
             leihgabe_an=person,
             notiz=_ausgabe_notiz(protokoll.nr if protokoll else "", position),
@@ -445,11 +445,11 @@ def ausmustern(
         )
     if gerat.kategorie.hat_datentraeger and not verloren:
         if not loeschung_art:
-            raise GeratFehler("Art der Löschung muss angegeben werden (F-56).")
+            raise GeratFehler("Art der Löschung muss angegeben werden.")
         if not loeschung_nachweis and not loeschung_datei:
-            raise GeratFehler("Nachweis der Löschung muss angegeben werden (F-56).")
+            raise GeratFehler("Nachweis der Löschung muss angegeben werden.")
     if verloren and not bestaetigt_gemeldt:
-        raise GeratFehler("Pflichtbestätigung, dass der Vorfall gemeldet wurde (F-57).")
+        raise GeratFehler("Pflichtbestätigung, dass der Vorfall gemeldet wurde.")
 
     teile = []
     if not verloren and loeschung_art:
@@ -466,7 +466,7 @@ def ausmustern(
     vorgang = Vorgang(
         gerat=gerat,
         typ=Vorgang.TYP_AUSMUSTERUNG,
-        zeitpunkt=timezone.now(),
+        zeitpunkt=jetzt_aware(),
         erzeugt_von=ausgefuehrt_von,
         ausmusterung_grund=grund,
         ausmusterung_datum=datum,
@@ -504,7 +504,7 @@ def _nachweis_pruefen(datei) -> tuple:
     endung = _ANHANG_ENDUNGEN.get(_typ_am_inhalt(roh) or "")
     if endung is None:
         raise GeratFehler("Nachweis nicht erlaubt: PDF, JPG oder PNG bis 10 MB.")
-    return f"nachweis-{timezone.now():%Y%m%d-%H%M%S}{endung}", ContentFile(roh)
+    return f"nachweis-{jetzt_aware():%Y%m%d-%H%M%S}{endung}", ContentFile(roh)
 
 
 def standard_lager() -> Ort | None:
@@ -621,7 +621,7 @@ def geraete_zuruecknehmen(
         Vorgang.objects.create(
             gerat=gerat,
             typ=Vorgang.TYP_RUECKGABE,
-            zeitpunkt=timezone.now(),
+            zeitpunkt=jetzt_aware(),
             erzeugt_von=ausgefuehrt_von,
             notiz=", ".join(teile),
             protokoll=protokoll,
@@ -653,7 +653,7 @@ def gerat_rueckgeben(
     if gerat.status not in (Gerat.STATUS_IN_BENUTZUNG, Gerat.STATUS_VERLIEHEN):
         raise GeratFehler("Nur Geräte in Benutzung oder verliehen können zurückgegeben werden.")
     if fehlend:
-        raise GeratFehler("Ein fehlendes Gerät läuft über den Dialog Ausmustern mit Grund „verloren“ (F-50).")
+        raise GeratFehler("Ein fehlendes Gerät läuft über den Dialog Ausmustern mit Grund „verloren“.")
     geraete_zuruecknehmen(
         gerat.person,
         [{
@@ -690,7 +690,7 @@ def _offboarding_vorbelegung(gerat: Gerat, person: Person, konto: Konto | None =
     schluessel = [k for k, _text in Protokoll.OFFBOARDING_PUNKTE]
     erledigt = {
         "status": "erledigt",
-        "datum": timezone.now().strftime("%d.%m.%Y"),
+        "datum": jetzt_aware().strftime("%d.%m.%Y"),
         "kuerzel": _bearbeiter_kuerzel(konto),
         "bemerkung": "",
     }
@@ -764,7 +764,7 @@ def gerat_in_reparatur_geschickt(
     Vorgang.objects.create(
         gerat=gerat,
         typ=Vorgang.TYP_REPARATUR,
-        zeitpunkt=timezone.now(),
+        zeitpunkt=jetzt_aware(),
         erzeugt_von=ausgefuehrt_von,
         reperatur_anleitung=f"Dienstleister: {dienstleister}, Vorgangsnummer: {vorgangsnummer}, Notiz: {notiz}",
         abschliesst=False,
@@ -810,7 +810,7 @@ def gerat_reparatur_fertig(
     Vorgang.objects.create(
         gerat=gerat,
         typ=Vorgang.TYP_REPARATUR,
-        zeitpunkt=timezone.now(),
+        zeitpunkt=jetzt_aware(),
         erzeugt_von=ausgefuehrt_von,
         reparatur_kosten=kosten,
         reparatur_beleg=beleg,
@@ -869,7 +869,7 @@ def gerat_bearbeiten(
             Vorgang.objects.create(
                 gerat=gerat,
                 typ=Vorgang.TYP_AENDERUNG,
-                zeitpunkt=timezone.now(),
+                zeitpunkt=jetzt_aware(),
                 erzeugt_von=erzeugt_von,
                 aenderung_feld=name,
                 aenderung_alter_wert=alter,
@@ -954,7 +954,7 @@ def gerat_pruefen(gerat: Gerat, geprueft_von: Konto) -> Gerat:
         typ=Vorgang.TYP_AENDERUNG,
         zeitpunkt=jetzt,
         erzeugt_von=geprueft_von,
-        notiz="Geprüft bei der Erstinventur (F-89).",
+        notiz="Geprüft bei der Erstinventur.",
         abschliesst=True,
     )
     return gerat
@@ -1003,7 +1003,7 @@ def konflikt_anlegen(
     return GeratKonflikt.objects.create(
         gerat=gerat, feld=feld, alter_wert=alter_wert,
         neuer_wert=neuer_wert, herkunft=herkunft, offen=True,
-        erzeugt_am=timezone.now(),
+        erzeugt_am=jetzt_aware(),
     )
 
 
@@ -1145,6 +1145,33 @@ def geraete_fuers_offboarding(person: Person) -> list[Gerat]:
             status__in=[Gerat.STATUS_IN_BENUTZUNG, Gerat.STATUS_VERLIEHEN, Gerat.STATUS_IN_REPARATUR],
         ).select_related("kategorie").order_by("inventarnummer")
     )
+
+
+def vorschlag_fuer_person(person: Person) -> dict | None:
+    """F-24: Was dem festen Arbeitsplatz der Person laut Profil fehlt, mit freien Geräten vom Lager."""
+    ort = person.feste_plaetze.filter(typ=Ort.TYP_ARBEITSPLATZ).order_by("kennung").first()
+    if ort is None:
+        return None
+    zeilen, nummern = [], []
+    for kategorie, anzahl in soll_ist_abgleich(ort)["fehlend"]:
+        frei = []
+        lager = Gerat.objects.filter(
+            status=Gerat.STATUS_AUF_LAGER, kategorie=kategorie, leihpool=False,
+        ).order_by("inventarnummer")
+        for gerat in lager:
+            if len(frei) == anzahl:
+                break
+            if not ausgabe_sperrgrund(gerat):
+                frei.append(gerat)
+        zeilen.append({"kategorie": kategorie, "anzahl": anzahl, "geraete": frei})
+        nummern += [g.inventarnummer for g in frei]
+    if not zeilen:
+        return None
+    from urllib.parse import urlencode
+    abfrage = urlencode(
+        [("auswahl", n) for n in nummern] + [("person", person.pk), ("ort", ort.pk)]
+    )
+    return {"ort": ort, "zeilen": zeilen, "nummern": nummern, "abfrage": abfrage}
 
 
 def soll_zahlen(ort: Ort) -> list[tuple[Kategorie, int]]:
@@ -1683,14 +1710,14 @@ def leih_gerat_ausgeben(
         raise GeratFehler(f"Gerät ist nicht auf Lager (Status: {gerat.status}).")
 
     if _gerat_ist_reserviert(gerat):
-        raise GeratFehler("Gerät ist reserviert und kann nicht verliehen werden (F-20).")
+        raise GeratFehler("Gerät ist reserviert und kann nicht verliehen werden.")
 
     if not zweck or not zweck.strip():
-        raise GeratFehler("Zweck ist Pflicht (F-30).")
+        raise GeratFehler("Zweck ist Pflicht.")
 
     heute = jetzt_wie_im_entwicklungsmodus().date()
     if rueckgabe_bis is None or rueckgabe_bis <= heute:
-        raise GeratFehler("Das Rückgabedatum muss nach heute liegen (F-30).")
+        raise GeratFehler("Das Rückgabedatum muss nach heute liegen.")
 
     # A-0128: Zweiter Verleih abgelehnt, solange ein Protokoll
     # auf "bearbeiter-offen" steht (F-30, F-33).
@@ -1699,7 +1726,7 @@ def leih_gerat_ausgeben(
     ).exists():
         raise GeratFehler(
             "Für dieses Gerät steht bereits ein offenes Protokoll. "
-            "Ein weiterer Verleih ist solange nicht möglich (F-30)."
+            "Ein weiterer Verleih ist solange nicht möglich."
         )
 
     im_tool = unterschrift == "tool"
@@ -1765,7 +1792,7 @@ def _leihe_ausgabe_buchen(leihe: Leihe, ausgefuehrt_von: Konto | None) -> None:
         erzeugt_von=ausgefuehrt_von,
         leihgabe_an=leihe.person,
         zurueck_am=leihe.rueckgabe_bis,
-        notiz=leihe.zweck or "Leihgerät ausgegeben (F-33).",
+        notiz=leihe.zweck or "Leihgerät ausgegeben.",
         abschliesst=False,
     )
     _reservierung_nachziehen(gerat)
@@ -2103,7 +2130,7 @@ def leihe_anfragen(
     diese Anfrage ab (F-34).
     """
     if not zweck or not zweck.strip():
-        raise GeratFehler("Zweck ist Pflicht (F-31).")
+        raise GeratFehler("Zweck ist Pflicht.")
     if beginn > ende:
         raise GeratFehler("Das Enddatum muss am oder nach dem Startdatum liegen.")
     if beginn < jetzt_wie_im_entwicklungsmodus().date():
@@ -2118,7 +2145,7 @@ def leihe_anfragen(
         if _gerat_ist_reserviert(gerat, beginn, ende):
             raise GeratFehler(
                 "Das Gerät ist in diesem Zeitraum bereits für eine "
-                "Leihe reserviert (F-34)."
+                "Leihe reserviert."
             )
     with transaction.atomic():
         # Der Wunsch reserviert noch nichts, das tut erst die Genehmigung (Kapitel 4).
@@ -2164,12 +2191,12 @@ def leihe_genehmigen(
     if not _leihgeraet_einsetzbar(gerat):
         raise GeratFehler(
             f"Das Gerät steht auf „{gerat.status_anzeige}“ und kann nicht "
-            "zugewiesen werden (F-32)."
+            "zugewiesen werden."
         )
     if _gerat_ist_reserviert(gerat, leihe.beginn, leihe.ende, ohne=leihe):
         raise GeratFehler(
             "Das Gerät ist in diesem Zeitraum bereits für eine "
-            "Leihe reserviert (F-34)."
+            "Leihe reserviert."
         )
     with transaction.atomic():
         leihe.gerat = gerat
@@ -2185,7 +2212,7 @@ def leihe_genehmigen(
             typ=Vorgang.TYP_AENDERUNG,
             zeitpunkt=jetzt_wie_im_entwicklungsmodus(),
             erzeugt_von=ausgefuehrt_von,
-            notiz="Leihe genehmigt und Gerät reserviert (F-32).",
+            notiz="Leihe genehmigt und Gerät reserviert.",
             abschliesst=False,
         )
         # F-32: Mail an die Person
@@ -2207,7 +2234,7 @@ def leihe_ablehnen(
     if leihe.status != Leihe.STATUS_ANGEFRAGT:
         raise GeratFehler("Diese Leihe ist nicht angefragt.")
     if not begruendung or not begruendung.strip():
-        raise GeratFehler("Begründung ist Pflicht (F-32).")
+        raise GeratFehler("Begründung ist Pflicht.")
     with transaction.atomic():
         leihe.abgelehnt = True
         leihe.abgelehnt_bis = begruendung.strip()
@@ -2231,7 +2258,7 @@ def leihe_ablehnen(
                 typ=Vorgang.TYP_AENDERUNG,
                 zeitpunkt=jetzt_wie_im_entwicklungsmodus(),
                 erzeugt_von=ausgefuehrt_von,
-                notiz="Leihe abgelehnt (F-32).",
+                notiz="Leihe abgelehnt.",
                 abschliesst=False,
             )
         # F-32: Mail an die Person
@@ -2253,7 +2280,7 @@ def leihe_zurueckziehen(
     if not leihe.ist_zurueckziehbar():
         raise GeratFehler(
             "Diese Leihe ist nicht zurückziehbar – sie ist ausgegeben "
-            "(F-37)."
+            "."
         )
     with transaction.atomic():
         leihe.status = Leihe.STATUS_ZURUECKGEZOGEN
@@ -2269,7 +2296,7 @@ def leihe_zurueckziehen(
                 typ=Vorgang.TYP_AENDERUNG,
                 zeitpunkt=jetzt_wie_im_entwicklungsmodus(),
                 erzeugt_von=ausgefuehrt_von,
-                notiz="Leihe zurückgezogen, Reservierung aufgehoben (F-37).",
+                notiz="Leihe zurückgezogen, Reservierung aufgehoben.",
                 abschliesst=False,
             )
         return leihe
@@ -2319,7 +2346,7 @@ def leihe_ausgeben(
     from django.db import transaction
 
     if leihe.status != Leihe.STATUS_GENEHMIGT:
-        raise GeratFehler("Diese Leihe ist nicht genehmigt (F-33).")
+        raise GeratFehler("Diese Leihe ist nicht genehmigt.")
 
     if leihe.gerat_id is None:
         raise GeratFehler("Die Leihe hat kein Gerät zugewiesen.")
@@ -2329,7 +2356,7 @@ def leihe_ausgeben(
         raise GeratFehler(f"Gerät ist nicht auf Lager (Status: {gerat.status}).")
 
     if not gerat.leihpool:
-        raise GeratFehler("Gerät steht nicht im Leihpool (F-33).")
+        raise GeratFehler("Gerät steht nicht im Leihpool.")
 
     rueckgabe_bis = leihe.rueckgabe_bis
     if rueckgabe_bis is None:
@@ -2338,19 +2365,19 @@ def leihe_ausgeben(
     if rueckgabe_bis < jetzt_wie_im_entwicklungsmodus().date():
         raise GeratFehler(
             "Das Rückgabedatum liegt in der Vergangenheit; die Leihe wäre "
-            "sofort überfällig (F-33)."
+            "sofort überfällig."
         )
 
     # Eine andere Leihe im Zeitraum (F-20, F-34); spätere Reservierungen stören nicht.
     if _gerat_ist_reserviert(gerat, leihe.beginn or rueckgabe_bis, rueckgabe_bis, ohne=leihe):
-        raise GeratFehler("Gerät ist für eine andere Leihe reserviert und kann nicht ausgegeben werden (F-20).")
+        raise GeratFehler("Gerät ist für eine andere Leihe reserviert und kann nicht ausgegeben werden.")
 
     if Protokoll.objects.filter(
         geraet=gerat, stand=Protokoll.STAND_BEARBEITER_OFFEN
     ).exists():
         raise GeratFehler(
             "Für dieses Gerät steht bereits ein offenes Protokoll. "
-            "Die Ausgabe ist solange nicht möglich (F-33)."
+            "Die Ausgabe ist solange nicht möglich."
         )
 
     person = leihe.person
@@ -2392,13 +2419,13 @@ def leihe_verlaengerung_anfragen(
     geht sofort, wie bei der Anfrage selbst (F-93).
     """
     if leihe.status != Leihe.STATUS_AUSGEGEBEN:
-        raise GeratFehler("Eine Verlängerung gibt es nur für ausgegebene Leihen (F-35).")
+        raise GeratFehler("Eine Verlängerung gibt es nur für ausgegebene Leihen.")
     if leihe.verlaengerung_bis is not None:
-        raise GeratFehler("Für diese Leihe ist schon eine Verlängerung angefragt (F-35).")
+        raise GeratFehler("Für diese Leihe ist schon eine Verlängerung angefragt.")
     if rueckgabe_bis_neu <= leihe.rueckgabe_bis:
-        raise GeratFehler("Neues Rückgabedatum muss nach dem alten liegen (F-35).")
+        raise GeratFehler("Neues Rückgabedatum muss nach dem alten liegen.")
     if rueckgabe_bis_neu <= jetzt_wie_im_entwicklungsmodus().date():
-        raise GeratFehler("Das Datum muss nach heute liegen (F-35).")
+        raise GeratFehler("Das Datum muss nach heute liegen.")
     leihe.verlaengerung_bis = rueckgabe_bis_neu
     leihe.save(update_fields=["verlaengerung_bis"])
     _mail_verlaengerung_an_it(leihe)
@@ -2429,7 +2456,7 @@ def leihe_verlaengern(
     from django.db import transaction
 
     if leihe.status != Leihe.STATUS_AUSGEGEBEN:
-        raise GeratFehler("Diese Leihe ist nicht ausgegeben (F-35).")
+        raise GeratFehler("Diese Leihe ist nicht ausgegeben.")
 
     gerat = leihe.gerat
     if gerat is None:
@@ -2437,10 +2464,10 @@ def leihe_verlaengern(
 
     altes_rueckgabe_bis = leihe.rueckgabe_bis
     if rueckgabe_bis_neu <= altes_rueckgabe_bis:
-        raise GeratFehler("Neues Rückgabedatum muss nach dem alten liegen (F-35).")
+        raise GeratFehler("Neues Rückgabedatum muss nach dem alten liegen.")
 
     if rueckgabe_bis_neu <= jetzt_wie_im_entwicklungsmodus().date():
-        raise GeratFehler("Das Datum muss nach heute liegen (F-35).")
+        raise GeratFehler("Das Datum muss nach heute liegen.")
 
     # Die ganze hinzukommende Zeit muss frei sein, nicht nur der Zieltag (F-35).
     folge = _belegende_leihen(
@@ -2450,7 +2477,7 @@ def leihe_verlaengern(
         beginn = folge[0].beginn.strftime("%d.%m.%Y") if folge[0].beginn else "sofort"
         raise GeratFehler(
             f"Verlängerung abgelehnt: Ab {beginn} ist das Gerät für "
-            f"{folge[0].person.voller_name()} reserviert (F-35)."
+            f"{folge[0].person.voller_name()} reserviert."
         )
 
     with transaction.atomic():
@@ -2468,7 +2495,7 @@ def leihe_verlaengern(
             aenderung_feld="rueckgabe_bis",
             aenderung_alter_wert=altes_rueckgabe_bis.strftime("%d.%m.%Y"),
             aenderung_neuer_wert=rueckgabe_bis_neu.strftime("%d.%m.%Y"),
-            notiz="Verlängerung der Leihe (F-35).",
+            notiz="Verlängerung der Leihe.",
             abschliesst=False,
         )
         _mail_verlaengerung_an_person(leihe)

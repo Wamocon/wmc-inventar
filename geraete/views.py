@@ -20,6 +20,8 @@ from django.db.models import Q
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+
+from konten.zeit import jetzt_aware
 from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_POST
 
@@ -839,7 +841,7 @@ def ort_pruefen(request, kennung: str):
     ort = get_object_or_404(
         Ort.objects.filter(typ=Ort.TYP_ARBEITSPLATZ), kennung=kennung
     )
-    ort.aktualisiert_am = timezone.now()
+    ort.aktualisiert_am = jetzt_aware()
     ort.save(update_fields=["aktualisiert_am"])
     meldung_success(request, f"Ort {ort.kennung} als geprüft markiert.")
     return redirect("/arbeitsplaetze/" + kennung + "/")
@@ -1069,18 +1071,20 @@ def sammelausgabe(request):
     if not _darf_ändern(request.user):
         raise PermissionDenied("Zugriff verweigert: Vorgänge macht die IT.")
     daten = request.POST if request.method == "POST" else request.GET
+    # Aus der Geräteliste kommt nur die Auswahl, ausgefüllt wird danach.
+    nur_auswahl = request.POST.get("aktion") == "waehlen"
     gewaehlt = list(
         Gerat.objects.filter(inventarnummer__in=daten.getlist("auswahl"))
         .select_related("kategorie").order_by("inventarnummer")
     )
     geraete = [g for g in gewaehlt if not services.ausgabe_sperrgrund(g)]
     gesperrt = [(g, services.ausgabe_sperrgrund(g)) for g in gewaehlt if services.ausgabe_sperrgrund(g)]
-    form = GeratAusgabeForm(request.POST or None, initial={
+    form = GeratAusgabeForm(None if nur_auswahl else (request.POST or None), initial={
         "ziel_person": request.GET.get("person"), "ziel_ort": request.GET.get("ort"),
     })
     # Die Zeilen tragen Zustand, Zubehör und Bemerkung je Gerät, nicht die Felder des Einzeldialogs.
     del form.fields["zustand"], form.fields["zubehoer_komplett"], form.fields["anmerkung"]
-    if request.method == "POST" and form.is_valid():
+    if request.method == "POST" and not nur_auswahl and form.is_valid():
         ziel_person = form.cleaned_data.get("ziel_person")
         ziel_ort = form.cleaned_data.get("ziel_ort")
         eingaben = {
@@ -1874,7 +1878,7 @@ def meine_geraete_leihe_verlaengern(request, leih_id):
 
     form = LeiheVerlaengerungAnfragenForm(request.POST)
     if not form.is_valid():
-        meldung_error(request, "Bitte das neue Rückgabedatum angeben (F-35).")
+        meldung_error(request, "Bitte das neue Rückgabedatum angeben.")
         return redirect("/meine-geraete/")
     try:
         leihe_verlaengerung_anfragen(leihe, form.cleaned_data["rueckgabe_bis_neu"])
@@ -2255,7 +2259,7 @@ def protokoll_checkliste_beantworten(request, protokoll_nr):
     except services.GeratFehler as fehler:
         meldung_error(request, str(fehler))
     else:
-        meldung_success(request, "Checkliste gespeichert (F-132).")
+        meldung_success(request, "Checkliste gespeichert.")
     return redirect(f"/protokolle/{protokoll_nr}/")
 
 
@@ -2294,7 +2298,7 @@ def protokoll_offboarding_beantworten(request, protokoll_nr):
     except services.GeratFehler as fehler:
         meldung_error(request, str(fehler))
     else:
-        meldung_success(request, "Prüfpunkte gespeichert (F-133).")
+        meldung_success(request, "Prüfpunkte gespeichert.")
     return redirect(f"/protokolle/{protokoll_nr}/")
 
 
@@ -2313,7 +2317,7 @@ def protokoll_foto_hochladen(request, protokoll_nr):
 
     datei = request.FILES.get("foto")
     if datei is None:
-        meldung_error(request, "Kein Foto übergeben (F-134).")
+        meldung_error(request, "Kein Foto übergeben.")
         return redirect(f"/protokolle/{protokoll_nr}/")
     try:
         protokoll_services.foto_hochladen(
@@ -2322,7 +2326,7 @@ def protokoll_foto_hochladen(request, protokoll_nr):
     except services.GeratFehler as fehler:
         meldung_error(request, str(fehler))
     else:
-        meldung_success(request, "Foto als Anlage gespeichert (F-134).")
+        meldung_success(request, "Foto als Anlage gespeichert.")
     return redirect(f"/protokolle/{protokoll_nr}/")
 
 
@@ -2340,14 +2344,14 @@ def protokoll_scan_hochladen(request, protokoll_nr):
 
     datei = request.FILES.get("scan")
     if datei is None:
-        meldung_error(request, "Kein Scan übergeben (F-22).")
+        meldung_error(request, "Kein Scan übergeben.")
         return redirect(f"/protokolle/{protokoll_nr}/")
     try:
         protokoll_services.scan_hochladen(protokoll, datei, request.user)
     except services.GeratFehler as fehler:
         meldung_error(request, str(fehler))
     else:
-        meldung_success(request, "Scan hochgeladen, Protokoll abgeschlossen (F-22).")
+        meldung_success(request, "Scan hochgeladen, Protokoll abgeschlossen.")
     return redirect(f"/protokolle/{protokoll_nr}/")
 
 
@@ -2408,7 +2412,7 @@ def protokoll_signieren(request, protokoll_nr: str):
 
     password = request.POST.get("passwort", "")
     if not password:
-        meldung_error(request, "Passwort fehlt (F-135).")
+        meldung_error(request, "Passwort fehlt.")
         return redirect(f"/protokolle/{protokoll_nr}/")
 
     try:
@@ -2428,16 +2432,16 @@ def protokoll_signieren(request, protokoll_nr: str):
             meldung_error(
                 request,
                 f"Die Checkliste ist noch nicht vollständig beantwortet "
-                f"({len(offene)} Punkte offen, F-132); die Signatur wird abgelehnt."
+                f"({len(offene)} Punkte offen); die Signatur wird abgelehnt."
             )
         else:
-            meldung_error(request, "Passwort ungültig (F-135).")
+            meldung_error(request, "Passwort ungültig.")
     elif not protokoll.gegenzeichnung_empfaenger:
         meldung_success(request, "Protokoll signiert. Für diese Person ist keine E-Mail hinterlegt: bitte eine Adresse eintragen oder vor Ort am Tablet gegenzeichnen.")
     elif getattr(protokoll, "mail_ging_nicht", False):
         meldung_error(request, "Protokoll signiert, die Mail ließ sich aber nicht senden. Bitte den Link neu senden oder vor Ort am Tablet gegenzeichnen.")
     else:
-        meldung_success(request, "Protokoll signiert. Mail mit Link gesendet (F-135, F-136).")
+        meldung_success(request, "Protokoll signiert. Mail mit Link gesendet.")
     return redirect(f"/protokolle/{protokoll_nr}/")
 
 
@@ -2494,12 +2498,12 @@ def protokoll_korrigieren(request, protokoll_nr: str):
 
     neue, erfolg = services.protokoll_korrigieren(protokoll, request.user)
     if not erfolg:
-        meldung_error(request, "Korrektur nicht möglich: Protokoll nicht signiert (F-135).")
+        meldung_error(request, "Korrektur nicht möglich: Protokoll nicht signiert.")
         return redirect(f"/protokolle/{protokoll_nr}/")
 
     meldung_success(
         request,
-        f"Neue Fassung {neue.nr} erzeugt (F-135)."
+        f"Neue Fassung {neue.nr} erzeugt."
     )
     return redirect(f"/protokolle/{neue.nr}/")
 
@@ -2566,7 +2570,7 @@ def signieren_code_senden(request, token: str):
             {
                 "protokoll": protokoll,
                 "token": token,
-                "meldung": "Code per Mail gesendet (F-136).",
+                "meldung": "Code per Mail gesendet.",
             },
         )
     return render(

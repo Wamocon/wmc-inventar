@@ -8,16 +8,16 @@ from .uploads import UploadFehler, datei_pruefen
 
 # F-96: Jede Mailart mit Schalter. Feld, Text, an wen und wann, Markierung.
 MAILARTEN = [
-    ("mail_leihe_endet_morgen", "Leihe endet morgen", "an Mitarbeiter, einmalig am Vortag (F-91)", "mail-leihe-endet-morgen"),
-    ("mail_leihe_ueberfaellig", "Leihe überfällig", "an Mitarbeiter und IT, täglich bis zur Rückgabe (F-92)", "mail-leihe-ueberfaellig"),
-    ("mail_verleih_anfrage", "Leihanfrage eingegangen", "an IT, sofort (F-93)", "mail-verleih-anfrage"),
-    ("mail_verleih_genehmigung", "Leihanfrage genehmigt", "an Mitarbeiter, sofort (F-93)", "mail-verleih-genehmigung"),
-    ("mail_verleih_ablehnung", "Leihanfrage abgelehnt", "an Mitarbeiter, sofort (F-93)", "mail-verleih-ablehnung"),
-    ("mail_garantie_sammelmail", "Garantie endet bald", "an IT, montags als Sammelmail (F-94)", "mail-garantie"),
-    ("mail_unterzeichen_sammelmail", "Unterschrift offen", "an IT, in der Sammelmail (F-95)", "mail-unterschrift"),
-    ("mail_protokoll_gesendet", "Link zur Gegenzeichnung", "an die Person, sobald der Bearbeiter signiert hat (F-136)", "mail-protokoll-gesendet"),
-    ("mail_gegenzeichnung_erinnerung", "Erinnerung an die Gegenzeichnung", "an die Person, am dritten Tag nach dem Versand (F-140)", "mail-gegenzeichnung-erinnerung"),
-    ("mail_protokoll_unterzeichnet", "Fertiges Protokoll", "an Person und Bearbeiter, nach der Gegenzeichnung (F-139)", "mail-protokoll-unterzeichnet"),
+    ("mail_leihe_endet_morgen", "Leihe endet morgen", "an Mitarbeiter, einmalig am Vortag", "mail-leihe-endet-morgen"),
+    ("mail_leihe_ueberfaellig", "Leihe überfällig", "an Mitarbeiter und IT, täglich bis zur Rückgabe", "mail-leihe-ueberfaellig"),
+    ("mail_verleih_anfrage", "Leihanfrage eingegangen", "an IT, sofort", "mail-verleih-anfrage"),
+    ("mail_verleih_genehmigung", "Leihanfrage genehmigt", "an Mitarbeiter, sofort", "mail-verleih-genehmigung"),
+    ("mail_verleih_ablehnung", "Leihanfrage abgelehnt", "an Mitarbeiter, sofort", "mail-verleih-ablehnung"),
+    ("mail_garantie_sammelmail", "Garantie endet bald", "an IT, montags als Sammelmail", "mail-garantie"),
+    ("mail_unterzeichen_sammelmail", "Unterschrift offen", "an IT, in der Sammelmail", "mail-unterschrift"),
+    ("mail_protokoll_gesendet", "Link zur Gegenzeichnung", "an die Person, sobald der Bearbeiter signiert hat", "mail-protokoll-gesendet"),
+    ("mail_gegenzeichnung_erinnerung", "Erinnerung an die Gegenzeichnung", "an die Person, am dritten Tag nach dem Versand", "mail-gegenzeichnung-erinnerung"),
+    ("mail_protokoll_unterzeichnet", "Fertiges Protokoll", "an Person und Bearbeiter, nach der Gegenzeichnung", "mail-protokoll-unterzeichnet"),
 ]
 
 
@@ -98,7 +98,7 @@ class EinstellungenForm(forms.ModelForm):
         }
         help_texts = {
             "smtp_passwort": "Leer lassen, wenn sich nichts geändert hat.",
-            "nutzungsbedingungen_version": "Neue Version gilt nur für neue Protokolle (F-130).",
+            "nutzungsbedingungen_version": "Neue Version gilt nur für neue Protokolle.",
         }
 
     def __init__(self, *args, **kwargs):
@@ -122,7 +122,7 @@ class EinstellungenForm(forms.ModelForm):
         if not datei:
             return None
         try:
-            art, daten = datei_pruefen(datei, ("png", "svg"), "Das Logo muss eine PNG- oder SVG-Datei sein (N-02).")
+            art, daten = datei_pruefen(datei, ("png", "svg"), "Das Logo muss eine PNG- oder SVG-Datei sein.")
         except UploadFehler as fehler:
             raise forms.ValidationError(str(fehler))
         return art, daten

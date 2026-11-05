@@ -4,7 +4,7 @@
 <div class="page-head">
   <div>
     <h1>Einstellungen</h1>
-    <p class="muted lead">Firmendaten, Protokolltexte, SMTP und Mailarten (F-122, F-90, F-96, F-130, N-02).</p>
+    <p class="muted lead">Firmendaten, Protokolltexte, SMTP und Mailarten.</p>
   </div>
   <div class="actions">
     <a class="btn" href="/kategorien/" data-test="einstellungen-kategorien">Kategorien</a>
@@ -24,7 +24,7 @@
   </div>
 
   <fieldset class="card">
-    <legend class="card-head"><h2>Firma und Absender (F-122)</h2></legend>
+    <legend class="card-head"><h2>Firma und Absender</h2></legend>
     <div class="form-grid">
       <div class="field">
         <label for="id_firmenname" class="req">Firmenname</label>
@@ -47,12 +47,12 @@
   </fieldset>
 
   <fieldset class="card">
-    <legend class="card-head"><h2>Logo (N-02)</h2></legend>
+    <legend class="card-head"><h2>Logo</h2></legend>
     <div class="form-grid">
       <div class="field">
         <label for="id_logo">Logo (PNG oder SVG)</label>
         <input type="file" id="id_logo" name="logo" accept=".png,.svg,image/png,image/svg+xml" data-test="logo">
-        <small class="help">Bis 10 MB. SVG wird nur als Bild eingebunden, nie als Inline-SVG (N-02).</small>
+        <small class="help">Bis 10 MB. SVG wird nur als Bild eingebunden, nie als Inline-SVG.</small>
         {% if einstellungen.logo %}
         <img class="logo-vorschau" src="/einstellungen/logo/" alt="Aktuelles Logo" data-test="logo-vorschau">
         {% endif %}
@@ -61,7 +61,7 @@
   </fieldset>
 
   <fieldset class="card">
-    <legend class="card-head"><h2>Protokolltexte (F-130)</h2></legend>
+    <legend class="card-head"><h2>Protokolltexte</h2></legend>
     <p class="muted small">Neue Version gilt nur für neue Protokolle. <code>{Firmenname}</code> im Text wird ersetzt.</p>
 
     <div class="field">
@@ -127,8 +127,8 @@
       <div class="field">
         <label for="id_etikettenformat">Etikettenformat</label>
         <select id="id_etikettenformat" name="etikettenformat" data-test="etikettenformat">
-          <option value="a4" {% if form.etikettenformat.value == "a4" %}selected{% endif %}>A4, 10 Etiketten je Seite</option>
-          <option value="a5" {% if form.etikettenformat.value == "a5" %}selected{% endif %}>A5, 10 Etiketten je Seite</option>
+          <option value="a4" {% if form.etikettenformat.value == "a4" %}selected{% endif %}>A4-Bogen, 24 Etiketten, 70 × 37 mm</option>
+          <option value="a5" {% if form.etikettenformat.value == "a5" %}selected{% endif %}>A5-Bogen, 10 Etiketten, 74 × 42 mm</option>
         </select>
       </div>
       <div class="field">
@@ -151,7 +151,7 @@
   </fieldset>
 
   <fieldset class="card">
-    <legend class="card-head"><h2>SMTP (F-90)</h2></legend>
+    <legend class="card-head"><h2>SMTP</h2></legend>
     <div class="form-grid">
       <div class="field">
         <label for="id_smtp_server">SMTP-Server</label>
@@ -191,7 +191,7 @@
   </fieldset>
 
   <fieldset class="card">
-    <legend class="card-head"><h2>Mailarten (F-96)</h2></legend>
+    <legend class="card-head"><h2>Mailarten</h2></legend>
     <p class="muted small">Eine abgeschaltete Mailart erzeugt keine Mail. Einmalcode, Einladung und Link zum Zurücksetzen des Passworts gehen immer raus, weil sonst niemand mehr hineinkommt.</p>
     <div class="form-grid">
       {% for art in form.mailarten %}

@@ -262,7 +262,7 @@ class Einstellungen(models.Model):
     # --- Etiketten ---
     etikettenformat = models.CharField(
         max_length=20, default="a4",
-        choices=[("a4", "A4, 10 Etiketten je Seite"), ("a5", "A5, 10 Etiketten je Seite")],
+        choices=[("a4", "A4-Bogen, 24 Etiketten, 70 × 37 mm"), ("a5", "A5-Bogen, 10 Etiketten, 74 × 42 mm")],
         verbose_name="Etikettenformat",
     )
 

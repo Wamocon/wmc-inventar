@@ -215,8 +215,17 @@ def personen_detail(request, pk):
             # F-64: fester Arbeitsplatz; Kapitel 6: Detail mit Geräten.
             "plaetze": person.feste_plaetze.order_by("kennung"),
             "gerate": _geraete_beim_austritt(person),
+            "vorschlag": _vorschlag(request, person),
         },
     )
+
+
+def _vorschlag(request, person):
+    """F-24: Vorschlag für die Ausstattung, nur für den Admin, der ausgeben darf."""
+    if not request.user.ist_admin:
+        return None
+    from geraete.services import vorschlag_fuer_person
+    return vorschlag_fuer_person(person)
 
 
 def _geraete_beim_austritt(person: Person) -> list:
@@ -538,7 +547,7 @@ def _grundriss_speichern(plan: Plan, datei) -> None:
     art, daten = datei_pruefen(
         datei,
         ("png", "jpg", "svg", "pdf"),
-        "Der Grundriss muss PNG, JPG, SVG oder ein PDF sein (F-67).",
+        "Der Grundriss muss PNG, JPG, SVG oder ein PDF sein.",
     )
     if art == "pdf":
         art, daten = "png", bild_aus_pdf(daten)

@@ -17,6 +17,8 @@ from datetime import datetime
 from django.core.files.base import ContentFile
 from django.utils import timezone
 
+from konten.zeit import jetzt_aware
+
 from konten.models import Konto
 
 from .models import Protokoll
@@ -81,7 +83,7 @@ def checkliste_beantworten(
     """
     if not _stand_beantwortbar(protokoll):
         raise GeratFehler(
-            "Die Checkliste ist für ein abgeschlossenes Protokoll gesperrt (F-22)."
+            "Die Checkliste ist für ein abgeschlossenes Protokoll gesperrt."
         )
     erlaubt = {schluessel for schluessel, _text in Protokoll.CHECKLISTE_PUNKTE}
     bereinigt: dict[str, int] = {}
@@ -91,7 +93,7 @@ def checkliste_beantworten(
         if wert in (0, 1):
             bereinigt[schluessel] = int(wert)
     if not bereinigt:
-        raise GeratFehler("Keine Antwort der Checkliste übergeben (F-132).")
+        raise GeratFehler("Keine Antwort der Checkliste übergeben.")
     protokoll.checkliste = {**(protokoll.checkliste or {}), **bereinigt}
     protokoll.checkliste_bemerkung = {
         **(protokoll.checkliste_bemerkung or {}),
@@ -112,7 +114,7 @@ def offboarding_abhaken(
     """
     if not _stand_beantwortbar(protokoll):
         raise GeratFehler(
-            "Die Prüfpunkte sind für ein abgeschlossenes Protokoll gesperrt (F-22)."
+            "Die Prüfpunkte sind für ein abgeschlossenes Protokoll gesperrt."
         )
     erlaubt = {schluessel for schluessel, _text in Protokoll.OFFBOARDING_PUNKTE}
     bereinigt: dict[str, bool] = {}
@@ -121,7 +123,7 @@ def offboarding_abhaken(
             continue
         bereinigt[schluessel] = bool(wert)
     if not bereinigt:
-        raise GeratFehler("Kein Prüfpunkt übergeben (F-133).")
+        raise GeratFehler("Kein Prüfpunkt übergeben.")
     protokoll.offboarding = {**(protokoll.offboarding or {}), **bereinigt}
     protokoll.save(update_fields=["offboarding"])
     return protokoll
@@ -148,15 +150,15 @@ def offboarding_beantworten(
     """
     if not _stand_beantwortbar(protokoll):
         raise GeratFehler(
-            "Die Prüfpunkte sind für ein abgeschlossenes Protokoll gesperrt (F-22)."
+            "Die Prüfpunkte sind für ein abgeschlossenes Protokoll gesperrt."
         )
     if protokoll.art != Protokoll.ART_RUECKNAHME:
         raise GeratFehler(
-            "Die Prüfpunkte IT-Offboarding gehören nur zu einem Rücknahmeprotokoll (F-133)."
+            "Die Prüfpunkte IT-Offboarding gehören nur zu einem Rücknahmeprotokoll."
         )
 
     erlaubt = {schluessel for schluessel, _text in Protokoll.OFFBOARDING_PUNKTE}
-    heute = timezone.now().date()
+    heute = jetzt_aware().date()
     bearbeiter_kuerzel = ""
     if ausgefuehrt_von is not None and getattr(ausgefuehrt_von, "person", None) is not None:
         bearbeiter_kuerzel = ausgefuehrt_von.person.kuerzel
@@ -182,7 +184,7 @@ def offboarding_beantworten(
             "bemerkung": bemerkung,
         }
     if not bereinigt:
-        raise GeratFehler("Kein Prüfpunkt übergeben (F-133).")
+        raise GeratFehler("Kein Prüfpunkt übergeben.")
 
     # Punkt 13 „Rückgabe im Hardware-Inventar dokumentiert" setzt das Tool
     # selbst (F-133): immer erledigt, unabhängig von der Eingabe.
@@ -276,17 +278,17 @@ def foto_hochladen(
     if not _stand_anhaenge_erlaubt(protokoll):
         raise GeratFehler(
             "Für ein abgeschlossenes Protokoll sind keine weiteren Anhänge "
-            "möglich (F-22)."
+            "möglich."
         )
     dateiname = getattr(datei, "name", "") or ""
     roh = datei.read(MAX_FOTO_GROESSE + 1)
     if len(roh) > MAX_FOTO_GROESSE:
-        raise GeratFehler("Das Foto ist größer als 10 MB (F-134).")
+        raise GeratFehler("Das Foto ist größer als 10 MB.")
     content_type = _typ_am_inhalt(roh) or ""
     erweiterung = _foto_erweitern(dateiname, content_type)
     if erweiterung is None:
         raise GeratFehler(
-            "Fotoformat nicht erlaubt: JPG, PNG oder HEIC bis 10 MB (F-134)."
+            "Fotoformat nicht erlaubt: JPG, PNG oder HEIC bis 10 MB."
         )
     if content_type == "image/heic":
         gewandelt = _heic_als_jpeg(roh)
@@ -295,13 +297,13 @@ def foto_hochladen(
     try:
         verkleinert = _kleiner_bild_punkt(roh, content_type)
     except Exception as fehler:
-        raise GeratFehler("Die Datei ist kein lesbares Bild (F-134).") from fehler
+        raise GeratFehler("Die Datei ist kein lesbares Bild.") from fehler
 
     # F-134: verkleinert in der DATEIABLAGE gespeichert; der Pfad steht
     # in anhaenge, das PDF lädt das Bild von dort.
     from django.core.files.storage import default_storage
 
-    zeitstempel = timezone.now().strftime("%Y%m%d-%H%M%S")
+    zeitstempel = jetzt_aware().strftime("%Y%m%d-%H%M%S")
     pfad = f"protokolle/{protokoll.id or 'neu'}/foto-{zeitstempel}{erweiterung}"
     pfad = default_storage.save(pfad, ContentFile(verkleinert))
     anhaenge = protokoll.anhaenge_liste()
@@ -312,7 +314,7 @@ def foto_hochladen(
             "name": dateiname or f"foto{erweiterung}",
             "groesse": len(verkleinert),
             "typ": content_type,
-            "hochgeladen_am": timezone.now().isoformat(),
+            "hochgeladen_am": jetzt_aware().isoformat(),
         }
     )
     protokoll.anhaenge = anhaenge
@@ -339,21 +341,21 @@ def scan_hochladen(
     if protokoll.stand != Protokoll.STAND_SCAN_OFFEN:
         raise GeratFehler(
             "Nur ein Protokoll im Stand 'scan-offen' kann abgeschlossen "
-            "werden (F-22)."
+            "werden."
         )
     roh = datei.read(MAX_FOTO_GROESSE + 1)
     if not roh:
         raise GeratFehler("Der Scan ist leer.")
     if len(roh) > MAX_FOTO_GROESSE:
-        raise GeratFehler("Der Scan ist größer als 10 MB (N-02).")
+        raise GeratFehler("Der Scan ist größer als 10 MB.")
     typ = _typ_am_inhalt(roh)
     if typ is None:
-        raise GeratFehler("Scan nicht erlaubt: PDF, JPG, PNG oder HEIC bis 10 MB (N-02).")
+        raise GeratFehler("Scan nicht erlaubt: PDF, JPG, PNG oder HEIC bis 10 MB.")
     erweiterung = {"application/pdf": ".pdf", **ERLAUBTE_FOTO_TYPEN}[typ]
-    zeitstempel = timezone.now().strftime("%Y%m%d-%H%M%S")
+    zeitstempel = jetzt_aware().strftime("%Y%m%d-%H%M%S")
     pfad = f"protokolle/{protokoll.id}/scan-{zeitstempel}{erweiterung}"
     protokoll.scan_datei.save(pfad, ContentFile(roh), save=False)
-    protokoll.scan_am = timezone.now()
+    protokoll.scan_am = jetzt_aware()
     protokoll.scan_von = ausgefuehrt_von
     protokoll.stand = Protokoll.STAND_ABGESCHLOSSEN
     protokoll.save(
@@ -381,7 +383,7 @@ def protokoll_anlegen(
     """
     from .services import _absenderzeile, _naechste_protokollnummer, position_aus_gerat
 
-    now = datum or timezone.now()
+    now = datum or jetzt_aware()
     if art == Protokoll.ART_RUECKNAHME:
         formular = "FRM-002"
     else:

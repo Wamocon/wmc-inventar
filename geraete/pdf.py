@@ -556,7 +556,7 @@ def pdf_bauen(protokoll: Protokoll) -> bytes:
     if offene:
         raise GeratFehler(
             "Die Checkliste ist noch nicht vollständig beantwortet "
-            f"({len(offene)} Punkte offen, F-132); das PDF entsteht erst danach."
+            f"({len(offene)} Punkte offen); das PDF entsteht erst danach."
         )
     html = protokoll.html_eingefroren or _render_inhalt(protokoll)
     return _html_zu_pdf(protokoll, _mit_vermerken(protokoll, html))
@@ -584,7 +584,7 @@ def pdf_fertig_bauen(protokoll: Protokoll, *, versiegeln: bool | None = None) ->
     from . import siegel as siegel_modul
     versiegelt = siegel_modul.siegel_anwenden(pdf_bytes)
     if versiegelt is None:
-        raise GeratFehler("Das Siegel konnte nicht angebracht werden. Bitte wenden Sie sich an die IT (F-138).")
+        raise GeratFehler("Das Siegel konnte nicht angebracht werden. Bitte wenden Sie sich an die IT.")
     return versiegelt
 
 

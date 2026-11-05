@@ -4,7 +4,7 @@
 <div class="page-head">
   <div>
     <h1>Leihanfrage genehmigen</h1>
-    <p class="muted lead">Leihe {{ leihe.nr }}: ein Gerät aus dem Leihpool der Kategorie zuweisen (F-32, F-34).</p>
+    <p class="muted lead">Leihe {{ leihe.nr }}: ein Gerät aus dem Leihpool der Kategorie zuweisen.</p>
   </div>
 </div>
 <div data-test="dialog" data-name="genehmigen">
@@ -30,7 +30,7 @@
           <option value="{{ g.id }}"{% if g.id|stringformat:"s" == gewaehlt %} selected{% endif %}>{{ g.text }}</option>
           {% endfor %}
         </select>
-        <span class="help">{{ leihe.person.vorname }} {{ leihe.person.nachname }} erhält eine E-Mail mit der Entscheidung (F-93).</span>
+        <span class="help">{{ leihe.person.vorname }} {{ leihe.person.nachname }} erhält eine E-Mail mit der Entscheidung.</span>
       </div>
     </div>
     <div class="actions">

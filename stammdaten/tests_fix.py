@@ -922,7 +922,7 @@ class MailTests(Grundlage):
 
     def test_ausnahmen_gehen_an_deaktivierte_konten(self):
         Konto.objects.filter(pk=self.felix_konto.pk).update(aktiv=False)
-        p = Protokoll.objects.create(nr="UP-8", person=self.felix, geraet=self.geraet(self.notebook), datum=date(2026, 11, 3), gegenzeichnung_empfaenger=self.felix.email)
+        p = Protokoll.objects.create(nr="UP-8", person=self.felix, geraet=self.geraet(self.notebook), datum=date(2026, 11, 3), gegenzeichnung_empfaenger=self.felix.email, stand=Protokoll.STAND_GEGENZEICHNUNG_OFFEN)
         services._mail_gegenzeichnen_link(p, "tok", self.felix.email)
         services.protokoll_code_senden(p)
         services._mail_anhang(p, b"%PDF", "a.pdf", self.felix.email)

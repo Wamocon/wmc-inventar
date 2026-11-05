@@ -70,9 +70,10 @@
   {% csrf_token %}
   <div class="bulk leer">
     <span data-test="auswahl-anzahl">0 ausgewählt</span>
-    <label>Startposition <input type="number" name="startposition" value="1" min="1" max="{{ etikett_pro_bogen }}" data-test="startposition" title="Startposition auf dem Bogen (F-73)"></label>
+    <label>Startposition <input type="number" name="startposition" value="1" min="1" max="{{ etikett_pro_bogen }}" data-test="startposition" title="Startposition auf dem Bogen"></label>
     <button type="submit" class="btn sm" data-test="etiketten-drucken" disabled>Etiketten drucken</button>
     <button type="submit" class="btn sm" name="vorschau" value="1" data-test="etiketten-vorschau" disabled>Vorschau</button>
+    <button type="submit" class="btn sm" name="aktion" value="waehlen" formaction="/geraete/sammelausgabe/" data-test="sammel-ausgabe" disabled>Ausgeben</button>
   </div>
 {% endif %}
   <div class="tbl-wrap" data-test="liste">
