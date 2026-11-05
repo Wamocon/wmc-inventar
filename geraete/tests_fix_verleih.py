@@ -54,7 +54,7 @@ class VerleihTestCase(TestCase):
             seriennummer=seriennummer,
             leihpool=True,
             zustand=Gerat.ZUSTAND_GUT,
-            ausgefuehrt_von=cls.admin,
+            erzeugt_von=cls.admin,
         )
 
     def setUp(self):
@@ -221,7 +221,7 @@ class AnfrageTests(VerleihTestCase):
         # Eine genehmigte Leihe im Zeitraum, ein Gerät in Reparatur, eines ausgemustert.
         self.genehmigt(self.VON, self.BIS, self.a, person=self.felix)
         d = self._pool("SN-D")
-        services.gerat_in_reparatur_geschickt(d, dienstleister="X", vorgangsnummer="1", ausgefuehrt_von=self.admin)
+        services.gerat_in_reparatur_geschickt(d, dienstleister="X", vorgangsnummer="1", notiz="", ausgefuehrt_von=self.admin)
         e = self._pool("SN-E")
         services.ausmustern(e, grund="verloren", datum=HEUTE, bestaetigt_gemeldt=True, ausgefuehrt_von=self.admin)
         stand = self._frei()
@@ -384,7 +384,7 @@ class EntscheidungTests(VerleihTestCase):
 
     def test_ausgemustert_und_reparatur_nicht_waehl_und_nicht_genehmigbar(self):
         services.ausmustern(self.b, grund="verloren", datum=HEUTE, bestaetigt_gemeldt=True, ausgefuehrt_von=self.admin)
-        services.gerat_in_reparatur_geschickt(self.c, dienstleister="X", vorgangsnummer="1", ausgefuehrt_von=self.admin)
+        services.gerat_in_reparatur_geschickt(self.c, dienstleister="X", vorgangsnummer="1", notiz="", ausgefuehrt_von=self.admin)
         leihe = self.anfragen(self.VON, self.BIS)
         c = self.client_fuer(self.admin)
         seite = c.get(f"/geraete/verleih/{leihe.id}/genehmigen/").content.decode()
