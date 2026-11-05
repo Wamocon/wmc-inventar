@@ -2428,7 +2428,7 @@ class AenderungsHistorieTests(TestCase):
         self.assertIn('data-alt="Lenovo"', html)
         self.assertIn('data-neu="HP"', html)
         # Auch als sichtbarer Text, nicht nur in data-Attributen.
-        self.assertIn("hersteller: Lenovo → HP", html)
+        self.assertIn("Hersteller: Lenovo → HP", html)
 
     def test_aendern_kein_vorgang_wenn_kein_feld_geaendert(self):
         """F-40: Gibt man denselben Wert ein, entsteht kein neuer Vorgang."""

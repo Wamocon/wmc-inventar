@@ -566,12 +566,12 @@ class ImportUndUebersichtTests(Grundlage):
         gerat.refresh_from_db()
         services.gerat_rueckgeben(gerat, zustand_rueckgabe=2, ausgefuehrt_von=self.admin)
         delta = kennzahlen.delta_zum_vortag(heute)
-        self.assertEqual(delta["in-benutzung"] if "in-benutzung" in delta else delta["geraete-in-benutzung"], -1)
+        self.assertEqual(delta["in-benutzung"], -1)
 
     def test_leser_landet_nicht_auf_der_genehmigung(self):
         gerat = self._gerat(leihpool=True)
         heute = zeit.jetzt_wie_im_entwicklungsmodus().date()
-        Leihe.objects.create(person=self.anna, kat=self.kat, gerat=gerat, beginn=heute, ende=heute + timedelta(days=5), rueckgabe_bis=heute + timedelta(days=5), status=Leihe.STATUS_ANGEFRAGT)
+        Leihe.objects.create(nr="L-0001", person=self.anna, kat=self.kat, gerat=gerat, beginn=heute, ende=heute + timedelta(days=5), rueckgabe_bis=heute + timedelta(days=5), status=Leihe.STATUS_ANGEFRAGT)
         self.client.force_login(konto_erstellen("leser.k", "leser", "leser@beispiel.test"))
         self.assertNotContains(self.client.get("/"), "/genehmigen/")
 

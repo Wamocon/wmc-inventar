@@ -2266,24 +2266,6 @@ def protokoll_pdf(request, protokoll_nr):
     protokoll = get_object_or_404(Protokoll, nr=protokoll_nr)
     _protokoll_berechtigt(protokoll, request)
 
-    # F-22, F-110: Beim Papierweg ist der Scan das unterschriebene Dokument.
-    if protokoll.scan_datei and not protokoll.pdf_baubar:
-        with protokoll.scan_datei.open("rb") as scan:
-            roh = scan.read()
-        if roh.startswith(b"%PDF"):
-            art, endung = "application/pdf", "pdf"
-        elif roh.startswith(b"\xff\xd8"):
-            art, endung = "image/jpeg", "jpg"
-        elif roh.startswith(b"\x89PNG"):
-            art, endung = "image/png", "png"
-        else:
-            art, endung = "application/octet-stream", "heic"
-        antwort = HttpResponse(roh, content_type=art)
-        antwort["Content-Disposition"] = (
-            f"attachment; filename={protokoll.nr}-scan.{endung}"
-        )
-        return antwort
-
     from . import pdf as protokoll_pdf_modul
     # F-22: Beim Papierweg ist der Scan das Protokoll.
     if protokoll.scan_datei:

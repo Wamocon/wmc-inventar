@@ -953,13 +953,14 @@ class UebersichtTests(Grund):
         self.assertNotContains(self.client.get("/"), 'data-test="delta"')
 
     def test_delta_zum_vortag(self):
+        # Die angezeigte Zahl gegen den Zählerstand des Vortags.
         heute = kennzahlen._heute()
-        for tage, wert in ((1, 5), (0, 7)):
-            Zaehlerstand.objects.create(
-                stichtag=heute - timedelta(days=tage),
-                kennzahlen={"in-benutzung": {"ist": wert, "gesamt": 9}},
-                erzeugt_am=kennzahlen.jetzt_aware(),
-            )
+        jetzt = {k["data_id"]: k["ist"] for k in kennzahlen.kennzahlen(heute)}["in-benutzung"]
+        Zaehlerstand.objects.create(
+            stichtag=heute - timedelta(days=1),
+            kennzahlen={"in-benutzung": {"ist": jetzt - 2, "gesamt": 9}},
+            erzeugt_am=kennzahlen.jetzt_aware(),
+        )
         self.assertContains(self.client.get("/"), "+2")
 
     def test_anfrage_springt_zur_entscheidung(self):
