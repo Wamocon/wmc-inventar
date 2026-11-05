@@ -1,20 +1,34 @@
 {% extends "basis.html" %}
-
+{% block titel %}Gerät verleihen · WMC Inventar{% endblock %}
 {% block inhalt %}
-<div class="card" data-test="dialog" data-name="verleih">
-    <div class="card-head"><h2>Gerät verleihen</h2></div>
-    <div class="card-body">
-        <p class="muted">
-            {{ gerat.inventarnummer }} · {{ gerat.hersteller }} {{ gerat.modell }}
-        </p>
-        {% if fehler %}
-        <div data-test="fehler" class="error-box">{{ fehler }}</div>
-        {% endif %}
-        <form method="post" novalidate>
-            {% csrf_token %}
-            {{ form.as_p }}
-            <button type="submit" data-test="speichern" class="btn primary">Verleih abschließen</button>
-        </form>
+<div class="page-head">
+  <div>
+    <h1>Gerät verleihen</h1>
+    <p class="muted lead">{{ gerat.inventarnummer }} · {{ gerat.hersteller }} {{ gerat.modell }} (F-30)</p>
+  </div>
+</div>
+<div data-test="dialog" data-name="verleih">
+  <form method="post" novalidate data-test="verleih-formular">
+    {% csrf_token %}
+    <div class="meldungen">
+      {% include "fragmente/fehler.html" %}
+      {% if fehler %}<div class="meldung error" data-test="fehler">{{ fehler }}</div>{% endif %}
     </div>
+    <div class="form-grid">
+      <div class="field"><label for="id_person" class="req">Person</label>{{ form.person }}</div>
+      <div class="field"><label for="id_rueckgabe_bis" class="req">Rückgabe bis</label>{{ form.rueckgabe_bis }}</div>
+      <div class="field full"><label for="id_zweck" class="req">Zweck</label>{{ form.zweck }}</div>
+      <div class="field full" data-test="unterschrift">
+        <label>Unterschrift</label>
+        {% for radio in form.unterschrift %}
+          <label class="radio">{{ radio }}</label>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="actions">
+      <button type="submit" class="btn primary" data-test="speichern">Verleih abschließen</button>
+      <a class="btn link" href="/geraete/{{ gerat.inventarnummer }}/" data-test="abbrechen">Abbrechen</a>
+    </div>
+  </form>
 </div>
 {% endblock %}

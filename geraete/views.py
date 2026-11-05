@@ -6,6 +6,8 @@ F-84 bis F-88 (Konflikte, Datenlücken).
 """
 from __future__ import annotations
 
+from datetime import date, timedelta
+
 from django.contrib.auth.decorators import login_required
 from django.contrib.messages import error as meldung_error
 from django.contrib.messages import info as meldung_info
@@ -17,8 +19,10 @@ from django.db.models import Q
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_POST
 
+from konten.zeit import jetzt_wie_im_entwicklungsmodus
 from stammdaten.models import Kategorie, Ort, Person
 
 from . import services
@@ -1272,9 +1276,11 @@ def verleih_zeige(request, inventarnummer):
         raise PermissionDenied
 
     gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
-    form = VerleihForm(request.POST or None)
+    form = VerleihForm(
+        request.POST or None,
+        initial={"rueckgabe_bis": jetzt_wie_im_entwicklungsmodus().date() + timedelta(days=7)},
+    )
 
-    meldung = ""
     fehler = ""
 
     if request.method == "POST" and form.is_valid():
@@ -1283,7 +1289,7 @@ def verleih_zeige(request, inventarnummer):
             rueckgabe_bis = form.cleaned_data["rueckgabe_bis"]
             zweck = form.cleaned_data["zweck"]
             unterschrift = form.cleaned_data.get("unterschrift", "papier")
-            leih_gerat_ausgeben(
+            leihe = leih_gerat_ausgeben(
                 gerat=gerat,
                 person=person,
                 rueckgabe_bis=rueckgabe_bis,
@@ -1291,7 +1297,14 @@ def verleih_zeige(request, inventarnummer):
                 ausgefuehrt_von=request.user,
                 unterschrift=unterschrift,
             )
-            meldung = "Gerät wurde verliehen."
+            offen = leihe.offenes_protokoll
+            if offen is not None:
+                meldung_success(
+                    request,
+                    f"Protokoll {offen.nr} angelegt. Das Gerät wird mit Ihrer Signatur verliehen.",
+                )
+            else:
+                meldung_success(request, "Gerät wurde verliehen.")
             return redirect("geraete:detail", inventarnummer=inventarnummer)
         except GeratFehler as e:
             fehler = str(e)
@@ -1302,7 +1315,6 @@ def verleih_zeige(request, inventarnummer):
         {
             "form": form,
             "gerat": gerat,
-            "meldung": meldung,
             "fehler": fehler,
         },
     )
@@ -1317,7 +1329,6 @@ def verleih_liste(request):
     F-103: format=csv oder format=xlsx liefert die Liste als Datei.
     """
     from .models import Leihe
-    from .services import leihen_ueberfaellig
 
     if not _ist_admin(request):
         raise PermissionDenied
@@ -1327,7 +1338,6 @@ def verleih_liste(request):
         .select_related("gerat", "person", "kat")
         .order_by("-zeitpunkt")
     )
-    ueberfaellige = {l.id for l in services.leihen_ueberfaellig()}
 
     format_export = request.GET.get("format", "")
     if format_export in ("csv", "xlsx"):
@@ -1356,33 +1366,57 @@ def verleih_liste(request):
         "geraete/verleih_liste.html",
         {
             "leihen": leihen,
-            "ueberfaellige": ueberfaellige,
         },
     )
 
 
 # --- M5 Teil 2: Anfrage und Entscheidung (A-0118) ---------------------------
 
-def _freie_je_kategorie(beginn, ende, pool_qs):
-    """F-31: Freie Geräte je Kategorie im Leihpool im Zeitraum.
+def _eigene_person(request):
+    """Kapitel 3: /meine-geraete/… für Mitarbeiter, für Admin und Leser mit Person."""
+    if not _ist_mitarbeiter(request):
+        if not (request.user.ist_admin or request.user.ist_leser):
+            raise PermissionDenied
+        if request.user.person is None:
+            raise PermissionDenied
+    return request.user.person
 
-    Ein Gerät ist frei, wenn es im Leihpool steht und in dem Zeitraum
-    nicht schon genehmigt (O-12, F-34).
-    """
-    from .services import _gerat_ist_reserviert
 
-    freie = {}
-    for gerat in pool_qs.select_related("kategorie"):
-        if _gerat_ist_reserviert(gerat, beginn, ende):
-            continue
-        kat = gerat.kategorie
-        if kat is None:
-            continue
-        freie[kat.id] = (kat, freie.get(kat.id, (None, 0))[1] + 1)
-    return [
-        (kat, anzahl)
-        for (kat, anzahl) in sorted(freie.values(), key=lambda t: t[0].name)
-    ]
+def _datum_oder_nichts(text):
+    """Datum aus einem Formularwert; was keines ist, zählt als nicht gewählt."""
+    if isinstance(text, date):
+        return text
+    try:
+        return parse_date(text or "")
+    except ValueError:
+        return None
+
+
+def _leihpool_anfragbar():
+    """F-31: Geräte, die in der Anfrage wählbar sind: Leihpool ohne Ausgemusterte."""
+    return (
+        Gerat.objects.filter(leihpool=True)
+        .exclude(status=Gerat.STATUS_AUSGEMUSTERT)
+        .select_related("kategorie")
+        .order_by("inventarnummer")
+    )
+
+
+def _anfrage_auswahl(kategorie, von, bis):
+    """F-31: Anzeige der freien Geräte und Einträge für „Inventarnummer (optional)“."""
+    if kategorie is None:
+        return {"text": "", "art": "info", "frei": 0, "gesamt": 0, "geraete": []}
+    stand = services.leihe_verfuegbarkeit(kategorie, von, bis)
+    geraete = stand["frei"] if stand["text"] else stand["einsetzbar"]
+    return {
+        "text": stand["text"],
+        "art": stand["art"],
+        "frei": len(stand["frei"]),
+        "gesamt": stand["gesamt"],
+        "geraete": [
+            {"id": g.pk, "text": services.leihgeraet_bezeichnung(g)} for g in geraete
+        ],
+    }
 
 
 @login_required
@@ -1395,19 +1429,15 @@ def meine_geraete_zeige(request):
     Kapitel 3: 200 für Mitarbeiter; 200 auch für Admin und Leser,
     wenn das Konto eine Person hat; sonst 403.
     """
-    if not _ist_mitarbeiter(request):
-        if not (request.user.ist_admin or request.user.ist_leser):
-            raise PermissionDenied
-        if request.user.person is None:
-            raise PermissionDenied
-    person = request.user.person
+    person = _eigene_person(request)
 
-    geräte = list(Gerat.objects.filter(person=person).order_by("inventarnummer"))
+    # Ohne Person gäbe filter(person=None) die Geräte ohne Zuordnung aus (F-112).
+    geräte = list(Gerat.objects.filter(person=person).order_by("inventarnummer")) if person else []
 
     ausgaben = {}
     protokoll_je_gerat = {}
     for vorgang in Vorgang.objects.filter(
-        typ=Vorgang.TYP_AUSGABE, gerat__person=person
+        typ=Vorgang.TYP_AUSGABE, gerat__in=geräte
     ).order_by("-zeitpunkt"):
         if vorgang.gerat_id not in ausgaben:
             ausgaben[vorgang.gerat_id] = vorgang
@@ -1415,14 +1445,19 @@ def meine_geraete_zeige(request):
     def _eintrag(gerat):
         vorgang_ausgabe = ausgaben.get(gerat.id)
         protokoll = (
-            Protokoll.objects.filter(geraet=gerat, person=person)
+            Protokoll.objects.filter(
+                geraet=gerat, person=person, art=Protokoll.ART_AUSGABE
+            )
             .order_by("-datum", "-id")
             .first()
         )
         return {
             "gerat": gerat,
-            "ausgabe_datum": vorgang_ausgabe.zeitpunkt.date() if vorgang_ausgabe else None,
+            "ausgabe_datum": timezone.localdate(vorgang_ausgabe.zeitpunkt) if vorgang_ausgabe else None,
             "protokoll": protokoll,
+            "leihe": Leihe.objects.filter(
+                gerat=gerat, person=person, status=Leihe.STATUS_AUSGEGEBEN
+            ).first(),
         }
 
     gerate_eintraege = [_eintrag(gerat) for gerat in geräte]
@@ -1432,12 +1467,20 @@ def meine_geraete_zeige(request):
         .order_by("-datum")
     )
 
-    leihen = list(
-        Leihe.objects.filter(person=person).order_by("-zeitpunkt")
-    )
-    ueberfaellige = {l.id for l in services.leihen_ueberfaellig()}
+    leihen = [
+        leihe
+        for leihe in Leihe.objects.filter(person=person)
+        .select_related("gerat", "kat")
+        .order_by("-zeitpunkt")
+        # Ein Direktverleih ist erst mit der Signatur eine Leihe der Person (F-30).
+        if not leihe.ist_direktentwurf
+    ]
+    vorschlag_basis = jetzt_wie_im_entwicklungsmodus().date()
     for leihe in leihen:
-        leihe.ueberfaellig = leihe.id in ueberfaellige
+        # Vorbelegung wie im Prototyp: eine Woche über das spätere von Frist und heute.
+        leihe.verlaengerung_vorschlag = max(
+            leihe.rueckgabe_bis or vorschlag_basis, vorschlag_basis
+        ) + timedelta(days=7)
 
     return render(
         request,
@@ -1446,20 +1489,9 @@ def meine_geraete_zeige(request):
             "geraete": gerate_eintraege,
             "protokolle": protokolle,
             "leihen": leihen,
+            # Kapitel 2: Der Leser fragt nicht an und ändert nichts.
+            "darf_anfragen": not request.user.ist_leser,
         },
-    )
-
-
-@login_required
-def meine_geraete_alle_zeige(request):
-    """/meine-geraete/alle/ – Alle Geräte (F-112)."""
-    if not _ist_mitarbeiter(request):
-        raise PermissionDenied
-    geräte = Gerat.objects.all().order_by("inventarnummer")
-    return render(
-        request,
-        "geraete/alle_geraete.html",
-        {"geraete": geräte},
     )
 
 
@@ -1467,40 +1499,31 @@ def meine_geraete_alle_zeige(request):
 def meine_geraete_leihe_neu(request):
     """/meine-geraete/leihe/neu/ – Leihgerät anfragen (F-31, Kapitel 3).
 
-    GET: Formular mit Leihkategorien und freien Geräten je Kategorie
-    im Leihpool im gewählten Zeitraum. POST: Anfrage speichern,
-    danach mit data-stand „angefragt\" in /verleih/ (O-12).
+    GET: Formular mit Leihkategorien und der Anzahl freier Geräte der
+    Kategorie im Zeitraum. POST: Anfrage speichern, danach mit data-stand
+    „angefragt\" in /verleih/ (O-12). Der Leser sieht die Seite
+    (TESTSCHNITTSTELLE 3), fragt aber nicht an (Kapitel 2).
     """
-    from stammdaten.models import Person
-
     from .forms import LeiheAnfrageForm
     from .services import GeratFehler, leihe_anfragen
 
-    if not _ist_mitarbeiter(request):
-        if not (request.user.ist_admin or request.user.ist_leser):
-            raise PermissionDenied
-        if request.user.person is None:
-            raise PermissionDenied
-
-    person = request.user.person
-    if person is None:
-        person = Person.objects.filter(konten=request.user).first()
+    person = _eigene_person(request)
     if person is None:
         raise PermissionDenied
+    if request.method == "POST" and request.user.ist_leser:
+        raise PermissionDenied
 
-    pool_qs = Gerat.objects.filter(
-        leihpool=True
-    ).select_related("kategorie")
+    heute = jetzt_wie_im_entwicklungsmodus().date()
+    form = LeiheAnfrageForm(
+        request.POST or None,
+        leihpool_geraete=_leihpool_anfragbar(),
+        initial={
+            "beginn": heute + timedelta(days=2),
+            "ende": heute + timedelta(days=4),
+        },
+    )
 
-    form = LeiheAnfrageForm(request.POST or None, leihpool_geraete=pool_qs)
-    freie = []
-    if form.is_bound and form.is_valid():
-        beginn = form.cleaned_data.get("beginn")
-        ende = form.cleaned_data.get("ende")
-        if beginn and ende and beginn <= ende:
-            freie = _freie_je_kategorie(beginn, ende, pool_qs)
-
-    meldung = ""
+    fehler = ""
     if request.method == "POST" and form.is_valid():
         try:
             leihe_anfragen(
@@ -1512,20 +1535,51 @@ def meine_geraete_leihe_neu(request):
                 gerat=form.cleaned_data.get("gerat"),
                 erzeugt_von=request.user,
             )
-            meldung_success(request, "Leihanfrage gesendet. Sie ist mit dem Status 'angefragt' angelegt.")
+            meldung_success(request, "Anfrage gesendet. Die IT entscheidet und meldet sich per E-Mail.")
             return redirect("/meine-geraete/")
         except GeratFehler as fehler_vorgang:
-            meldung = str(fehler_vorgang)
+            fehler = str(fehler_vorgang)
+
+    # Anzeige wie auf dem Bildschirm: gewählte Werte, sonst die Vorbelegung.
+    kategorien = form.fields["kat"].queryset
+    kat = str(form["kat"].value() or "")
+    kategorie = kategorien.filter(pk=kat).first() if kat.isdigit() else None
+    kategorie = kategorie or kategorien.first()
+    von = _datum_oder_nichts(form["beginn"].value())
+    bis = _datum_oder_nichts(form["ende"].value())
+    if von and bis and bis < von:
+        von = bis = None
 
     return render(
         request,
         "geraete/leihe_neu.html",
         {
             "form": form,
-            "freie": freie,
-            "meldung": meldung,
+            "fehler": fehler,
+            "auswahl": _anfrage_auswahl(kategorie, von, bis),
+            "gewaehlt": str(form["gerat"].value() or ""),
+            "darf_anfragen": not request.user.ist_leser,
         },
     )
+
+
+@login_required
+def meine_geraete_leihe_frei(request):
+    """F-31: Freie Geräte der Kategorie im Zeitraum, für das Formular der Anfrage.
+
+    Liefert nur Anzahl, Inventarnummer und Modell, keine Personen (F-112).
+    """
+    from django.http import JsonResponse
+
+    if _eigene_person(request) is None:
+        raise PermissionDenied
+    kat = request.GET.get("kat", "")
+    kategorie = Kategorie.objects.filter(pk=kat).first() if kat.isdigit() else None
+    von = _datum_oder_nichts(request.GET.get("beginn"))
+    bis = _datum_oder_nichts(request.GET.get("ende"))
+    if von and bis and bis < von:
+        von = bis = None
+    return JsonResponse(_anfrage_auswahl(kategorie, von, bis))
 
 
 @login_required
@@ -1533,24 +1587,26 @@ def meine_geraete_leihe_zurueckziehen(request, leih_id):
     """Leihe zurückziehen (F-37, Kapitel 3).
 
     POST: Leihe auf „zurueckgezogen\" setzen; die Reservierung endet
-    damit. GET: Formular mit Bestätigung.
+    damit. GET: Seite mit dem Knopf. Wer anfragen darf, darf die eigene
+    Anfrage zurückziehen (Kapitel 2): Mitarbeiter und Admin, nicht der Leser.
     """
     from .forms import LeiheZurueckziehenForm
     from .models import Leihe
     from .services import GeratFehler, leihe_zurueckziehen
 
-    if not _ist_mitarbeiter(request):
+    if request.user.ist_leser:
         raise PermissionDenied
 
     leihe = get_object_or_404(Leihe, id=leih_id)
-    if leihe.person_id != request.user.person_id:
+    if request.user.person_id is None or leihe.person_id != request.user.person_id:
         raise PermissionDenied
-    form = LeiheZurueckziehenForm(request.POST or None)
+    form = LeiheZurueckziehenForm(request.POST if request.method == "POST" else None)
 
     meldung = ""
     if request.method == "POST" and form.is_valid():
         try:
             leihe_zurueckziehen(leihe, ausgefuehrt_von=request.user)
+            meldung_success(request, f"Anfrage {leihe.nr} zurückgezogen.")
             return redirect("/meine-geraete/")
         except GeratFehler as fehler:
             meldung = str(fehler)
@@ -1564,6 +1620,38 @@ def meine_geraete_leihe_zurueckziehen(request, leih_id):
             "meldung": meldung,
         },
     )
+
+
+@login_required
+@require_POST
+def meine_geraete_leihe_verlaengern(request, leih_id):
+    """F-35, F-111: Verlängerung der eigenen Leihe anfragen, die IT gewährt.
+
+    Kapitel 2: Mitarbeiter und Admin dürfen anfragen, der Leser nicht.
+    """
+    from .forms import LeiheVerlaengerungAnfragenForm
+    from .models import Leihe
+    from .services import GeratFehler, leihe_verlaengerung_anfragen
+
+    if request.user.ist_leser:
+        raise PermissionDenied
+
+    leihe = get_object_or_404(Leihe, id=leih_id)
+    if request.user.person_id is None or leihe.person_id != request.user.person_id:
+        raise PermissionDenied
+
+    form = LeiheVerlaengerungAnfragenForm(request.POST)
+    if not form.is_valid():
+        meldung_error(request, "Bitte das neue Rückgabedatum angeben (F-35).")
+        return redirect("/meine-geraete/")
+    try:
+        leihe_verlaengerung_anfragen(leihe, form.cleaned_data["rueckgabe_bis_neu"])
+    except GeratFehler as fehler:
+        meldung_error(request, str(fehler))
+    else:
+        bis = leihe.verlaengerung_bis.strftime("%d.%m.%Y")
+        meldung_success(request, f"Verlängerung bis {bis} bei der IT angefragt.")
+    return redirect("/meine-geraete/")
 
 
 @login_required
@@ -1595,9 +1683,27 @@ def leihe_genehmigen_zeige(request, leih_id):
                 gerat=form.cleaned_data["gerat"],
                 ausgefuehrt_von=request.user,
             )
+            meldung_success(
+                request,
+                f"Genehmigt und {leihe.gerat.inventarnummer} reserviert. "
+                f"{leihe.person.voller_name()} wird per E-Mail informiert.",
+            )
             return redirect("/verleih/")
         except GeratFehler as fehler_vorgang:
             fehler = str(fehler_vorgang)
+
+    # F-32, F-34: Ausgemustertes, Reparatur und fest Ausgegebenes stehen nicht in
+    # der Auswahl. Belegte Geräte stehen gekennzeichnet dahinter, die Prüfung
+    # beim Genehmigen lehnt sie mit Meldung ab.
+    stand = services.leihe_verfuegbarkeit(leihe.kat, leihe.beginn, leihe.ende, ohne=leihe)
+    gewaehlt = str(form["gerat"].value() or leihe.gerat_id or "")
+    auswahl = [
+        {"id": g.pk, "text": services.leihgeraet_bezeichnung(g)}
+        for g in stand["frei"]
+    ] + [
+        {"id": g.pk, "text": f"{services.leihgeraet_bezeichnung(g)} (im Zeitraum belegt)"}
+        for g in stand["belegt"]
+    ]
 
     return render(
         request,
@@ -1606,6 +1712,9 @@ def leihe_genehmigen_zeige(request, leih_id):
             "form": form,
             "leihe": leihe,
             "fehler": fehler,
+            "auswahl": auswahl,
+            "gewaehlt": gewaehlt,
+            "frei_anzahl": len(stand["frei"]),
         },
     )
 
@@ -1625,11 +1734,26 @@ def leihe_ausgeben_zeige(request, leih_id):
         raise PermissionDenied
 
     leihe = get_object_or_404(Leihe, id=leih_id)
-    form = LeiheAusgebenForm(request.POST or None)
+    form = LeiheAusgebenForm(
+        request.POST if request.method == "POST" else None,
+        initial={"unterschrift": "tool"},
+    )
     fehler = ""
     if request.method == "POST" and form.is_valid():
         try:
-            leihe_ausgeben(leihe, ausgefuehrt_von=request.user)
+            leihe_ausgeben(
+                leihe,
+                ausgefuehrt_von=request.user,
+                unterschrift=form.cleaned_data.get("unterschrift") or "papier",
+            )
+            offen = leihe.offenes_protokoll
+            if offen is not None:
+                meldung_success(
+                    request,
+                    f"Protokoll {offen.nr} angelegt. Das Gerät wird mit Ihrer Signatur verliehen.",
+                )
+            else:
+                meldung_success(request, "Gerät wurde verliehen.")
             return redirect("/verleih/")
         except GeratFehler as fehler_vorgang:
             fehler = str(fehler_vorgang)
@@ -1660,7 +1784,12 @@ def leihe_verlaengern_zeige(request, leih_id):
         raise PermissionDenied
 
     leihe = get_object_or_404(Leihe, id=leih_id)
-    form = LeiheVerlaengernForm(request.POST or None, leihe=leihe)
+    # Vorbelegung: was der Mitarbeiter wünscht, sonst eine Woche wie im Prototyp.
+    heute = jetzt_wie_im_entwicklungsmodus().date()
+    vorschlag = leihe.verlaengerung_bis or (
+        max(leihe.rueckgabe_bis or heute, heute) + timedelta(days=7)
+    )
+    form = LeiheVerlaengernForm(request.POST or None, vorschlag=vorschlag)
     fehler = ""
     if request.method == "POST" and form.is_valid():
         try:
@@ -1669,6 +1798,8 @@ def leihe_verlaengern_zeige(request, leih_id):
                 rueckgabe_bis_neu=form.cleaned_data["rueckgabe_bis_neu"],
                 ausgefuehrt_von=request.user,
             )
+            bis = leihe.rueckgabe_bis.strftime("%d.%m.%Y")
+            meldung_success(request, f"Leihe bis {bis} verlängert.")
             return redirect("/verleih/")
         except GeratFehler as fehler_vorgang:
             fehler = str(fehler_vorgang)
@@ -1704,8 +1835,12 @@ def leihe_ablehnen_zeige(request, leih_id):
         try:
             leihe_ablehnen(
                 leihe,
-                begruendung=form.cleaned_data["begründung"],
+                begruendung=form.cleaned_data["begruendung"],
                 ausgefuehrt_von=request.user,
+            )
+            meldung_success(
+                request,
+                f"Abgelehnt. {leihe.person.voller_name()} wird per E-Mail informiert.",
             )
             return redirect("/verleih/")
         except GeratFehler as fehler_vorgang:
@@ -1818,6 +1953,24 @@ def protokoll_pdf(request, protokoll_nr):
     """
     protokoll = get_object_or_404(Protokoll, nr=protokoll_nr)
     _protokoll_berechtigt(protokoll, request)
+
+    # F-22, F-110: Beim Papierweg ist der Scan das unterschriebene Dokument.
+    if protokoll.scan_datei and not protokoll.pdf_baubar:
+        with protokoll.scan_datei.open("rb") as scan:
+            roh = scan.read()
+        if roh.startswith(b"%PDF"):
+            art, endung = "application/pdf", "pdf"
+        elif roh.startswith(b"\xff\xd8"):
+            art, endung = "image/jpeg", "jpg"
+        elif roh.startswith(b"\x89PNG"):
+            art, endung = "image/png", "png"
+        else:
+            art, endung = "application/octet-stream", "heic"
+        antwort = HttpResponse(roh, content_type=art)
+        antwort["Content-Disposition"] = (
+            f"attachment; filename={protokoll.nr}-scan.{endung}"
+        )
+        return antwort
 
     from . import pdf as protokoll_pdf_modul
     # F-22: Beim Papierweg ist der Scan das Protokoll.
@@ -1997,13 +2150,15 @@ def protokoll_abbrechen(request, protokoll_nr: str):
         return redirect(f"/protokolle/{protokoll_nr}/")
     ziel = f"/geraete/{protokoll.geraet.inventarnummer}/"
 
-    # A-0128: Bei Verleih (F-30, F-33) auch die Leihe entfernen,
-    # damit das Gerät wieder ausgebbar ist.
-    if protokoll.leihe is not None:
-        protokoll.leihe.delete()
-
+    # A-0128: Bei Verleih (F-30, F-33) gehört die Leihe dazu: Der Direktverleih
+    # verschwindet, damit das Gerät wieder ausgebbar ist; eine genehmigte Anfrage
+    # bleibt genehmigt (F-21: ein verworfener Entwurf ändert nichts).
+    leihe = protokoll.leihe
     protokoll.delete()
     meldung_success(request, "Protokoll abgebrochen. Das Gerät bleibt unverändert.")
+    if leihe is not None:
+        services.leihe_entwurf_verworfen(leihe)
+        return redirect("/verleih/")
     return redirect(ziel)
 
 

@@ -154,6 +154,13 @@ form .actions{margin-top:8px}
 .chip-status.verliehen{color:var(--neutral);background:var(--neutral-bg)}
 .chip-status.in-reparatur,.chip-status.warn{color:var(--warn);background:var(--warn-bg)}
 .chip-status.ausgemustert{color:var(--err);background:var(--err-bg)}
+/* Leihe (F-36, TESTSCHNITTSTELLE 5): Stand mit Farbe und, wenn überfällig, Symbol */
+.chip-status.ok{color:var(--ok);background:var(--ok-bg)}
+.chip-status.err{color:var(--err);background:var(--err-bg)}
+.chip-status.muted{color:var(--fg-2);background:var(--surface-2)}
+.chip-status .ic{width:14px;height:14px}
+[data-test="freie-geraete"].meldung,dl.kv + form{margin-top:14px}
+td .actions input[type=date]{width:auto}
 .pills{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 
 /* Raumplan (F-65 bis F-68, A-0913 Teil 2) */

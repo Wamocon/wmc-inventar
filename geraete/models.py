@@ -750,6 +750,23 @@ class Protokoll(models.Model):
         nach_nummer = {g.inventarnummer: g for g in Gerat.objects.filter(inventarnummer__in=nummern)}
         return [nach_nummer[n] for n in nummern if n in nach_nummer]
 
+    @property
+    def pdf_baubar(self) -> bool:
+        """F-132, F-133: Das PDF entsteht, wenn Checkliste und Prüfpunkte beantwortet sind."""
+        offene = self.checkliste_unbeantwortet()
+        if self.art == self.ART_RUECKNAHME:
+            offene = offene + self.offboarding_unbeantwortet()
+        return not offene
+
+    @property
+    def pdf_verfuegbar(self) -> bool:
+        """F-110: Führt der PDF-Link zu einem Dokument?
+
+        Ein Scan ist immer da (F-22). Sonst zeigt die Oberfläche keinen Link,
+        der nur in eine Fehlermeldung führt.
+        """
+        return bool(self.scan_datei) or self.pdf_baubar
+
 
 class Leihe(models.Model):
     """Eine Leihe eines Geräts an eine Person (Kapitel 3.2, F-30, F-36).
@@ -791,13 +808,48 @@ class Leihe(models.Model):
         Eine ausgegebene Leihe zeigt nach Ablauf der Frist „überfällig“
         (F-36), sonst den Stand.
         """
-        if self.status == self.STATUS_AUSGEGEBEN and getattr(self, "ueberfaellig", False):
+        if self.ist_ueberfaellig:
             return "überfällig"
         return self.STAND_ANZEIGE.get(self.status, self.status)
 
+    @property
+    def stand_wert(self) -> str:
+        """Wert für data-stand (TESTSCHNITTSTELLE 5), „ueberfaellig“ wird berechnet."""
+        return "ueberfaellig" if self.ist_ueberfaellig else self.status
+
+    @property
+    def ist_ueberfaellig(self) -> bool:
+        """F-36: ausgegeben und Rückgabedatum überschritten, nach der Uhr der Anwendung."""
+        from konten.zeit import jetzt_wie_im_entwicklungsmodus
+
+        return (
+            self.status == self.STATUS_AUSGEGEBEN
+            and self.rueckgabe_bis is not None
+            and self.rueckgabe_bis < jetzt_wie_im_entwicklungsmodus().date()
+        )
+
+    @property
+    def offenes_protokoll(self):
+        """Protokoll, das noch auf die Signatur des Bearbeiters wartet (F-30, F-33)."""
+        return self.protokolle.filter(stand=Protokoll.STAND_BEARBEITER_OFFEN).first()
+
+    @property
+    def ist_direktentwurf(self) -> bool:
+        """F-30: Direktverleih, dessen Protokoll noch nicht signiert ist.
+
+        Er hält das Gerät fest, ist aber noch keine Leihe der Person; ein
+        verworfener Entwurf ändert nichts (F-21). Eine genehmigte Anfrage hat
+        dagegen ein Entscheidungsdatum.
+        """
+        return (
+            self.status == self.STATUS_GENEHMIGT
+            and self.decided_at is None
+            and self.offenes_protokoll is not None
+        )
+
     def ist_zurueckziehbar(self) -> bool:
         """F-37: Rückziehbar, solange die Leihe nicht ausgegeben ist."""
-        return self.status in self.ZURUECKZIEHBAR
+        return self.status in self.ZURUECKZIEHBAR and not self.ist_direktentwurf
 
     nr = models.CharField("Leihnummer", max_length=16, blank=True, default="")
     gerat = models.ForeignKey(
@@ -825,6 +877,11 @@ class Leihe(models.Model):
         "konten.Konto", on_delete=models.SET_NULL, null=True, blank=True,
         related_name="abgelehnte_leihen", verbose_name="Abgelehnt von",
     )
+    # F-35: Der Mitarbeiter fragt an, die IT gewährt. Bis dahin steht hier das
+    # gewünschte Rückgabedatum; „Rückgabe bis“ bleibt unverändert.
+    verlaengerung_bis = models.DateField(
+        "Verlängerung angefragt bis", null=True, blank=True
+    )
     decided_at = models.DateTimeField("Entschieden am", null=True, blank=True)
     zeitpunkt = models.DateTimeField("Zeitpunkt", default=timezone.now)
     erzeugt_von = models.ForeignKey(
@@ -838,7 +895,8 @@ class Leihe(models.Model):
         ordering = ["-zeitpunkt"]
 
     def __str__(self):
-        return f"Leihe {self.gerat.inventarnummer} → {self.person.nachname}"
+        ziel = self.gerat.inventarnummer if self.gerat_id else (self.nr or self.pk)
+        return f"Leihe {ziel} → {self.person.nachname}"
 
     def stand_aktuell(self) -> str:
         """Aktueller Stand: ausgegeben, zurueckgegeben oder ueberfaellig (F-36)."""
@@ -858,6 +916,8 @@ class Leihe(models.Model):
     @property
     def status_class(self) -> str:
         """CSS-Klasse für den Status-Pill in der Leihliste."""
+        if self.ist_ueberfaellig:
+            return "err"
         mapping = {
             self.STATUS_ANGEFRAGT: "warn",
             self.STATUS_GENEHMIGT: "ok",

@@ -20,6 +20,7 @@
     <dt>Formular</dt><dd>WMC-IT-{{ protokoll.formularnummer }}, Version {{ protokoll.fassung }}</dd>
     {% if protokoll.korrigiert_zu_protokoll %}<dt>Korrektur von</dt><dd><a href="/protokolle/{{ protokoll.korrigiert_zu_protokoll.nr }}/">{{ protokoll.korrigiert_zu_protokoll.nr }}</a></dd>{% endif %}
     {% if ersetzt_durch %}<dt>Ersetzt durch</dt><dd><a href="/protokolle/{{ ersetzt_durch.nr }}/" data-test="ersetzt-durch">{{ ersetzt_durch.nr }}</a></dd>{% endif %}
+    {% if protokoll.leihe %}<dt>Leihnummer</dt><dd data-test="protokoll-leihnummer">{{ protokoll.leihe.nr }}</dd><dt>Rückgabe bis</dt><dd>{{ protokoll.leihe.rueckgabe_bis|date:"d.m.Y"|default:"–" }}</dd><dt>Zweck</dt><dd>{{ protokoll.leihe.zweck|default:"–" }}</dd>{% endif %}
     {% if protokoll.rueckgabe_zu_protokoll %}<dt>Bezug</dt><dd><a href="/protokolle/{{ protokoll.rueckgabe_zu_protokoll.nr }}/">Ausgabeprotokoll {{ protokoll.rueckgabe_zu_protokoll.nr }}</a></dd>{% endif %}
   </dl>
 </section>
@@ -73,7 +74,12 @@
     {% if editierbar %}<p class="actions"><button class="btn" type="submit" data-test="offboarding-speichern">Prüfpunkte speichern</button></p>{% endif %}
   </form>
 </section>
-{% elif not protokoll.leihe_id %}
+{% elif protokoll.leihe_id %}
+<section class="card" data-test="protokoll-checkliste">
+  <div class="card-head"><h2>Zugänge und Zugangsmittel</h2></div>
+  <p>Bei einer Leihe werden keine Zugänge ausgegeben.</p>
+</section>
+{% else %}
 <section class="card" data-test="protokoll-checkliste">
   <div class="card-head"><h2>Zugänge und Zugangsmittel</h2></div>
   <form method="post" action="/protokolle/{{ protokoll.nr }}/checkliste/" data-test="checkliste-formular">
