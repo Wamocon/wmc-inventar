@@ -886,7 +886,7 @@ class MailTests(Grundlage):
         proto("UP-2", Protokoll.STAND_SCAN_OFFEN, alt)
         proto("UP-3", Protokoll.STAND_GEGENZEICHNUNG_OFFEN, alt, gegenzeichnung_token="a", gegenzeichnung_token_erstellt=datetime(2026, 11, 3, 9, tzinfo=tz.utc))
         proto("UP-4", Protokoll.STAND_SCAN_OFFEN, date(2026, 11, 6))
-        proto("UP-5", Protokoll.STAND_ENTWURF, alt)
+        proto("UP-5", Protokoll.STAND_ABGESCHLOSSEN, alt)
         self.lauf("2026-11-09")
         sammel = [m for m in mail.outbox if "Sammelmail" in m.subject][0]
         for nr in ("UP-1", "UP-2", "UP-3"):
