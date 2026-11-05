@@ -11,7 +11,6 @@ from __future__ import annotations
 import secrets
 from datetime import timedelta
 
-from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout, update_session_auth_hash
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
