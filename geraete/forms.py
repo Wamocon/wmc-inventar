@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from django import forms
 
+from konten.zeit import jetzt_wie_im_entwicklungsmodus
 from stammdaten.models import Kategorie, Person
 
 from . import services
@@ -465,7 +466,7 @@ class VerleihForm(forms.Form):
     rueckgabe_bis = forms.DateField(
         label="Rückgabe bis",
         required=True,
-        widget=forms.DateInput(attrs={"data-test": "rueckgabe-bis", "type": "date", "class": "req"}),
+        widget=forms.DateInput(format="%Y-%m-%d", attrs={"data-test": "rueckgabe-bis", "type": "date", "class": "req"}),
     )
     zweck = forms.CharField(
         label="Zweck",
@@ -493,26 +494,42 @@ class LeiheAnfrageForm(forms.ModelForm):
     class Meta:
         model = Leihe
         fields = ["kat", "beginn", "ende", "zweck", "gerat"]
+        # Beschriftungen wörtlich aus dem Prototyp (TESTSCHNITTSTELLE 4).
         labels = {
-            "kat": "Kategorie",
-            "beginn": "Leihbeginn",
-            "ende": "Leihende",
+            "kat": "Gerät",
+            "beginn": "Von",
+            "ende": "Bis",
             "zweck": "Zweck",
-            "gerat": "Konkretes Gerät (optional)",
+            "gerat": "Inventarnummer (optional)",
         }
         widgets = {
-            "kat": forms.Select(attrs={"data-test": "kategorie"}),
-            "beginn": forms.DateInput(attrs={"data-test": "beginn", "type": "date"}),
-            "ende": forms.DateInput(attrs={"data-test": "ende", "type": "date"}),
-            "zweck": forms.Textarea(attrs={"data-test": "zweck", "rows": 3}),
+            "kat": forms.Select(attrs={"data-test": "kat"}),
+            "beginn": forms.DateInput(format="%Y-%m-%d", attrs={"data-test": "beginn", "type": "date"}),
+            "ende": forms.DateInput(format="%Y-%m-%d", attrs={"data-test": "ende", "type": "date"}),
+            "zweck": forms.TextInput(attrs={
+                "data-test": "zweck",
+                "placeholder": "z. B. Schulung beim Kunden, Messe, Homeoffice-Phase",
+            }),
             "gerat": forms.Select(attrs={"data-test": "gerat"}),
+        }
+        error_messages = {
+            "kat": {"required": "Bitte eine Kategorie wählen."},
+            "beginn": {"required": "Bitte das Startdatum angeben.", "invalid": "Bitte das Startdatum angeben."},
+            "ende": {"required": "Bitte das Enddatum angeben.", "invalid": "Bitte das Enddatum angeben."},
+            "zweck": {"required": "Bitte den Zweck angeben."},
         }
 
     def __init__(self, *args, leihpool_geraete=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["gerat"].required = False
+        self.fields["gerat"].empty_label = "Beliebiges Gerät dieser Kategorie"
+        self.fields["gerat"].label_from_instance = services.leihgeraet_bezeichnung
         if leihpool_geraete is not None:
             self.fields["gerat"].queryset = leihpool_geraete
+            self.fields["kat"].queryset = Kategorie.objects.filter(
+                pk__in=leihpool_geraete.values("kategorie_id")
+            ).order_by("name")
+        self.fields["kat"].empty_label = None
         self.fields["kat"].required = True
         self.fields["beginn"].required = True
         self.fields["ende"].required = True
@@ -523,7 +540,9 @@ class LeiheAnfrageForm(forms.ModelForm):
         beginn = data.get("beginn")
         ende = data.get("ende")
         if beginn and ende and beginn > ende:
-            self.add_error("ende", "Leihende ist vor dem Leihbeginn.")
+            self.add_error("ende", "Das Enddatum muss am oder nach dem Startdatum liegen.")
+        if beginn and beginn < jetzt_wie_im_entwicklungsmodus().date():
+            self.add_error("beginn", "Das Startdatum darf nicht in der Vergangenheit liegen.")
         gerat = data.get("gerat")
         kat = data.get("kat")
         if gerat is not None and kat is not None and gerat.kategorie_id != kat.id:
@@ -532,11 +551,19 @@ class LeiheAnfrageForm(forms.ModelForm):
 
 
 class LeiheGenehmigenForm(forms.Form):
-    """M5 Teil 2 (F-32): IT genehmigt mit Zuweisung eines Leihpool-Geräts."""
+    """M5 Teil 2 (F-32): IT genehmigt mit Zuweisung eines Leihpool-Geräts.
+
+    Der Queryset prüft nur die Kategorie; ob das Gerät verfügbar ist, sagt die
+    Service-Schicht mit einer Meldung (F-32, F-34).
+    """
 
     gerat = forms.ModelChoiceField(
-        label="Gerät aus dem Leihpool",
+        label="Gerät zuweisen",
         queryset=Gerat.objects.none(),
+        error_messages={
+            "required": "Bitte ein Gerät zuweisen.",
+            "invalid_choice": "Dieses Gerät steht nicht im Leihpool der Kategorie.",
+        },
         widget=forms.Select(attrs={"data-test": "gerat"}),
     )
 
@@ -550,51 +577,69 @@ class LeiheAblehnenForm(forms.Form):
     """M5 Teil 2 (F-32): IT lehnt mit Pflichtbegründung ab."""
 
     begruendung = forms.CharField(
-        label="Begründung (Pflicht)",
+        label="Begründung",
         required=True,
+        error_messages={"required": "Bitte eine Begründung angeben (Pflicht)."},
         widget=forms.Textarea(
-            attrs={"data-test": "begrundung", "rows": 2}
+            attrs={
+                "data-test": "begruendung",
+                "rows": 3,
+                "placeholder": "Wird dem Mitarbeiter per E-Mail mitgeteilt",
+            }
         ),
     )
 
 
 class LeiheZurueckziehenForm(forms.Form):
-    """M5 Teil 2 (F-37): Mitarbeiter zieht die Leihe zurück."""
-
-    bestätigung = forms.BooleanField(
-        label="Zurückziehen bestätigen",
-        required=True,
-        widget=forms.CheckboxInput(attrs={"data-test": "bestaetigung"}),
-    )
+    """M5 Teil 2 (F-37): Mitarbeiter zieht die Leihe zurück. Der Knopf genügt."""
 
 
 class LeiheAusgebenForm(forms.Form):
-    """M5 Teil 4 (F-33): IT gibt eine genehmigte Leihe aus."""
+    """M5 Teil 4 (F-33): IT gibt eine genehmigte Leihe aus.
 
-    bestätigung = forms.BooleanField(
-        label="Ausgabe bestätigen",
-        required=True,
-        widget=forms.CheckboxInput(attrs={"data-test": "bestaetigung"}),
+    Unterschrift wie beim direkten Verleih (F-30). Ohne Angabe gilt der
+    Papierweg, wie in der Service-Schicht.
+    """
+
+    unterschrift = forms.ChoiceField(
+        choices=VerleihForm.UNTERSCHRIFT,
+        required=False,
+        initial="tool",
+        label="Unterschrift",
+        widget=forms.RadioSelect,
     )
 
 
 class LeiheVerlaengernForm(forms.Form):
-    """M5 Teil 4 (F-35): IT gewährt oder lehnt Verlängerung ab."""
+    """M5 Teil 4 (F-35): IT gewährt eine Verlängerung."""
 
     rueckgabe_bis_neu = forms.DateField(
         label="Neues Rückgabedatum",
         required=True,
+        error_messages={
+            "required": "Bitte das neue Rückgabedatum angeben.",
+            "invalid": "Bitte das neue Rückgabedatum angeben.",
+        },
         widget=forms.DateInput(
-            attrs={"data-test": "rueckgabe-bis-neu", "type": "date"}
+            format="%Y-%m-%d",
+            attrs={"data-test": "rueckgabe-bis-neu", "type": "date"},
         ),
     )
-    bestätigung = forms.BooleanField(
-        label="Verlängerung bestätigen",
-        required=True,
-        widget=forms.CheckboxInput(attrs={"data-test": "bestaetigung"}),
-    )
 
-    def __init__(self, *args, leihe=None, **kwargs):
+    def __init__(self, *args, vorschlag=None, **kwargs):
         super().__init__(*args, **kwargs)
-        if leihe is not None and leihe.rueckgabe_bis:
-            self.fields["rueckgabe_bis_neu"].initial = leihe.rueckgabe_bis
+        if vorschlag is not None:
+            self.fields["rueckgabe_bis_neu"].initial = vorschlag
+
+
+class LeiheVerlaengerungAnfragenForm(forms.Form):
+    """F-35, F-111: Mitarbeiter fragt eine Verlängerung an."""
+
+    rueckgabe_bis_neu = forms.DateField(
+        label="Neues Rückgabedatum",
+        required=True,
+        error_messages={
+            "required": "Bitte das neue Rückgabedatum angeben.",
+            "invalid": "Bitte das neue Rückgabedatum angeben.",
+        },
+    )

@@ -1,46 +1,31 @@
 {% extends "basis.html" %}
-
-{% block titel %}Verlängerung · WMC Inventar{% endblock %}
-
+{% block titel %}Leihe verlängern · WMC Inventar{% endblock %}
 {% block inhalt %}
 <div class="page-head">
-    <div><h1>Verlängerung</h1>
-        <p class="lead">Rückgabedatum einer Leihe verschieben (F-35).</p>
-    </div>
+  <div>
+    <h1>Leihe verlängern</h1>
+    <p class="muted lead">Leihe {{ leihe.nr }}: {{ leihe.person.vorname }} {{ leihe.person.nachname }}, {{ leihe.gerat.inventarnummer }}, bisher bis {{ leihe.rueckgabe_bis|date:"d.m.Y" }} (F-35)</p>
+  </div>
 </div>
-
-<div class="card" data-test="dialog" data-name="verlaengern">
-    <div class="card-head">
-        <h2>Leihe {{ leihe.nr }} verlängern</h2>
+<div data-test="dialog" data-name="verlaengern">
+  <form method="post" novalidate data-test="verlaengern-formular">
+    {% csrf_token %}
+    <div class="meldungen">
+      {% include "fragmente/fehler.html" %}
+      {% if fehler %}<div class="meldung error" data-test="fehler">{{ fehler }}</div>{% endif %}
     </div>
-    <div class="card-body">
-        <p class="muted">
-            Gerät: {{ leihe.gerat.inventarnummer }} ({{ leihe.gerat.modell }}) ·
-            Person: {{ leihe.person.vorname }} {{ leihe.person.nachname }} ·
-            Aktuelles Rückgabedatum: {{ leihe.rueckgabe_bis|date:"d.m.Y" }}
-        </p>
-
-        {% if fehler %}
-        <div data-test="fehler" class="error-box">{{ fehler }}</div>
-        {% endif %}
-
-        <form method="post" novalidate>
-            {% csrf_token %}
-            <label class="field">
-                <span>Neues Rückgabedatum <span class="erforderlich">*</span></span>
-                <input type="date" name="rueckgabe_bis_neu" required data-test="rueckgabe-bis-neu"
-                       min="{{ leihe.rueckgabe_bis|date:'Y-m-d' }}"
-                       value="{{ leihe.rueckgabe_bis|date:'Y-m-d' }}">
-            </label>
-            <label class="field">
-                <span>Verlängerung bestätigen <span class="erforderlich">*</span></span>
-                <input type="checkbox" name="bestätigung" required data-test="bestaetigung">
-            </label>
-            <div class="form-actions">
-                <a href="{% url 'geraete:verleih-liste' %}" class="btn">Abbrechen</a>
-                <button type="submit" class="btn primary" data-test="verlaengern">Verlängern</button>
-            </div>
-        </form>
+    <div class="form-grid">
+      <div class="field">
+        <label for="id_rueckgabe_bis_neu" class="req">Neues Rückgabedatum</label>
+        {{ form.rueckgabe_bis_neu }}
+        {% if leihe.verlaengerung_bis %}<span class="help" data-test="verlaengerung-angefragt">Angefragt bis {{ leihe.verlaengerung_bis|date:"d.m.Y" }}</span>{% endif %}
+        <span class="help">Eine Verlängerung ist nur möglich, wenn das Gerät danach nicht reserviert ist.</span>
+      </div>
     </div>
+    <div class="actions">
+      <button type="submit" class="btn primary" data-test="speichern">Verlängern</button>
+      <a class="btn link" href="/verleih/" data-test="abbrechen">Abbrechen</a>
+    </div>
+  </form>
 </div>
 {% endblock %}

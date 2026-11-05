@@ -1,9 +1,9 @@
 {% extends "basis.html" %}
-
+{% block titel %}Verleih · WMC Inventar{% endblock %}
 {% block inhalt %}
 <div class="page-head">
     <div><h1>Verleih</h1>
-        <p class="lead">Alle Leihen: angefragt, genehmigt, ausgegeben, zurückgegeben, abgelehnt, zurückgezogen</p>
+        <p class="lead">Alle Leihen: angefragt, genehmigt, ausgegeben, überfällig, zurückgegeben, abgelehnt, zurückgezogen</p>
     </div>
     <div class="actions">
         <a class="btn" href="/verleih/?format=xlsx" data-test="export-xlsx">Export .xlsx</a>
@@ -27,54 +27,60 @@
             </thead>
             <tbody>
             {% for leihe in leihen %}
-                <tr data-test="zeile" data-id="{{ leihe.id }}">
+                <tr data-test="zeile" data-id="{{ leihe.nr }}" data-stand="{{ leihe.stand_wert }}">
                     <td class="mono">{{ leihe.nr }}</td>
                     <td>
                         {% if leihe.gerat %}
-                            <a href="{% url 'geraete:detail' leihe.gerat.inventarnummer %}" class="linkish inv">
+                            <a href="{% url 'geraete:detail' leihe.gerat.inventarnummer %}" class="inv">
                                 {{ leihe.gerat.inventarnummer }}
                             </a>
                             <span class="sub">{{ leihe.gerat.hersteller }} {{ leihe.gerat.modell }}</span>
                         {% else %}
-                            <span class="muted">{{ leihe.kat.name }}</span>
+                            <span class="muted">{{ leihe.kat.name }}, noch kein Gerät</span>
                         {% endif %}
                     </td>
                     <td>{{ leihe.person.vorname }} {{ leihe.person.nachname }}</td>
                     <td class="nowrap">
                         {% if leihe.beginn %}
-                            {{ leihe.beginn|date:"d.m.Y" }} – {{ leihe.ende|date:"d.m.Y" }}
+                            {{ leihe.beginn|date:"d.m.Y" }} bis {{ leihe.rueckgabe_bis|default:leihe.ende|date:"d.m.Y" }}
                         {% else %}
-                            {{ leihe.rueckgabe_bis|date:"d.m.Y" }}
+                            bis {{ leihe.rueckgabe_bis|date:"d.m.Y" }}
                         {% endif %}
                     </td>
-                    <td>{{ leihe.zweck }}</td>
                     <td>
-                        <span class="pill {{ leihe.status_class }}" data-test="leihe" data-id="{{ leihe.id }}" data-stand="{{ leihe.status }}">
-                            {{ leihe.status_anzeige }}
-                        </span>
+                        {{ leihe.zweck }}
                         {% if leihe.abgelehnt and leihe.abgelehnt_bis %}
-                            <div class="sub" title="Ablehnungsbegründung">{{ leihe.abgelehnt_bis }}</div>
+                            <span class="sub">Abgelehnt: {{ leihe.abgelehnt_bis }}</span>
+                        {% endif %}
+                        {% if leihe.verlaengerung_bis %}
+                            <span class="sub" data-test="verlaengerung-angefragt">Verlängerung bis {{ leihe.verlaengerung_bis|date:"d.m.Y" }} angefragt</span>
                         {% endif %}
                     </td>
-                    <td class="aktionen">
-                        {% if leihe.status == "angefragt" %}
-                            <a href="{% url 'geraete:leih_genehmigen' leihe.id %}" class="btn small primary" data-test="genehmigen">Genehmigen</a>
-                            <a href="{% url 'geraete:leih_ablehnen' leihe.id %}" class="btn small" data-test="ablehnen">Ablehnen</a>
+                    <td class="nowrap">
+                        <span class="chip-status {{ leihe.status_class }}" data-test="leihe" data-id="{{ leihe.nr }}" data-stand="{{ leihe.stand_wert }}">{% if leihe.ist_ueberfaellig %}<svg class="ic" viewBox="0 0 24 24" aria-hidden="true" data-test="symbol-ueberfaellig"><path d="M12 3.5 21.5 20h-19z"/><path d="M12 10v4.5M12 17.5v.01"/></svg>{% endif %}{{ leihe.stand_anzeige }}</span>
+                    </td>
+                    <td>
+                        <span class="actions">
+                        {% with offen=leihe.offenes_protokoll %}
+                        {% if offen %}
+                            <a href="/protokolle/{{ offen.nr }}/" class="btn sm primary" data-test="protokoll-signieren">Protokoll {{ offen.nr }}</a>
+                        {% elif leihe.status == "angefragt" %}
+                            <a href="{% url 'geraete:leih_genehmigen' leihe.id %}" class="btn sm primary" data-test="genehmigen">Genehmigen</a>
+                            <a href="{% url 'geraete:leih_ablehnen' leihe.id %}" class="btn sm" data-test="ablehnen">Ablehnen</a>
                         {% elif leihe.status == "genehmigt" %}
-                            <a href="{% url 'geraete:leih_ausgeben' leihe.id %}" class="btn small primary" data-test="ausgeben">Ausgeben</a>
+                            <a href="{% url 'geraete:leih_ausgeben' leihe.id %}" class="btn sm primary" data-test="ausgeben">Ausgeben</a>
                         {% elif leihe.status == "ausgegeben" %}
-                            <a href="{% url 'geraete:leih_verlaengern' leihe.id %}" class="btn small" data-test="verlaengern">Verlängern</a>
-                        {% elif leihe.status == "zurückgezogen" %}
-                            <span class="muted">—</span>
-                        {% else %}
-                            <span class="muted">—</span>
+                            <a href="/geraete/{{ leihe.gerat.inventarnummer }}/rueckgeben/" class="btn sm" data-test="ruecknahme">Rücknahme</a>
+                            <a href="{% url 'geraete:leih_verlaengern' leihe.id %}" class="btn sm" data-test="verlaengern">Verlängern</a>
                         {% endif %}
+                        {% endwith %}
+                        </span>
                     </td>
                 </tr>
             {% empty %}
                 <tr>
                     <td colspan="7">
-                        <div class="empty-state">Keine Leihen in dieser Ansicht.</div>
+                        <p class="leer-text">Keine Leihen in dieser Ansicht.</p>
                     </td>
                 </tr>
             {% endfor %}

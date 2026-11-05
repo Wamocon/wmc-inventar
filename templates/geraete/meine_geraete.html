@@ -8,9 +8,11 @@
         <h1>Meine Geräte</h1>
         <p class="lead muted">Ihre Geräte, Ihre Protokolle und Ihre Leihen.</p>
     </div>
+    {% if darf_anfragen %}
     <div class="actions">
         <a class="btn" data-test="leihe-anfragen" href="/meine-geraete/leihe/neu/">Leihgerät anfragen</a>
     </div>
+    {% endif %}
 </div>
 
 <section class="abschnitt" data-test="meine-geraete">
@@ -21,11 +23,16 @@
         <div class="zeile" data-test="zeile" data-id="{{ eintrag.gerat.inventarnummer }}">
             <span class="inv num">{{ eintrag.gerat.inventarnummer }}</span>
             <span>
-                <span class="muted">Ausgabe: {{ eintrag.ausgabe_datum|default:"—" }}</span>
-                {% if eintrag.protokoll %}
+                <span class="muted">Ausgabe: {% if eintrag.ausgabe_datum %}{{ eintrag.ausgabe_datum|date:"d.m.Y" }}{% else %}—{% endif %}</span>
+                {% if eintrag.leihe %}<span class="muted"> · Leihe bis {{ eintrag.leihe.rueckgabe_bis|date:"d.m.Y" }}</span>{% endif %}
+            </span>
+            <span>
+                {% if not eintrag.protokoll %}
+                <span class="muted">noch ohne Protokoll</span>
+                {% elif eintrag.protokoll.pdf_verfuegbar %}
                 <a data-test="protokoll-pdf" href="/protokolle/{{ eintrag.protokoll.nr }}/pdf/">Protokoll (PDF)</a>
                 {% else %}
-                <span class="muted">noch ohne Protokoll</span>
+                <span class="muted" data-test="protokoll-offen">Protokoll noch offen</span>
                 {% endif %}
             </span>
         </div>
@@ -45,12 +52,12 @@
             <span class="num">{{ protokoll.nr }}</span>
             <span>
                 <span class="chip-status {{ protokoll.stand_class }}">{{ protokoll.stand_anzeige }}</span>
+                {% if protokoll.datum %}<span class="muted"> {{ protokoll.datum|date:"d.m.Y" }}</span>{% endif %}
             </span>
-            <span>
-                {% if protokoll.datum %}<span class="muted">{{ protokoll.datum|date:"d.m.Y" }}</span>{% endif %}
+            <span class="actions">
+                <a data-test="protokoll-detail" href="/protokolle/{{ protokoll.nr }}/">Details</a>
+                {% if protokoll.pdf_verfuegbar %}<a data-test="protokoll-pdf" href="/protokolle/{{ protokoll.nr }}/pdf/">PDF</a>{% endif %}
             </span>
-            <a data-test="protokoll-detail" href="/protokolle/{{ protokoll.nr }}/">Details</a>
-            <a data-test="protokoll-pdf" href="/protokolle/{{ protokoll.nr }}/pdf/">PDF</a>
         </div>
         {% endfor %}
     </div>
@@ -62,23 +69,52 @@
 <section class="abschnitt" data-test="meine-leihen">
     <h2>Meine Leihen</h2>
     {% if leihen %}
-    <div class="liste" data-test="liste" data-liste="meine-leihen">
-        {% for leihe in leihen %}
-        <div class="zeile" data-test="zeile" data-id="{{ leihe.id }}" data-stand="{{ leihe.status }}">
-            <span>
-                <span class="chip-status {{ leihe.status_class }}">{{ leihe.stand_anzeige }}</span>
-            </span>
-            <span>
-                <span class="muted">Rückgabe bis: {{ leihe.rueckgabe_bis|date:"d.m.Y" }}</span>
-                {% if leihe.zweck %}<span class="muted"> · {{ leihe.zweck }}</span>{% endif %}
-            </span>
-        </div>
-        {% endfor %}
+    <div class="tbl-wrap">
+        <table data-test="liste" data-liste="meine-leihen">
+            <thead>
+                <tr><th>Nr.</th><th>Gerät</th><th>Zeitraum</th><th>Rückgabe bis</th><th>Zweck</th><th>Status</th><th></th></tr>
+            </thead>
+            <tbody>
+            {% for leihe in leihen %}
+                <tr data-test="zeile" data-id="{{ leihe.nr }}" data-stand="{{ leihe.stand_wert }}">
+                    <td class="mono">{{ leihe.nr }}</td>
+                    <td>
+                        {% if leihe.kat %}{{ leihe.kat.name }}{% endif %}
+                        {% if leihe.gerat %}<span class="sub">{{ leihe.gerat.inventarnummer }}, {{ leihe.gerat.modell }}</span>{% endif %}
+                    </td>
+                    <td class="nowrap">{% if leihe.beginn %}{{ leihe.beginn|date:"d.m.Y" }} bis {{ leihe.ende|date:"d.m.Y" }}{% else %}—{% endif %}</td>
+                    <td class="nowrap">{{ leihe.rueckgabe_bis|date:"d.m.Y" }}</td>
+                    <td>
+                        {{ leihe.zweck }}
+                        {% if leihe.abgelehnt and leihe.abgelehnt_bis %}<span class="sub" data-test="begruendung">Begründung: {{ leihe.abgelehnt_bis }}</span>{% endif %}
+                        {% if leihe.verlaengerung_bis %}<span class="sub" data-test="verlaengerung-angefragt">Verlängerung bis {{ leihe.verlaengerung_bis|date:"d.m.Y" }} angefragt</span>{% endif %}
+                    </td>
+                    <td class="nowrap"><span class="chip-status {{ leihe.status_class }}">{% if leihe.ist_ueberfaellig %}<svg class="ic" viewBox="0 0 24 24" aria-hidden="true" data-test="symbol-ueberfaellig"><path d="M12 3.5 21.5 20h-19z"/><path d="M12 10v4.5M12 17.5v.01"/></svg>{% endif %}{{ leihe.stand_anzeige }}</span></td>
+                    <td>
+                        {% if darf_anfragen %}
+                        {% if leihe.ist_zurueckziehbar %}
+                        <form method="post" action="/meine-geraete/leihe/{{ leihe.id }}/zurueckziehen/" data-test="zurueckziehen-formular">
+                            {% csrf_token %}
+                            <button type="submit" class="btn sm" data-test="zurueckziehen">Zurückziehen</button>
+                        </form>
+                        {% elif leihe.status == "ausgegeben" and not leihe.verlaengerung_bis %}
+                        <form method="post" action="/meine-geraete/leihe/{{ leihe.id }}/verlaengern/" class="actions" data-test="verlaengern-formular" novalidate>
+                            {% csrf_token %}
+                            <input type="date" name="rueckgabe_bis_neu" value="{{ leihe.verlaengerung_vorschlag|date:'Y-m-d' }}" aria-label="Neues Rückgabedatum" data-test="rueckgabe-bis-neu">
+                            <button type="submit" class="btn sm" data-test="verlaengerung-anfragen">Verlängerung anfragen</button>
+                        </form>
+                        {% endif %}
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
     </div>
     {% else %}
     <p class="muted">
         Sie haben keine Leihen.
-        <a data-test="leihe-anfragen" href="/meine-geraete/leihe/neu/">Leihgerät anfragen</a>
+        {% if darf_anfragen %}<a data-test="leihe-anfragen" href="/meine-geraete/leihe/neu/">Leihgerät anfragen</a>{% endif %}
     </p>
     {% endif %}
 </section>

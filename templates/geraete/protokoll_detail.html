@@ -33,6 +33,11 @@
         {% if protokoll.rueckgabe_zu_protokoll %}
         <tr><td class="lbl">Bezug</td><td>Ausgabeprotokoll {{ protokoll.rueckgabe_zu_protokoll.nr }}</td></tr>
         {% endif %}
+        {% if protokoll.leihe %}
+        <tr><td class="lbl">Leihnummer</td><td data-test="protokoll-leihnummer">{{ protokoll.leihe.nr }}</td></tr>
+        <tr><td class="lbl">Rückgabe bis</td><td>{{ protokoll.leihe.rueckgabe_bis|date:"d.m.Y" }}</td></tr>
+        <tr><td class="lbl">Zweck</td><td>{{ protokoll.leihe.zweck }}</td></tr>
+        {% endif %}
     </table>
 </section>
 
@@ -78,6 +83,11 @@
             {% endif %}
         </p>
     </form>
+</section>
+{% elif protokoll.leihe_id %}
+<section class="abschnitt" data-test="protokoll-checkliste">
+    <h2>Checkliste Zugänge</h2>
+    <p>Bei einer Leihe werden keine Zugänge ausgegeben.</p>
 </section>
 {% else %}
 <section class="abschnitt" data-test="protokoll-checkliste">

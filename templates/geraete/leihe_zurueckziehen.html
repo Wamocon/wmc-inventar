@@ -1,40 +1,22 @@
 {% extends "basis.html" %}
-
-{% block titel %}Leihe zurückziehen · WMC Inventar{% endblock %}
-
+{% block titel %}Anfrage zurückziehen · WMC Inventar{% endblock %}
 {% block inhalt %}
 <div class="page-head">
-    <div><h1>Leihe zurückziehen</h1>
-        <p class="lead">Eine angefragte oder genehmigte Leihe zurückziehen (F-37).</p>
-    </div>
+  <div>
+    <h1>Anfrage zurückziehen</h1>
+    <p class="muted lead">Leihe {{ leihe.nr }}: {{ leihe.kat.name }}, {{ leihe.beginn|date:"d.m.Y" }} bis {{ leihe.ende|date:"d.m.Y" }}, {{ leihe.zweck }} (F-37)</p>
+  </div>
 </div>
-
-<div class="card" data-test="dialog" data-name="zurueckziehen">
-    <div class="card-head">
-        <h2>Leihe {{ leihe.nr }} zurückziehen</h2>
+<div data-test="dialog" data-name="zurueckziehen">
+  <form method="post" novalidate data-test="zurueckziehen-formular">
+    {% csrf_token %}
+    <div class="meldungen">
+      {% if meldung %}<div class="meldung error" data-test="fehler">{{ meldung }}</div>{% endif %}
     </div>
-    <div class="card-body">
-        <p class="muted">
-            Kategorie: {{ leihe.kat.name }} ·
-            {{ leihe.beginn|date:"d.m.Y" }} – {{ leihe.ende|date:"d.m.Y" }} ·
-            Zweck: {{ leihe.zweck }}
-        </p>
-
-        {% if meldung %}
-        <div data-test="fehler" class="error-box">{{ meldung }}</div>
-        {% endif %}
-
-        <form method="post" novalidate>
-            {% csrf_token %}
-            <label class="field">
-                <input type="checkbox" name="bestätigung" required data-test="bestätigung">
-                <span>Zurückziehen bestätigen</span>
-            </label>
-            <div class="form-actions">
-                <a href="/meine-geraete/" class="btn">Abbrechen</a>
-                <button type="submit" class="btn danger" data-test="zurueckziehen">Zurückziehen</button>
-            </div>
-        </form>
+    <div class="actions">
+      <button type="submit" class="btn primary" data-test="bestaetigen">Zurückziehen</button>
+      <a class="btn link" href="/meine-geraete/" data-test="abbrechen">Abbrechen</a>
     </div>
+  </form>
 </div>
 {% endblock %}

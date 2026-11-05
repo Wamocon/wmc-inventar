@@ -62,7 +62,7 @@
         {% if user.person_id %}
           <div class="nav-sep" role="separator"></div>
           <a class="nav-item" href="/meine-geraete/" data-test="nav-meine-geraete"{% if p == "/meine-geraete/" %} aria-current="page"{% endif %}><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="11" rx="1"/><path d="M2 19h20"/></svg>Meine Geräte</a>
-          <a class="nav-item" href="/meine-geraete/leihe/neu/" data-test="nav-leihen"{% if p|slice:":21" == "/meine-geraete/leihe/" %} aria-current="page"{% endif %}><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l-3.5-3.5M19 16H5l3.5 3.5"/></svg>Leihgerät anfragen</a>
+          {% if not user.ist_leser %}<a class="nav-item" href="/meine-geraete/leihe/neu/" data-test="nav-leihen"{% if p|slice:":21" == "/meine-geraete/leihe/" %} aria-current="page"{% endif %}><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l-3.5-3.5M19 16H5l3.5 3.5"/></svg>Leihgerät anfragen</a>{% endif %}
         {% endif %}
       {% endwith %}{% endif %}
     </nav>

@@ -11,7 +11,7 @@ F-84 bis F-88 (Importkonflikte, Datenlücken).
 from __future__ import annotations
 
 import os
-from datetime import date
+from datetime import date, timedelta
 
 from django.db import transaction
 from django.db.models import Max
@@ -330,7 +330,7 @@ def _protokoll_erstellen(
         nr=_naechste_protokollnummer(),
         person=person,
         geraet=gerat,
-        datum=timezone.now().date(),
+        datum=jetzt_wie_im_entwicklungsmodus().date(),
         stand=stand,
         art=art,
         fassung="1.0",
@@ -398,6 +398,8 @@ def ausmustern(
     gerat.status = Gerat.STATUS_AUSGEMUSTERT
     gerat.person = None
     gerat.ort = None
+    # Ein verlorenes Leihgerät kommt nicht zurück; die Erinnerung endet (F-92).
+    _leihen_beenden(gerat)
 
     Vorgang.objects.create(
         gerat=gerat,
@@ -477,7 +479,13 @@ def gerat_rueckgeben(
             erzeugt_von=ausgefuehrt_von,
             rueckgabe_zu_protokoll=ausgabe_protokoll,
             offboarding=_offboarding_vorbelegung(gerat, person),
+            leihe=Leihe.objects.filter(
+                gerat=gerat, status=Leihe.STATUS_AUSGEGEBEN
+            ).first(),
         )
+
+    # Die Leihe endet mit der Rückgabe des Geräts (F-92, F-111).
+    _leihen_beenden(gerat)
 
     gerat.person = None
     gerat.ort = None
@@ -1409,7 +1417,7 @@ def _naechste_leihnummer() -> str:
 def _naechste_protokollnummer() -> str:
     """Nächste Protokollnummer UP-JJJJ-NNNN (fortlaufend je Jahr, TESTSCHNITTSTELLE 3)."""
     from .models import Protokoll
-    jahr = timezone.now().year
+    jahr = jetzt_wie_im_entwicklungsmodus().year
     letzte = (
         Protokoll.objects.filter(nr__startswith=f"UP-{jahr}-")
         .order_by("-nr")
@@ -1440,16 +1448,18 @@ def leih_gerat_ausgeben(
     - Rückgabedatum ist Pflicht
     - Zweck ist Pflicht
 
-    Ergebnis:
+    Ergebnis auf dem Papierweg (F-22):
     - Gerät: Status „Verliehen"
     - Leihe: Status „ausgegeben"
     - Protokoll: Stand "scan-offen" (F-22, Kapitel 8.2)
     - Vorgang: Typ „ausgabe", leihgabe_an, zurueck_am
 
-    A-0127: Unterschrift. Bei „tool" bleibt das Gerät „Auf Lager",
-    Protokoll auf „bearbeiter-offen"; Status kommt erst mit der Signatur.
+    A-0127: Unterschrift. Bei „tool" bleibt das Gerät „Auf Lager" und ist
+    reserviert, die Leihe steht auf „genehmigt", das Protokoll auf
+    „bearbeiter-offen"; Status und Vorgang kommen erst mit der Signatur
+    (F-30: zum selben Zeitpunkt wie in F-21).
     """
-    from .models import Leihe, Protokoll, Vorgang
+    from .models import Leihe, Protokoll
     from django.db import transaction
 
     if gerat.status != Gerat.STATUS_AUF_LAGER:
@@ -1461,115 +1471,213 @@ def leih_gerat_ausgeben(
     if not zweck or not zweck.strip():
         raise GeratFehler("Zweck ist Pflicht (F-30).")
 
-    # A-0127: Unterschrift „tool" – Gerät bleibt „Auf Lager",
-    # Protokoll auf „bearbeiter-offen". Status kommt erst mit der Signatur.
-    # A-0128: Zweite Ausgabe/Verleih abgelehnt, solange ein Protokoll
+    heute = jetzt_wie_im_entwicklungsmodus().date()
+    if rueckgabe_bis is None or rueckgabe_bis <= heute:
+        raise GeratFehler("Das Rückgabedatum muss nach heute liegen (F-30).")
+
+    # A-0128: Zweiter Verleih abgelehnt, solange ein Protokoll
     # auf "bearbeiter-offen" steht (F-30, F-33).
-    if unterschrift == "tool":
-        if Protokoll.objects.filter(
-            geraet=gerat, stand=Protokoll.STAND_BEARBEITER_OFFEN
-        ).exists():
-            raise GeratFehler(
-                "Für dieses Gerät steht bereits ein offenes Protokoll. "
-                "Ein weiterer Verleih ist solange nicht möglich (F-30)."
-            )
+    if Protokoll.objects.filter(
+        geraet=gerat, stand=Protokoll.STAND_BEARBEITER_OFFEN
+    ).exists():
+        raise GeratFehler(
+            "Für dieses Gerät steht bereits ein offenes Protokoll. "
+            "Ein weiterer Verleih ist solange nicht möglich (F-30)."
+        )
+
+    im_tool = unterschrift == "tool"
+    with transaction.atomic():
         # A-0128: Leihe zuerst anlegen, dann Protokoll mit Bezug.
-        leih_nr = _naechste_leihnummer()
         leihe = Leihe.objects.create(
-            nr=leih_nr,
+            nr=_naechste_leihnummer(),
             gerat=gerat,
             person=person,
+            kat=gerat.kategorie,
+            beginn=heute,
+            ende=rueckgabe_bis,
             rueckgabe_bis=rueckgabe_bis,
             zweck=zweck.strip(),
-            status=Leihe.STATUS_AUSGEGEBEN,
+            status=Leihe.STATUS_GENEHMIGT if im_tool else Leihe.STATUS_AUSGEGEBEN,
+            genehmigt=im_tool,
+            zeitpunkt=jetzt_wie_im_entwicklungsmodus(),
             erzeugt_von=ausgefuehrt_von,
         )
-        Protokoll.objects.create(
+        _protokoll_erstellen(
             person=person,
-            geraet=gerat,
-            datum=timezone.now().date(),
-            nr=_naechste_protokollnummer(),
-            stand=Protokoll.STAND_BEARBEITER_OFFEN,
-            fotos=0,
+            gerat=gerat,
+            art=Protokoll.ART_AUSGABE,
+            bearbeiter=(
+                ausgefuehrt_von.bezeichnung() if ausgefuehrt_von is not None else ""
+            ),
             erzeugt_von=ausgefuehrt_von,
-            unterschrift_art="tool",
+            stand=(
+                Protokoll.STAND_BEARBEITER_OFFEN if im_tool
+                else Protokoll.STAND_SCAN_OFFEN
+            ),
+            unterschrift_art="tool" if im_tool else "papier",
             leihe=leihe,
         )
-        return leihe
-
-    # Nächste Leihnummer und Protokollnummer
-    leih_nr = _naechste_leihnummer()
-    protokoll_nr = _naechste_protokollnummer()
-
-    with transaction.atomic():
-        # Protokoll (F-21, F-22): Stand "scan-offen", Nummer UP-JJJJ-NNNN
-        Protokoll.objects.create(
-            person=person,
-            geraet=gerat,
-            datum=timezone.now().date(),
-            nr=protokoll_nr,
-            stand=Protokoll.STAND_SCAN_OFFEN,
-            fotos=0,
-            erzeugt_von=ausgefuehrt_von,
-        )
-
-        # Gerät: Status → Verliehen (F-30)
-        gerat.status = Gerat.STATUS_VERLIEHEN
-        gerat.person = person
-        gerat.ort = None
-        gerat.save(update_fields=["status", "person", "ort"])
-
-        # Leihe: Status „ausgegeben" (F-30)
-        leihe = Leihe.objects.create(
-            nr=leih_nr,
-            gerat=gerat,
-            person=person,
-            rueckgabe_bis=rueckgabe_bis,
-            zweck=zweck.strip(),
-            status=Leihe.STATUS_AUSGEGEBEN,
-            erzeugt_von=ausgefuehrt_von,
-        )
-
-        # Vorgang (Kapitel 8)
-        Vorgang.objects.create(
-            gerat=gerat,
-            typ=Vorgang.TYP_AUSGABE,
-            erzeugt_von=ausgefuehrt_von,
-            leihgabe_an=person,
-            zurueck_am=rueckgabe_bis,
-            notiz=zweck.strip(),
-            abschliesst=False,
-        )
+        if im_tool:
+            _reservierung_nachziehen(gerat)
+        else:
+            _leihe_ausgabe_buchen(leihe, ausgefuehrt_von)
 
     return leihe
 
 
+def _leihe_ausgabe_buchen(leihe: Leihe, ausgefuehrt_von: Konto | None) -> None:
+    """Der eine Zeitpunkt der Ausgabe (F-30, F-33, Zeitpunkt wie in F-21).
+
+    Gerät „Verliehen" bei der Person, Leihe „ausgegeben", Vorgang „Ausgabe",
+    die Reservierung durch diese Leihe endet. Läuft in der Transaktion des
+    Aufrufers: beim Papierweg mit dem Speichern, sonst mit der Signatur.
+    """
+    gerat = leihe.gerat
+    gerat.status = Gerat.STATUS_VERLIEHEN
+    gerat.person = leihe.person
+    gerat.ort = None
+    gerat.save(update_fields=["status", "person", "ort"])
+
+    leihe.status = Leihe.STATUS_AUSGEGEBEN
+    leihe.save(update_fields=["status"])
+
+    Vorgang.objects.create(
+        gerat=gerat,
+        typ=Vorgang.TYP_AUSGABE,
+        zeitpunkt=jetzt_wie_im_entwicklungsmodus(),
+        erzeugt_von=ausgefuehrt_von,
+        leihgabe_an=leihe.person,
+        zurueck_am=leihe.rueckgabe_bis,
+        notiz=leihe.zweck or "Leihgerät ausgegeben (F-33).",
+        abschliesst=False,
+    )
+    _reservierung_nachziehen(gerat)
+
+
+def _belegende_leihen(
+    gerat: Gerat, von: date, bis: date, ohne: Leihe | None = None
+) -> list[Leihe]:
+    """Leihen desselben Geräts, die den Zeitraum belegen (F-34, F-35).
+
+    Genehmigte und ausgegebene Leihen zählen, die Ausgabe beendet den Schutz
+    nicht. Eine überfällige Leihe belegt das Gerät bis heute, es ist ja noch
+    draußen. Beide Grenztage gehören zum Zeitraum.
+    """
+    heute = jetzt_wie_im_entwicklungsmodus().date()
+    leihen = Leihe.objects.filter(
+        gerat=gerat, status__in=[Leihe.STATUS_GENEHMIGT, Leihe.STATUS_AUSGEGEBEN]
+    ).select_related("person").order_by("beginn", "id")
+    if ohne is not None:
+        leihen = leihen.exclude(pk=ohne.pk)
+    treffer = []
+    for leihe in leihen:
+        ende = heute if leihe.ist_ueberfaellig else (leihe.rueckgabe_bis or leihe.ende)
+        if leihe.beginn is not None and leihe.beginn > bis:
+            continue
+        if ende is not None and ende < von:
+            continue
+        treffer.append(leihe)
+    return treffer
+
+
 def _gerat_ist_reserviert(
-    gerat: Gerat, beginn: date | None = None, ende: date | None = None
+    gerat: Gerat,
+    beginn: date | None = None,
+    ende: date | None = None,
+    ohne: Leihe | None = None,
 ) -> bool:
     """Ist das Gerät reserviert? (F-20, Kapitel 4, F-34)
 
     Ohne Zeitraum: es gibt eine genehmigte Leihe für das Gerät. Mit
-    Zeitraum: Überschneidung mit einer genehmigten Leihe desselben
-    Geräts – ein Gerät gehört in einem Zeitraum nur zu einer
-    genehmigten Leihe (F-34, O-12).
+    Zeitraum: Überschneidung mit einer genehmigten oder ausgegebenen Leihe
+    desselben Geräts – ein Gerät gehört in einem Zeitraum nur zu einer
+    Leihe (F-34, O-12).
     """
-    from django.db.models import Q
-
-    qs = Leihe.objects.filter(
-        gerat=gerat, genehmigt=True, status=Leihe.STATUS_GENEHMIGT
-    )
     if beginn is not None and ende is not None:
-        qs = qs.filter(
-            Q(
-                beginn__isnull=False,
-                beginn__lte=ende,
-                ende__isnull=False,
-                ende__gte=beginn,
-            )
-            | Q(beginn__isnull=True)
+        return bool(_belegende_leihen(gerat, beginn, ende, ohne=ohne))
+    return Leihe.objects.filter(
+        gerat=gerat, genehmigt=True, status=Leihe.STATUS_GENEHMIGT
+    ).exists()
+
+
+def _leihgeraet_einsetzbar(gerat: Gerat) -> bool:
+    """Kommt das Gerät für eine Leihe in Frage? (F-31, F-32, Kapitel 4)
+
+    Nicht ausgemustert, nicht in Reparatur und nicht fest ausgegeben. Ein
+    verliehenes Gerät zählt, wenn seine Leihe ein Ende hat; ob der Zeitraum
+    passt, entscheidet dann die Überschneidung (F-34).
+    """
+    if gerat.status == Gerat.STATUS_AUF_LAGER:
+        return True
+    if gerat.status == Gerat.STATUS_VERLIEHEN:
+        return Leihe.objects.filter(
+            gerat=gerat, status=Leihe.STATUS_AUSGEGEBEN
+        ).exists()
+    return False
+
+
+def leihgeraet_bezeichnung(gerat: Gerat) -> str:
+    """Eintrag in Auswahllisten: Nummer, Hersteller, Modell (F-31)."""
+    return f"{gerat.inventarnummer}, {gerat.hersteller} {gerat.modell}".strip()
+
+
+def leihe_verfuegbarkeit(
+    kategorie: Kategorie,
+    von: date | None = None,
+    bis: date | None = None,
+    ohne: Leihe | None = None,
+) -> dict:
+    """F-31: Wie viele Leihpool-Geräte der Kategorie sind im Zeitraum frei?
+
+    ``einsetzbar`` sind die Geräte, die für eine Leihe in Frage kommen; davon
+    sind im Zeitraum ``frei`` und ``belegt``. ``gesamt`` zählt den Leihpool der
+    Kategorie ohne ausgemusterte Geräte, wie im Prototyp. Ohne Zeitraum gibt
+    es keinen Text.
+    """
+    pool = list(
+        Gerat.objects.filter(kategorie=kategorie, leihpool=True)
+        .exclude(status=Gerat.STATUS_AUSGEMUSTERT)
+        .order_by("inventarnummer")
+    )
+    einsetzbar = [g for g in pool if _leihgeraet_einsetzbar(g)]
+    ergebnis = {
+        "einsetzbar": einsetzbar,
+        "frei": [],
+        "belegt": [],
+        "gesamt": len(pool),
+        "text": "",
+        "art": "info",
+    }
+    if von is None or bis is None:
+        return ergebnis
+    frei = [g for g in einsetzbar if not _belegende_leihen(g, von, bis, ohne=ohne)]
+    belegt = [g for g in einsetzbar if g not in frei]
+    if frei:
+        verb = "ist" if len(frei) == 1 else "sind"
+        wort = "Leihgerät" if len(pool) == 1 else "Leihgeräten"
+        text = f"Im Zeitraum {verb} {len(frei)} von {len(pool)} {wort} der Kategorie {kategorie.name} frei."
+        art = "info"
+    else:
+        text = (
+            f"Im Zeitraum ist kein Leihgerät der Kategorie {kategorie.name} frei. "
+            "Sie können trotzdem anfragen, die IT meldet sich."
         )
-    return qs.exists()
+        art = "warning"
+    ergebnis.update(frei=frei, belegt=belegt, text=text, art=art)
+    return ergebnis
+
+
+def _leihen_beenden(gerat: Gerat) -> None:
+    """Ausgegebene Leihen abschließen, wenn das Gerät zurück oder verloren ist.
+
+    Rückgabe und Verlust laufen über das Gerät (F-50, F-52, F-57). Die Leihe
+    endet mit ihnen, sonst liefen Erinnerungen und „überfällig“ weiter (F-92).
+    """
+    Leihe.objects.filter(gerat=gerat, status=Leihe.STATUS_AUSGEGEBEN).update(
+        status=Leihe.STATUS_ZURUECKGEGEBEN,
+        genehmigt=False,
+        verlaengerung_bis=None,
+    )
 
 
 def leihe_zurueckgeben(
@@ -1578,39 +1686,46 @@ def leihe_zurueckgeben(
 ) -> None:
     """Rückgabe eines verliehenen Geräts (F-133, Kapitel 8).
 
-    Setzt die Leihe auf „zurueckgegeben" und das Gerät auf „Auf Lager".
-    Belegt die Prüfpunkte nach F-133.
+    Läuft über dieselbe Funktion wie die Rückgabe am Gerät (F-50): Gerät ins
+    Lager, Rücknahmeprotokoll, Vorgang, Leihe „zurueckgegeben".
     """
-    from .models import Vorgang
-    from django.db import transaction
-
-    gerat = leihe.gerat
     if leihe.status != Leihe.STATUS_AUSGEGEBEN:
         raise GeratFehler("Leihe ist nicht ausgegeben.")
+    gerat_rueckgeben(
+        leihe.gerat,
+        zustand_rueckgabe=leihe.gerat.zustand,
+        ausgefuehrt_von=ausgefuehrt_von,
+    )
+    leihe.refresh_from_db()
 
-    with transaction.atomic():
-        # Gerät zurück ins Lager (F-133)
-        gerat.status = Gerat.STATUS_AUF_LAGER
-        gerat.person = None
-        gerat.save(update_fields=["status", "person"])
 
-        # Leihe → zurückgegeben
-        leihe.status = Leihe.STATUS_ZURUECKGEGEBEN
-        leihe.genehmigt = False
-        leihe.save(update_fields=["status", "genehmigt"])
+def leihe_entwurf_verworfen(leihe: Leihe) -> None:
+    """Das offene Protokoll einer Leihe wurde verworfen (F-21, A-0128).
 
-        # Vorgang „Rückgabe"
-        Vorgang.objects.create(
-            gerat=gerat,
-            typ=Vorgang.TYP_RUECKGABE,
-            erzeugt_von=ausgefuehrt_von,
-            leihgabe_an=leihe.person,
-            notiz="Rückgabe Leihgerät",
-            abschliesst=True,
-        )
+    Ein verworfener Entwurf ändert nichts: Der Direktverleih verschwindet
+    wieder, eine genehmigte Anfrage bleibt genehmigt und reserviert.
+    """
+    gerat = leihe.gerat
+    if leihe.status == Leihe.STATUS_GENEHMIGT and leihe.decided_at is None:
+        leihe.delete()
+    if gerat is not None:
+        _reservierung_nachziehen(gerat)
 
 
 # --- F-93, F-32: Mails bei Leihanfrage und Entscheidung (M7 Teil 2) -----------
+
+def leihe_mail_empfaenger(person: Person | None) -> str:
+    """F-96: Adresse für Mails zur Leihe, leer bei deaktiviertem Konto.
+
+    Eine Person ohne Konto bekommt die Mail weiter an ihre Adresse.
+    """
+    if person is None:
+        return ""
+    konten = list(person.konten.all())
+    if konten and not any(konto.aktiv for konto in konten):
+        return ""
+    return person.email or ""
+
 
 def _mail_anfrage_an_it(leihe: Leihe) -> None:
     """F-93: Neue Leihanfrage → sofort Mail an die IT.
@@ -1621,7 +1736,7 @@ def _mail_anfrage_an_it(leihe: Leihe) -> None:
     from django.conf import settings as _settings
 
     einstellungen = Einstellungen.aktuelles()
-    if not einstellungen.mail_leihe_neu:
+    if not (einstellungen.mail_leihe_neu and einstellungen.mail_verleih_anfrage):
         return
     it_email = einstellungen.email_it
     if not it_email:
@@ -1664,7 +1779,7 @@ def _mail_entscheidung_an_person(leihe: Leihe, genehmigt: bool, begruendung: str
     else:
         if not einstellungen.mail_verleih_ablehnung:
             return
-    empfaenger = leihe.person.email
+    empfaenger = leihe_mail_empfaenger(leihe.person)
     if not empfaenger:
         return
     basis = _settings.BASIS_URL.rstrip("/") if _settings.BASIS_URL else "http://127.0.0.1:8000"
@@ -1673,24 +1788,79 @@ def _mail_entscheidung_an_person(leihe: Leihe, genehmigt: bool, begruendung: str
         beginn = leihe.beginn.strftime("%d.%m.%Y") if leihe.beginn else ""
         ende = leihe.ende.strftime("%d.%m.%Y") if leihe.ende else ""
         betrag = (
-            f"Ihre Leihanfrage wurde genehmigt.\n\n"
+            f"Ihre Leihanfrage {leihe.nr} wurde genehmigt.\n\n"
             f"Gerät: {gerat_name}\n"
             f"Zeitraum: {beginn} bis {ende}\n\n"
-            f"Details: {basis}/verleih/\n\n"
+            f"Details: {basis}/meine-geraete/\n\n"
             f"{einstellungen.absenderzeile or 'Wamocon GmbH · IT'}"
         )
         subject = f"Leihanfrage genehmigt – {gerat_name}"
     else:
         betrag = (
-            f"Ihre Leihanfrage wurde abgelehnt.\n\n"
+            f"Ihre Leihanfrage {leihe.nr} wurde abgelehnt.\n\n"
             f"Begründung: {begruendung}\n\n"
-            f"Details: {basis}/verleih/\n\n"
+            f"Details: {basis}/meine-geraete/\n\n"
             f"{einstellungen.absenderzeile or 'Wamocon GmbH · IT'}"
         )
         subject = "Leihanfrage abgelehnt"
     send_mail(
         subject=subject,
         message=betrag,
+        from_email=_settings.DEFAULT_FROM_EMAIL or "inventar@beispiel.test",
+        recipient_list=[empfaenger],
+        fail_silently=True,
+    )
+
+
+def _mail_verlaengerung_an_it(leihe: Leihe) -> None:
+    """F-35: Verlängerung angefragt → Mail an die IT, wie die Anfrage selbst (F-93)."""
+    from django.core.mail import send_mail
+    from django.conf import settings as _settings
+
+    einstellungen = Einstellungen.aktuelles()
+    if not (einstellungen.mail_leihe_neu and einstellungen.mail_verleih_anfrage):
+        return
+    if not einstellungen.email_it:
+        return
+    basis = _settings.BASIS_URL.rstrip("/") if _settings.BASIS_URL else "http://127.0.0.1:8000"
+    send_mail(
+        subject=f"Verlängerung angefragt – {leihe.gerat.inventarnummer}",
+        message=(
+            f"{leihe.person.vorname} {leihe.person.nachname} fragt eine Verlängerung an.\n\n"
+            f"Leihe: {leihe.nr}\n"
+            f"Gerät: {leihe.gerat.inventarnummer}\n"
+            f"Rückgabe bis: {leihe.rueckgabe_bis.strftime('%d.%m.%Y')}\n"
+            f"Gewünscht bis: {leihe.verlaengerung_bis.strftime('%d.%m.%Y')}\n\n"
+            f"Entscheidung: {basis}/verleih/\n\n"
+            f"{einstellungen.absenderzeile or 'Wamocon GmbH · IT'}"
+        ),
+        from_email=_settings.DEFAULT_FROM_EMAIL or "inventar@beispiel.test",
+        recipient_list=[einstellungen.email_it],
+        fail_silently=True,
+    )
+
+
+def _mail_verlaengerung_an_person(leihe: Leihe) -> None:
+    """F-35: Verlängerung gewährt → Mail an die Person (F-93, F-96)."""
+    from django.core.mail import send_mail
+    from django.conf import settings as _settings
+
+    einstellungen = Einstellungen.aktuelles()
+    if not einstellungen.mail_verleih_genehmigung:
+        return
+    empfaenger = leihe_mail_empfaenger(leihe.person)
+    if not empfaenger:
+        return
+    basis = _settings.BASIS_URL.rstrip("/") if _settings.BASIS_URL else "http://127.0.0.1:8000"
+    send_mail(
+        subject=f"Leihe verlängert – {leihe.gerat.inventarnummer}",
+        message=(
+            f"Ihre Leihe {leihe.nr} wurde verlängert.\n\n"
+            f"Gerät: {leihe.gerat.inventarnummer}\n"
+            f"Neues Rückgabedatum: {leihe.rueckgabe_bis.strftime('%d.%m.%Y')}\n\n"
+            f"Details: {basis}/meine-geraete/\n\n"
+            f"{einstellungen.absenderzeile or 'Wamocon GmbH · IT'}"
+        ),
         from_email=_settings.DEFAULT_FROM_EMAIL or "inventar@beispiel.test",
         recipient_list=[empfaenger],
         fail_silently=True,
@@ -1717,18 +1887,23 @@ def leihe_anfragen(
     if not zweck or not zweck.strip():
         raise GeratFehler("Zweck ist Pflicht (F-31).")
     if beginn > ende:
-        raise GeratFehler("Beginn ist nach dem Ende.")
+        raise GeratFehler("Das Enddatum muss am oder nach dem Startdatum liegen.")
+    if beginn < jetzt_wie_im_entwicklungsmodus().date():
+        raise GeratFehler("Das Startdatum darf nicht in der Vergangenheit liegen.")
     if gerat is not None:
         if gerat.kategorie_id != kat.id:
             raise GeratFehler("Das gewählte Gerät steht nicht in dieser Kategorie.")
         if not gerat.leihpool:
             raise GeratFehler("Das gewählte Gerät steht nicht im Leihpool.")
+        if not _leihgeraet_einsetzbar(gerat):
+            raise GeratFehler("Das gewählte Gerät ist nicht verfügbar.")
         if _gerat_ist_reserviert(gerat, beginn, ende):
             raise GeratFehler(
-                "Das Gerät ist in diesem Zeitraum bereits für eine genehmigte "
+                "Das Gerät ist in diesem Zeitraum bereits für eine "
                 "Leihe reserviert (F-34)."
             )
     with transaction.atomic():
+        # Der Wunsch reserviert noch nichts, das tut erst die Genehmigung (Kapitel 4).
         leihe = Leihe.objects.create(
             nr=_naechste_leihnummer(),
             gerat=gerat,
@@ -1739,10 +1914,9 @@ def leihe_anfragen(
             rueckgabe_bis=ende,
             zweck=zweck.strip(),
             status=Leihe.STATUS_ANGEFRAGT,
+            zeitpunkt=jetzt_wie_im_entwicklungsmodus(),
             erzeugt_von=erzeugt_von,
         )
-        if gerat is not None:
-            _gerat_reserve_halten(gerat, beginn, ende)
         # F-93: sofort Mail an die IT
         _mail_anfrage_an_it(leihe)
         return leihe
@@ -1769,23 +1943,29 @@ def leihe_genehmigen(
         raise GeratFehler("Das Gerät steht nicht in der angefragten Kategorie.")
     if not gerat.leihpool:
         raise GeratFehler("Das Gerät steht nicht im Leihpool.")
-    if _gerat_ist_reserviert(gerat, leihe.beginn, leihe.ende):
+    if not _leihgeraet_einsetzbar(gerat):
         raise GeratFehler(
-            "Das Gerät ist in diesem Zeitraum bereits für eine genehmigte "
+            f"Das Gerät steht auf „{gerat.status_anzeige}“ und kann nicht "
+            "zugewiesen werden (F-32)."
+        )
+    if _gerat_ist_reserviert(gerat, leihe.beginn, leihe.ende, ohne=leihe):
+        raise GeratFehler(
+            "Das Gerät ist in diesem Zeitraum bereits für eine "
             "Leihe reserviert (F-34)."
         )
     with transaction.atomic():
         leihe.gerat = gerat
         leihe.genehmigt = True
         leihe.status = Leihe.STATUS_GENEHMIGT
-        leihe.decided_at = timezone.now()
+        leihe.decided_at = jetzt_wie_im_entwicklungsmodus()
         leihe.save(
             update_fields=["gerat", "genehmigt", "status", "decided_at"]
         )
-        _gerat_reserve_halten(gerat, leihe.beginn, leihe.ende)
+        _reservierung_nachziehen(gerat)
         Vorgang.objects.create(
             gerat=gerat,
             typ=Vorgang.TYP_AENDERUNG,
+            zeitpunkt=jetzt_wie_im_entwicklungsmodus(),
             erzeugt_von=ausgefuehrt_von,
             notiz="Leihe genehmigt und Gerät reserviert (F-32).",
             abschliesst=False,
@@ -1816,7 +1996,7 @@ def leihe_ablehnen(
         leihe.abgelehnt_von = ausgefuehrt_von
         leihe.genehmigt = False
         leihe.status = Leihe.STATUS_ABGELEHNT
-        leihe.decided_at = timezone.now()
+        leihe.decided_at = jetzt_wie_im_entwicklungsmodus()
         leihe.save(
             update_fields=[
                 "abgelehnt",
@@ -1831,6 +2011,7 @@ def leihe_ablehnen(
             Vorgang.objects.create(
                 gerat=leihe.gerat,
                 typ=Vorgang.TYP_AENDERUNG,
+                zeitpunkt=jetzt_wie_im_entwicklungsmodus(),
                 erzeugt_von=ausgefuehrt_von,
                 notiz="Leihe abgelehnt (F-32).",
                 abschliesst=False,
@@ -1846,8 +2027,8 @@ def leihe_zurueckziehen(
 ) -> Leihe:
     """M5 Teil 2 (F-37): Mitarbeiter zieht die Leihe zurück.
 
-    Solange die Leihe nicht ausgegeben ist, endet damit auch eine
-    Reservierung: reserviert und reserviert_bis werden geleert.
+    Solange die Leihe nicht ausgegeben ist, endet damit auch ihre
+    Reservierung und ein noch nicht signierter Protokollentwurf.
     """
     from .models import Vorgang
 
@@ -1858,17 +2039,17 @@ def leihe_zurueckziehen(
         )
     with transaction.atomic():
         leihe.status = Leihe.STATUS_ZURUECKGEZOGEN
-        leihe.decided_at = timezone.now()
-        leihe.save(update_fields=["status", "decided_at"])
+        leihe.genehmigt = False
+        leihe.decided_at = jetzt_wie_im_entwicklungsmodus()
+        leihe.save(update_fields=["status", "genehmigt", "decided_at"])
+        leihe.protokolle.filter(stand=Protokoll.STAND_BEARBEITER_OFFEN).delete()
         if leihe.gerat_id is not None:
             gerat = leihe.gerat
-            if _gerat_reserve_ist_leihe(gerat, leihe):
-                gerat.reserviert = False
-                gerat.reserviert_bis = None
-                gerat.save(update_fields=["reserviert", "reserviert_bis"])
+            _reservierung_nachziehen(gerat)
             Vorgang.objects.create(
                 gerat=gerat,
                 typ=Vorgang.TYP_AENDERUNG,
+                zeitpunkt=jetzt_wie_im_entwicklungsmodus(),
                 erzeugt_von=ausgefuehrt_von,
                 notiz="Leihe zurückgezogen, Reservierung aufgehoben (F-37).",
                 abschliesst=False,
@@ -1876,50 +2057,47 @@ def leihe_zurueckziehen(
         return leihe
 
 
-def _gerat_reserve_halten(gerat: Gerat, beginn: date, ende: date) -> None:
-    """Reservierung setzen oder verlängern (F-20, Kapitel 4).
+def _reservierung_nachziehen(gerat: Gerat) -> None:
+    """Reservierung nach den genehmigten Leihen des Geräts setzen (F-20, Kapitel 4).
 
-    reserviert_bis ist das Maximum aller genehmigten Leihen (O-12).
+    reserviert_bis ist das Maximum aller genehmigten Leihen (O-12). Endet eine
+    Leihe, bleibt die Reservierung für die anderen bestehen.
     """
-    from konten.zeit import jetzt_wie_im_entwicklungsmodus
+    ende = Leihe.objects.filter(
+        gerat=gerat, genehmigt=True, status=Leihe.STATUS_GENEHMIGT
+    ).aggregate(Max("ende"))["ende__max"]
+    gerat.reserviert = Leihe.objects.filter(
+        gerat=gerat, genehmigt=True, status=Leihe.STATUS_GENEHMIGT
+    ).exists()
+    gerat.reserviert_von = None
+    gerat.reserviert_bis = ende
+    gerat.save(update_fields=["reserviert", "reserviert_von", "reserviert_bis"])
 
-    heute = jetzt_wie_im_entwicklungsmodus().date()
-    bis = max(ende, heute)
-    if not gerat.reserviert_bis or gerat.reserviert_bis < bis:
-        gerat.reserviert = True
-        gerat.reserviert_bis = bis
-        gerat.save(update_fields=["reserviert", "reserviert_bis"])
-
-
-def _gerat_reserve_ist_leihe(gerat: Gerat, leihe: Leihe) -> bool:
-    """Gehört die aktuelle Reservierung nur zu dieser Leihe?
-
-    Nur dann darf Zurückziehen sie aufheben, sonst bliebe die
-    Reservierung für eine andere genehmigte Leihe bestehen (O-12).
-    """
-    if gerat.reserviert_bis is None or leihe.ende is None:
-        return gerat.reserviert is True and leihe.ist_zurueckziehbar()
-    return gerat.reserviert_bis == leihe.ende and gerat.reserviert is True
 
 def leihe_ausgeben(
     leihe: Leihe,
     ausgefuehrt_von: Konto,
+    unterschrift: str = "papier",
 ) -> Leihe:
     """M5 Teil 4 (F-33, F-21, F-22): IT gibt eine genehmigte Leihe aus.
 
     Voraussetzungen (F-33):
     - Leihe ist genehmigt
-    - Gerät ist im Leihpool
-    - Gerät ist nicht reserviert (F-20), außer durch die Leihe selbst
+    - Gerät ist auf Lager und im Leihpool
+    - Keine andere genehmigte Leihe überschneidet sich (F-34)
+    - Kein offenes Protokoll für das Gerät
 
-    Ergebnis:
+    Ergebnis auf dem Papierweg (F-22):
     - Gerät: Status "Verliehen", Person gesetzt
     - Leihe: Status "ausgegeben"
     - Protokoll: Stand "scan-offen" (F-21, F-22)
     - Vorgang: Typ "ausgabe", leihgabe_an, zurueck_am
-    - Reservierung endet (reserviert=False, reserviert_bis=None)
+    - Die Reservierung durch diese Leihe endet
+
+    Bei „tool" entsteht nur das Protokoll auf „bearbeiter-offen". Gerät und
+    Leihe bleiben, wie sie sind; alles andere kommt mit der Signatur (F-33:
+    Zeitpunkt wie in F-21). Ein verworfener Entwurf ändert nichts.
     """
-    from .models import Protokoll, Vorgang
     from django.db import transaction
 
     if leihe.status != Leihe.STATUS_GENEHMIGT:
@@ -1935,32 +2113,36 @@ def leihe_ausgeben(
     if not gerat.leihpool:
         raise GeratFehler("Gerät steht nicht im Leihpool (F-33).")
 
-    # Prüfen, ob das Gerät für jemand anderen reserviert ist (F-20)
-    # Eine Reservierung durch die Leihe selbst (gleiche Person) ist erlaubt
-    if _gerat_ist_reserviert(gerat):
-        # Reservierung prüfen: nur ablehnen, wenn sie nicht zur Leihe gehört
-        andere_reservation = None
-        for leihe_anderer in Leihe.objects.filter(
-            gerat=gerat,
-            genehmigt=True,
-            status=Leihe.STATUS_GENEHMIGT,
-        ).exclude(person=leihe.person):
-            andere_reservation = leihe_anderer
-            break
-        if andere_reservation is not None:
-            raise GeratFehler("Gerät ist für eine andere Person reserviert und kann nicht ausgegeben werden (F-20).")
+    rueckgabe_bis = leihe.rueckgabe_bis
+    if rueckgabe_bis is None:
+        raise GeratFehler("Rückgabedatum fehlt.")
+
+    if rueckgabe_bis < jetzt_wie_im_entwicklungsmodus().date():
+        raise GeratFehler(
+            "Das Rückgabedatum liegt in der Vergangenheit; die Leihe wäre "
+            "sofort überfällig (F-33)."
+        )
+
+    # Eine andere Leihe im Zeitraum (F-20, F-34); spätere Reservierungen stören nicht.
+    if _gerat_ist_reserviert(gerat, leihe.beginn or rueckgabe_bis, rueckgabe_bis, ohne=leihe):
+        raise GeratFehler("Gerät ist für eine andere Leihe reserviert und kann nicht ausgegeben werden (F-20).")
+
+    if Protokoll.objects.filter(
+        geraet=gerat, stand=Protokoll.STAND_BEARBEITER_OFFEN
+    ).exists():
+        raise GeratFehler(
+            "Für dieses Gerät steht bereits ein offenes Protokoll. "
+            "Die Ausgabe ist solange nicht möglich (F-33)."
+        )
 
     person = leihe.person
     if person is None:
         raise GeratFehler("Die Leihe hat keine Person.")
 
-    rueckgabe_bis = leihe.rueckgabe_bis
-    if rueckgabe_bis is None:
-        raise GeratFehler("Rückgabedatum fehlt.")
-
+    im_tool = unterschrift == "tool"
     with transaction.atomic():
         # A-0123 (M6 Teil 1): F-21, F-22, F-130 — Protokoll in der
-        # Service-Schicht bei Verleih. Stand ist „scan-offen".
+        # Service-Schicht bei Verleih, mit Bezug auf die Leihe.
         _protokoll_erstellen(
             person=person,
             gerat=gerat,
@@ -1969,35 +2151,39 @@ def leihe_ausgeben(
                 ausgefuehrt_von.bezeichnung() if ausgefuehrt_von is not None else ""
             ),
             erzeugt_von=ausgefuehrt_von,
+            stand=(
+                Protokoll.STAND_BEARBEITER_OFFEN if im_tool
+                else Protokoll.STAND_SCAN_OFFEN
+            ),
+            unterschrift_art="tool" if im_tool else "papier",
+            leihe=leihe,
         )
+        if not im_tool:
+            _leihe_ausgabe_buchen(leihe, ausgefuehrt_von)
 
-        # Gerät: Status → Verliehen (F-33)
-        gerat.status = Gerat.STATUS_VERLIEHEN
-        gerat.person = person
-        gerat.ort = None
-        gerat.save(update_fields=["status", "person", "ort"])
+    return leihe
 
-        # Leihe: Status → ausgegeben (F-33)
-        leihe.status = Leihe.STATUS_AUSGEGEBEN
-        leihe.save(update_fields=["status"])
 
-        # Vorgang "Ausgabe" (Kapitel 8)
-        Vorgang.objects.create(
-            gerat=gerat,
-            typ=Vorgang.TYP_AUSGABE,
-            erzeugt_von=ausgefuehrt_von,
-            leihgabe_an=person,
-            zurueck_am=rueckgabe_bis,
-            notiz=leihe.zweck or "Leihgerät ausgegeben (F-33).",
-            abschliesst=False,
-        )
+def leihe_verlaengerung_anfragen(
+    leihe: Leihe,
+    rueckgabe_bis_neu: date,
+) -> Leihe:
+    """F-35, F-111: Der Mitarbeiter fragt eine Verlängerung an, die IT gewährt.
 
-        # Reservierung endet (F-20): das Gerät ist jetzt verliehen
-        gerat.reserviert = False
-        gerat.reserviert_von = None
-        gerat.reserviert_bis = None
-        gerat.save(update_fields=["reserviert", "reserviert_von", "reserviert_bis"])
-
+    Das Rückgabedatum bleibt, bis die IT entschieden hat. Die Mail an die IT
+    geht sofort, wie bei der Anfrage selbst (F-93).
+    """
+    if leihe.status != Leihe.STATUS_AUSGEGEBEN:
+        raise GeratFehler("Eine Verlängerung gibt es nur für ausgegebene Leihen (F-35).")
+    if leihe.verlaengerung_bis is not None:
+        raise GeratFehler("Für diese Leihe ist schon eine Verlängerung angefragt (F-35).")
+    if rueckgabe_bis_neu <= leihe.rueckgabe_bis:
+        raise GeratFehler("Neues Rückgabedatum muss nach dem alten liegen (F-35).")
+    if rueckgabe_bis_neu <= jetzt_wie_im_entwicklungsmodus().date():
+        raise GeratFehler("Das Datum muss nach heute liegen (F-35).")
+    leihe.verlaengerung_bis = rueckgabe_bis_neu
+    leihe.save(update_fields=["verlaengerung_bis"])
+    _mail_verlaengerung_an_it(leihe)
     return leihe
 
 
@@ -2006,18 +2192,20 @@ def leihe_verlaengern(
     rueckgabe_bis_neu: date,
     ausgefuehrt_von: Konto,
 ) -> Leihe:
-    """M5 Teil 4 (F-35): Mitarbeiter fragt Verlängerung an; IT gewährt oder lehnt ab.
+    """M5 Teil 4 (F-35): IT gewährt eine Verlängerung.
 
     Voraussetzungen (F-35):
     - Leihe ist ausgegeben
-    - Neue Rückgabedatum muss nach dem alten liegen
+    - Das neue Rückgabedatum liegt nach dem alten und nach heute
 
     Ablehnung:
-    - Gerät ist für einen Zeitraum nach dem neuen Rückgabedatum reserviert (F-35)
+    - Eine andere Leihe des Geräts fällt in die Zeit bis zum neuen
+      Rückgabedatum (Folgereservierung, F-35, F-34)
 
     Ergebnis bei Erfolg:
-    - Leihe: rueckgabe_bis wird verschoben
+    - Leihe: rueckgabe_bis wird verschoben, eine Anfrage ist erledigt
     - Vorgang "Änderung" wird angelegt
+    - Mail an die Person
     """
     from .models import Vorgang
     from django.db import transaction
@@ -2033,29 +2221,39 @@ def leihe_verlaengern(
     if rueckgabe_bis_neu <= altes_rueckgabe_bis:
         raise GeratFehler("Neues Rückgabedatum muss nach dem alten liegen (F-35).")
 
-    # Prüfen, ob das Gerät nach dem neuen Rückgabedatum reserviert ist (F-35)
-    if _gerat_ist_reserviert(gerat, rueckgabe_bis_neu, rueckgabe_bis_neu):
+    if rueckgabe_bis_neu <= jetzt_wie_im_entwicklungsmodus().date():
+        raise GeratFehler("Das Datum muss nach heute liegen (F-35).")
+
+    # Die ganze hinzukommende Zeit muss frei sein, nicht nur der Zieltag (F-35).
+    folge = _belegende_leihen(
+        gerat, altes_rueckgabe_bis + timedelta(days=1), rueckgabe_bis_neu, ohne=leihe
+    )
+    if folge:
+        beginn = folge[0].beginn.strftime("%d.%m.%Y") if folge[0].beginn else "sofort"
         raise GeratFehler(
-            "Verlängerung abgelehnt: Das Gerät ist für den gewünschten "
-            "Zeitraum bereits reserviert (F-35)."
+            f"Verlängerung abgelehnt: Ab {beginn} ist das Gerät für "
+            f"{folge[0].person.voller_name()} reserviert (F-35)."
         )
 
     with transaction.atomic():
         leihe.rueckgabe_bis = rueckgabe_bis_neu
         if leihe.ende is None or rueckgabe_bis_neu > leihe.ende:
             leihe.ende = rueckgabe_bis_neu
-        leihe.save(update_fields=["rueckgabe_bis", "ende"])
+        leihe.verlaengerung_bis = None
+        leihe.save(update_fields=["rueckgabe_bis", "ende", "verlaengerung_bis"])
 
         Vorgang.objects.create(
             gerat=gerat,
             typ=Vorgang.TYP_AENDERUNG,
+            zeitpunkt=jetzt_wie_im_entwicklungsmodus(),
             erzeugt_von=ausgefuehrt_von,
             aenderung_feld="rueckgabe_bis",
-            aenderung_alter_wert=str(altes_rueckgabe_bis),
-            aenderung_neuer_wert=str(rueckgabe_bis_neu),
+            aenderung_alter_wert=altes_rueckgabe_bis.strftime("%d.%m.%Y"),
+            aenderung_neuer_wert=rueckgabe_bis_neu.strftime("%d.%m.%Y"),
             notiz="Verlängerung der Leihe (F-35).",
             abschliesst=False,
         )
+        _mail_verlaengerung_an_person(leihe)
 
     return leihe
 
@@ -2176,20 +2374,13 @@ def protokoll_bearbeiter_signieren(
 
     # A-0128: Bei Unterschrift „tool" entstehen Status, Person, Ort
     # und der Vorgang mit der Signatur des Bearbeiters (F-21, F-135).
-    # Bei Verleih (F-30, F-33): Status Verliehen, Leihe wird weitergeführt.
+    # Bei Verleih (F-30, F-33): Status Verliehen, Leihe „ausgegeben", Vorgang.
     if protokoll.unterschrift_art == "tool":
         gerat = protokoll.geraet
         if protokoll.leihe is not None:
-            # Verleih: Status Verliehen, Person gesetzt, Ort leer (F-30).
-            gerat.status = Gerat.STATUS_VERLIEHEN
-            gerat.person = protokoll.person
-            gerat.ort = None
-            gerat.save(update_fields=["status", "person", "ort"])
-            # Leihe weiterführen: Status bleibt „ausgegeben" (F-33).
-            # (Wurde beim Anlegen bereits gesetzt; hier sicherstellen.)
-            if protokoll.leihe.status != Leihe.STATUS_AUSGEGEBEN:
-                protokoll.leihe.status = Leihe.STATUS_AUSGEGEBEN
-                protokoll.leihe.save()
+            # Eine korrigierte Fassung gehört zu einer schon ausgegebenen Leihe.
+            if protokoll.leihe.status == Leihe.STATUS_GENEHMIGT:
+                _leihe_ausgabe_buchen(protokoll.leihe, konto)
         else:
             # Ausgabe: Status In Benutzung, Person und Ort gesetzt (F-20, F-21).
             gerat.status = Gerat.STATUS_IN_BENUTZUNG
@@ -2672,6 +2863,7 @@ def protokoll_korrigieren(
         rueckgabe_zu_protokoll=protokoll.rueckgabe_zu_protokoll,
         ist_korrektur=True,
         korrigiert_zu_protokoll=protokoll,
+        leihe=protokoll.leihe,
     )
 
     # Alte Codes ungültig machen.

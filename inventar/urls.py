@@ -46,9 +46,10 @@ urlpatterns = [
     # M5 Teil 2: Meine Geräte (F-95, F-112, F-31, F-37)
     # direkt unter /meine-geraete/ (TESTSCHNITTSTELLE Kapitel 3)
     path("meine-geraete/", geraete_views.meine_geraete_zeige, name="meine_geraete"),
-    path("meine-geraete/alle/", geraete_views.meine_geraete_alle_zeige, name="meine_geraete_alle"),
     path("meine-geraete/leihe/neu/", geraete_views.meine_geraete_leihe_neu, name="meine_geraete_leihe_neu"),
+    path("meine-geraete/leihe/frei/", geraete_views.meine_geraete_leihe_frei, name="meine_geraete_leihe_frei"),
     path("meine-geraete/leihe/<int:leih_id>/zurueckziehen/", geraete_views.meine_geraete_leihe_zurueckziehen, name="meine_geraete_leihe_zurueckziehen"),
+    path("meine-geraete/leihe/<int:leih_id>/verlaengern/", geraete_views.meine_geraete_leihe_verlaengern, name="meine_geraete_leihe_verlaengern"),
     # M6 Teil 1: Protokoll (F-130, F-132, F-133, F-134, F-22)
     path("protokolle/<str:protokoll_nr>/", geraete_views.protokoll_detail, name="protokoll-detail"),
     path("protokolle/<str:protokoll_nr>/pdf/", geraete_views.protokoll_pdf, name="protokoll-pdf"),

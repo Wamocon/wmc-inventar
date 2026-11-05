@@ -1,46 +1,37 @@
 {% extends "basis.html" %}
-
-{% block titel %}Leihe ausgeben · WMC Inventar{% endblock %}
-
+{% block titel %}Gerät verleihen · WMC Inventar{% endblock %}
 {% block inhalt %}
 <div class="page-head">
-    <div><h1>Leihe ausgeben</h1>
-        <p class="lead">Ein genehmigtes Leihgerät ausgeben (F-33, F-21, F-22).</p>
-    </div>
+  <div>
+    <h1>Gerät verleihen</h1>
+    <p class="muted lead">Leihe {{ leihe.nr }} aus der genehmigten Anfrage ausgeben (F-33).</p>
+  </div>
 </div>
-
-<div class="card" data-test="dialog" data-name="ausgeben">
-    <div class="card-head">
-        <h2>Leihe {{ leihe.nr }} ausgeben</h2>
+<div data-test="dialog" data-name="verleih">
+  <dl class="kv">
+    <dt>Gerät</dt><dd>{{ leihe.gerat.inventarnummer }}, {{ leihe.gerat.hersteller }} {{ leihe.gerat.modell }}</dd>
+    <dt>Person</dt><dd>{{ leihe.person.vorname }} {{ leihe.person.nachname }}</dd>
+    <dt>Rückgabe bis</dt><dd>{{ leihe.rueckgabe_bis|date:"d.m.Y" }}</dd>
+    <dt>Zweck</dt><dd>{{ leihe.zweck }}</dd>
+  </dl>
+  <form method="post" novalidate data-test="verleih-formular">
+    {% csrf_token %}
+    <div class="meldungen">
+      {% include "fragmente/fehler.html" %}
+      {% if fehler %}<div class="meldung error" data-test="fehler">{{ fehler }}</div>{% endif %}
     </div>
-    <div class="card-body">
-        <p class="muted">
-            Gerät: {{ leihe.gerat.inventarnummer }} ({{ leihe.gerat.modell }}) ·
-            Person: {{ leihe.person.vorname }} {{ leihe.person.nachname }} ·
-            Rückgabe bis: {{ leihe.rueckgabe_bis|date:"d.m.Y" }} ·
-            Zweck: {{ leihe.zweck }}
-        </p>
-
-        {% if fehler %}
-        <div data-test="fehler" class="error-box">{{ fehler }}</div>
-        {% endif %}
-
-        <form method="post" novalidate>
-            {% csrf_token %}
-            <label class="field">
-                <span>Ausgabe bestätigen <span class="erforderlich">*</span></span>
-                <input type="checkbox" name="bestätigung" required data-test="bestaetigung">
-            </label>
-            <div class="field" data-test="unterschrift">
-                <span>Unterschrift</span>
-                <label class="radio"><input type="radio" name="unterschrift" value="tool" checked> Signatur im Tool</label>
-                <label class="radio"><input type="radio" name="unterschrift" value="papier"> Papier</label>
-            </div>
-            <div class="form-actions">
-                <a href="{% url 'geraete:verleih-liste' %}" class="btn">Abbrechen</a>
-                <button type="submit" class="btn primary" data-test="ausgeben">Ausgeben</button>
-            </div>
-        </form>
+    <div class="form-grid">
+      <div class="field full" data-test="unterschrift">
+        <label>Unterschrift</label>
+        {% for radio in form.unterschrift %}
+          <label class="radio">{{ radio }}</label>
+        {% endfor %}
+      </div>
     </div>
+    <div class="actions">
+      <button type="submit" class="btn primary" data-test="speichern">Verleih abschließen</button>
+      <a class="btn link" href="/verleih/" data-test="abbrechen">Abbrechen</a>
+    </div>
+  </form>
 </div>
 {% endblock %}

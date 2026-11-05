@@ -1,42 +1,29 @@
 {% extends "basis.html" %}
-
-{% block titel %}Leihe ablehnen · WMC Inventar{% endblock %}
-
+{% block titel %}Leihanfrage ablehnen · WMC Inventar{% endblock %}
 {% block inhalt %}
 <div class="page-head">
-    <div><h1>Leihe ablehnen</h1>
-        <p class="lead">Eine Anfrage mit Begründung ablehnen (F-32).</p>
-    </div>
+  <div>
+    <h1>Leihanfrage ablehnen</h1>
+    <p class="muted lead">Leihe {{ leihe.nr }}: {{ leihe.person.vorname }} {{ leihe.person.nachname }}, {{ leihe.kat.name }}, {{ leihe.beginn|date:"d.m.Y" }} bis {{ leihe.ende|date:"d.m.Y" }} (F-32)</p>
+  </div>
 </div>
-
-<div class="card" data-test="dialog" data-name="ablehnen">
-    <div class="card-head">
-        <h2>Leihe {{ leihe.nr }} ablehnen</h2>
+<div data-test="dialog" data-name="ablehnen">
+  <form method="post" novalidate data-test="ablehnen-formular">
+    {% csrf_token %}
+    <div class="meldungen">
+      {% include "fragmente/fehler.html" %}
+      {% if fehler %}<div class="meldung error" data-test="fehler">{{ fehler }}</div>{% endif %}
     </div>
-    <div class="card-body">
-        <p class="muted">
-            Anfrage von {{ leihe.person.vorname }} {{ leihe.person.nachname }} ·
-            Kategorie: {{ leihe.kat.name }} ·
-            {{ leihe.beginn|date:"d.m.Y" }} – {{ leihe.ende|date:"d.m.Y" }} ·
-            Zweck: {{ leihe.zweck }}
-        </p>
-
-        {% if fehler %}
-        <div data-test="fehler" class="error-box">{{ fehler }}</div>
-        {% endif %}
-
-        <form method="post" novalidate>
-            {% csrf_token %}
-            <label class="field">
-                <span>Begründung <span class="erforderlich">*</span></span>
-                <textarea name="begründung" required rows="3" data-test="begründung"
-                          placeholder="Warum wird die Anfrage abgelehnt?">{{ form.begründung.value }}</textarea>
-            </label>
-            <div class="form-actions">
-                <a href="{% url 'geraete:verleih-liste' %}" class="btn">Abbrechen</a>
-                <button type="submit" class="btn danger" data-test="ablehnen">Ablehnen</button>
-            </div>
-        </form>
+    <div class="form-grid">
+      <div class="field full">
+        <label for="id_begruendung" class="req">Begründung</label>
+        {{ form.begruendung }}
+      </div>
     </div>
+    <div class="actions">
+      <button type="submit" class="btn primary" data-test="speichern">Ablehnen</button>
+      <a class="btn link" href="/verleih/" data-test="abbrechen">Abbrechen</a>
+    </div>
+  </form>
 </div>
 {% endblock %}

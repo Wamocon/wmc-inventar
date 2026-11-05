@@ -26,6 +26,7 @@ from django.core.management.base import BaseCommand, CommandError
 from konten.zeit import jetzt_aware
 from stammdaten.models import Einstellungen, Mailversand, Ort, Zaehlerstand
 from geraete.models import Gerat, Leihe, Protokoll
+from geraete.services import leihe_mail_empfaenger
 
 
 def _absender() -> str:
@@ -103,7 +104,7 @@ def _mail_leihe_endet_morgen(stichtag: date) -> int:
     )
     anzahl = 0
     for leihe in leihen:
-        empfaenger = leihe.person.email if leihe.person else ""
+        empfaenger = leihe_mail_empfaenger(leihe.person)
         if not empfaenger:
             continue
         gerat_name = leihe.gerat.inventarnummer if leihe.gerat else ""
@@ -112,7 +113,7 @@ def _mail_leihe_endet_morgen(stichtag: date) -> int:
             message=(
                 f"Ihre Leihe {gerat_name} endet morgen ({_datums_text(morgen)}). "
                 f"Bitte geben Sie das Gerät bis dahin zurück.\n\n"
-                f"Details: {_basis_url()}/verleih/\n\n"
+                f"Details: {_basis_url()}/meine-geraete/\n\n"
                 f"{_absenderzeile()}"
             ),
             from_email=_absender(),
@@ -142,14 +143,15 @@ def _mail_leihe_ueberfaellig(stichtag: date) -> int:
     anzahl = 0
     it_email = _it_email()
     for leihe in leihen:
-        empfaenger_person = leihe.person.email if leihe.person else ""
+        empfaenger_person = leihe_mail_empfaenger(leihe.person)
         gerat_name = leihe.gerat.inventarnummer if leihe.gerat else ""
         frist = _datums_text(leihe.rueckgabe_bis)
         text = (
             f"Ihre Leihe {gerat_name} ist überfällig.\n"
+            f"Leihe {leihe.nr}, Person: {leihe.person.voller_name()}.\n"
             f"Die Rückgabefrist ({frist}) ist überschritten.\n"
             f"Bitte geben Sie das Gerät unverzüglich zurück.\n\n"
-            f"Details: {_basis_url()}/verleih/\n\n"
+            f"Details: {_basis_url()}/meine-geraete/\n\n"
             f"{_absenderzeile()}"
         )
         empfaenger_liste = []
