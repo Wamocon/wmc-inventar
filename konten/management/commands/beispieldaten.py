@@ -178,25 +178,10 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS("Beispieldaten angelegt."))
 
     def _leeren(self):
-        from django.db import connection
-        # Tabellen in der Reihenfolge der Fremdschlüssel leeren (Werkbank 23.10.):
-        # zuerst die Tabellen, die auf andere verweisen, dann die Referenzierten.
-        for tabelle in (
-            "geraete_geratkonflikt",   # FK → geraete_gerat
-            "geraete_protokoll",       # FK → geraete_gerat, stammdaten_person, konten_konto
-            "geraete_leihe",           # FK → geraete_gerat, stammdaten_person, konten_konto
-            "geraete_vorgang",         # FK → geraete_gerat, konten_konto, stammdaten_person
-            "geraete_gerat",          # FK → konten_konto, stammdaten_*
-            "geraete_importlauf",     # FK → konten_konto
-            "konten_konto",          # FK → stammdaten_person
-            "stammdaten_profilposition",  # FK → stammdaten_ausstattungsprofil, stammdaten_kategorie
-            "stammdaten_ort",        # FK → stammdaten_person, stammdaten_ausstattungsprofil
-            "stammdaten_person",
-            "stammdaten_ausstattungsprofil",
-            "stammdaten_kategorie",
-            "stammdaten_plan",       # A-0076: Raumplan
-        ):
-            connection.cursor().execute(f"DELETE FROM {tabelle}")
+        from django.core.management import call_command
+        # flush leert alle Tabellen und kennt auch neue Modelle (TESTSCHNITTSTELLE:
+        # --neu leert den Datenbankinhalt, auch während der Server läuft).
+        call_command("flush", verbosity=0, interactive=False)
 
         for var in ("DATEIABLAGE", "MAIL_ABLAGE"):
             p = getattr(settings, var, "")

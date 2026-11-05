@@ -7,7 +7,7 @@ und für Mitarbeiter mit einer Weiterleitung nach "/meine-geraete/".
 """
 from __future__ import annotations
 
-from django.test import TestCase
+from django.test import TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 
 from konten.models import Konto
@@ -212,3 +212,20 @@ class KontenVerwaltungTests(TestCase):
         )
         antwort = self.client.get("/konten/neu/")
         self.assertEqual(antwort.status_code, 403)
+
+
+class BeispieldatenLeerenTests(TransactionTestCase):
+    """TESTSCHNITTSTELLE: --neu leert den Datenbankinhalt, alle Tabellen (A-0914)."""
+
+    @override_settings(DEBUG=True)
+    def test_leeren_leert_alle_tabellen(self):
+        from django.apps import apps
+        from django.core.management import call_command
+
+        from konten.management.commands.beispieldaten import Command
+
+        call_command("beispieldaten", "--neu", verbosity=0)
+        Command()._leeren()
+        for modell in apps.get_models():
+            if modell._meta.app_label in ("konten", "stammdaten", "geraete"):
+                self.assertEqual(modell.objects.count(), 0, modell._meta.label)
