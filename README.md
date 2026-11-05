@@ -154,10 +154,10 @@ rm -rf var/dateien && cp -a /srv/inventar/sicherung/<Stempel>/dateien var/dateie
 gunzip -c /pfad/zum/<Stempel>/inventar.sql.gz | docker compose exec -T db psql -U inventar -d inventar
 
 # 2. Dateien zurückkopieren
-docker compose cp /pfad/zum/<Stempel>/dateien/. web:/srv/inventar/var/dateien
+docker compose cp -a /pfad/zum/<Stempel>/dateien/. web:/srv/inventar/var/dateien
 ```
 
-Vor dem Go-live einmal testen (N-06).
+`SICHERUNG_ZIEL` muss für den Nutzer der Anwendung (UID 1000) schreibbar sein. Vor dem Go-live einmal testen (N-06).
 
 ## Tests
 

@@ -33,7 +33,7 @@ COPY . /srv/inventar/
 # Statische Dateien entstehen beim Bau; der Schlüssel des Entwicklungsmodus gilt nur für diesen Schritt.
 RUN INVENTAR_DEBUG=1 python manage.py collectstatic --noinput
 
-RUN useradd --system --uid 1000 inventar && mkdir -p var && chown -R inventar:inventar var
+RUN useradd --system --uid 1000 --create-home inventar && mkdir -p var && chown -R inventar:inventar var
 USER inventar
 
 EXPOSE 8000
