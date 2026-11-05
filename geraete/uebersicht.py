@@ -129,6 +129,11 @@ _EXPORT_DEF = {
         "felder": ("nr", "stand", "person"),
         "quelle": _kz.unterschreibungen_offen,
     },
+    "versand-offen": {
+        "kopfzeile": ["Nr.", "Stand", "Person"],
+        "felder": ("nr", "stand", "person"),
+        "quelle": _kz.versand_offen,
+    },
     "daten-unvollstaendig": {
         "kopfzeile": ["Inventarnummer", "Modell", "Fehlende Angaben"],
         "felder": ("nr", "modell", "luecken"),

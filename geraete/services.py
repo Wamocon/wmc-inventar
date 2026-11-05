@@ -367,20 +367,28 @@ def position_aus_gerat(
 
 
 def protokolltexte(art: str) -> dict:
-    """Die Texte aus den Einstellungen, die für ein neues Protokoll gelten (F-130)."""
+    """Texte und Prüfpunkte, die für ein neues Protokoll gelten (F-130, F-132, F-133)."""
+    from stammdaten import checklisten
+
     e = Einstellungen.aktuelles()
+    punkte = {
+        liste: [list(punkt) for punkt in checklisten.aktive_punkte(liste)]
+        for liste in (checklisten.ZUGAENGE, checklisten.OFFBOARDING)
+    }
     if art == Protokoll.ART_RUECKNAHME:
         return {
             "nutzung": "",
             "erklaerung": e.erklaerungen_ruecknahme,
             "unterzeichnung": e.unterzeichnung_ruecknahme,
             "version": f"{e.erklaerungen_ruecknahme_version} / {e.unterzeichnung_ruecknahme_version}",
+            "punkte": punkte,
         }
     return {
         "nutzung": e.nutzungsbedingungen_ausgabe,
         "erklaerung": e.erklaerungen_ausgabe,
         "unterzeichnung": e.unterzeichnung_ausgabe,
         "version": f"{e.nutzungsbedingungen_version} / {e.erklaerungen_version} / {e.unterzeichnung_version}",
+        "punkte": punkte,
     }
 
 
@@ -545,17 +553,17 @@ _ANHANG_ENDUNGEN = {"application/pdf": ".pdf", "image/jpeg": ".jpg", "image/png"
 _ANHANG_GROESSE = 10 * 1024 * 1024
 
 
-def _nachweis_pruefen(datei) -> tuple:
+def _nachweis_pruefen(datei, wort: str = "Nachweis") -> tuple:
     """Anhang: PDF, JPG oder PNG bis 10 MB, am Inhalt geprüft (Kapitel 3.1, N-02)."""
     from django.core.files.base import ContentFile
     from .protokoll import _typ_am_inhalt
 
     roh = datei.read(_ANHANG_GROESSE + 1)
     if len(roh) > _ANHANG_GROESSE:
-        raise GeratFehler("Der Nachweis ist größer als 10 MB.")
+        raise GeratFehler(f"Der {wort} ist größer als 10 MB.")
     endung = _ANHANG_ENDUNGEN.get(_typ_am_inhalt(roh) or "")
     if endung is None:
-        raise GeratFehler("Nachweis nicht erlaubt: PDF, JPG oder PNG bis 10 MB.")
+        raise GeratFehler(f"{wort} nicht erlaubt: PDF, JPG oder PNG bis 10 MB.")
     return f"nachweis-{jetzt_aware():%Y%m%d-%H%M%S}{endung}", ContentFile(roh)
 
 
@@ -568,7 +576,7 @@ def anhang_hinzufuegen(gerat: Gerat, datei, ausgefuehrt_von: Konto | None = None
     if datei is None:
         raise GeratFehler("Bitte eine Datei wählen.")
     name = (getattr(datei, "name", "") or "Anhang")[:200]
-    pfad, inhalt = _nachweis_pruefen(datei)
+    pfad, inhalt = _nachweis_pruefen(datei, "Anhang")
     anhang = GeratAnhang(gerat=gerat, name=name, hochgeladen_am=jetzt_aware(), hochgeladen_von=ausgefuehrt_von)
     anhang.datei.save(pfad.replace("nachweis-", "anhang-"), inhalt, save=False)
     anhang.save()
@@ -908,7 +916,7 @@ def gerat_reparatur_fertig(
         reparatur_kosten=kosten,
         reparatur_beleg=beleg,
         reparatur_ziel=ziel,
-        notiz=f"Zustand: {zustand}, Ziel: {ziel}",
+        notiz=f"Zustand: {zustand}, Ziel: " + {"lager": "Lager", "zuordnung": "bisherige Zuordnung"}.get(ziel, ziel),
         abschliesst=True,
     )
     gerat.save()
@@ -2129,7 +2137,9 @@ def _mail_anfrage_an_it(leihe: Leihe) -> None:
     )
 
 
-def _mail_entscheidung_an_person(leihe: Leihe, genehmigt: bool, begruendung: str = "") -> None:
+def _mail_entscheidung_an_person(
+    leihe: Leihe, genehmigt: bool, begruendung: str = "", reservierung: bool = False,
+) -> None:
     """F-32: Entscheidung über Leihanfrage → sofort Mail an die Person.
 
     Abschaltbar über Einstellungen (F-96).
@@ -2163,13 +2173,15 @@ def _mail_entscheidung_an_person(leihe: Leihe, genehmigt: bool, begruendung: str
         )
         subject = f"Leihanfrage genehmigt – {gerat_name}"
     else:
+        was = f"Ihre Reservierung {leihe.nr} wurde aufgehoben." if reservierung \
+            else f"Ihre Leihanfrage {leihe.nr} wurde abgelehnt."
         betrag = (
-            f"Ihre Leihanfrage {leihe.nr} wurde abgelehnt.\n\n"
+            f"{was}\n\n"
             f"Begründung: {begruendung}\n\n"
             f"Details: {link}\n\n"
             f"{mail_signatur()}"
         )
-        subject = "Leihanfrage abgelehnt"
+        subject = "Reservierung aufgehoben" if reservierung else "Leihanfrage abgelehnt"
     send_mail(
         subject=subject,
         message=betrag,
@@ -2358,6 +2370,7 @@ def leihe_ablehnen(
         raise GeratFehler("Diese Leihe ist weder angefragt noch genehmigt.")
     if not begruendung or not begruendung.strip():
         raise GeratFehler("Begründung ist Pflicht.")
+    reservierung = leihe.status == Leihe.STATUS_GENEHMIGT
     with transaction.atomic():
         leihe.protokolle.filter(stand=Protokoll.STAND_BEARBEITER_OFFEN).delete()
         leihe.abgelehnt = True
@@ -2382,11 +2395,14 @@ def leihe_ablehnen(
                 typ=Vorgang.TYP_AENDERUNG,
                 zeitpunkt=jetzt_wie_im_entwicklungsmodus(),
                 erzeugt_von=ausgefuehrt_von,
-                notiz="Leihe abgelehnt.",
+                notiz="Reservierung aufgehoben." if reservierung else "Leihe abgelehnt.",
                 abschliesst=False,
             )
+            _reservierung_nachziehen(leihe.gerat)
         # F-32: Mail an die Person
-        _mail_entscheidung_an_person(leihe, genehmigt=False, begruendung=begruendung.strip())
+        _mail_entscheidung_an_person(
+            leihe, genehmigt=False, begruendung=begruendung.strip(), reservierung=reservierung,
+        )
         return leihe
 
 
@@ -2639,6 +2655,10 @@ def leihe_verlaengerung_ablehnen(leihe: Leihe, ausgefuehrt_von: Konto) -> Leihe:
         raise GeratFehler("Für diese Leihe ist keine Verlängerung angefragt.")
     leihe.verlaengerung_bis = None
     leihe.save(update_fields=["verlaengerung_bis"])
+    Vorgang.objects.create(
+        gerat=leihe.gerat, typ=Vorgang.TYP_AENDERUNG, zeitpunkt=jetzt_wie_im_entwicklungsmodus(),
+        erzeugt_von=ausgefuehrt_von, notiz=f"Verlängerung der Leihe {leihe.nr} abgelehnt.", abschliesst=False,
+    )
     empfaenger = leihe_mail_empfaenger(leihe.person)
     if empfaenger and Einstellungen.aktuelles().mail_verleih_ablehnung:
         frist = leihe.rueckgabe_bis.strftime("%d.%m.%Y") if leihe.rueckgabe_bis else ""
@@ -3170,7 +3190,9 @@ def protokoll_korrigieren(
         unterschrift_art="tool",
         leihe=protokoll.leihe,
         ort_ziel=protokoll.ort_ziel,
+        gegenzeichnung_empfaenger=protokoll.gegenzeichnung_empfaenger,
     )
+    neue.weitere_geraete.set(protokoll.weitere_geraete.all())
     SignaturCode.objects.filter(protokoll=protokoll, gueltig=True).update(gueltig=False)
     protokoll.stand = Protokoll.STAND_ERSETZT
     protokoll.gegenzeichnung_token = ""

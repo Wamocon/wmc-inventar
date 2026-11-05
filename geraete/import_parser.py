@@ -414,7 +414,7 @@ def lade_csv(dateiname: str, byte: bytes) -> Vorlage:
     try:
         text = byte.decode("utf-8-sig")
     except UnicodeDecodeError as e:
-        raise ImportFehler(f"Die Datei ist nicht UTF-8 kodiert: {e}") from e
+        raise ImportFehler("Die Datei ist nicht UTF-8 kodiert. Bitte als „CSV UTF-8“ speichern.") from e
     probe = text.splitlines()
     if not probe or not probe[0]:
         raise ImportFehler("Die CSV-Datei hat keine Kopfzeile.")
@@ -654,7 +654,8 @@ def _kategorie_finden(nachweis: str) -> Kategorie | None:
 
 
 def _lagerort_finden() -> Ort | None:
-    return Ort.objects.filter(kennung__iexact="LAGER-EG").first()
+    """F-85: „Auf Lager“ heißt Lagerort (Kapitel 4), egal wie er heißt."""
+    return Ort.objects.filter(typ=Ort.TYP_LAGER).order_by("kennung").first()
 
 
 def neue_kennung(text: str) -> str:
@@ -1135,7 +1136,7 @@ def _zeile_berechnen(lauf: _Lauf, eintrag: dict, w: Zeilenwerte) -> VorschauZeil
         hinweise.append("altbestand")
         texte["altbestand"] = "Altbestand ohne Protokoll"
     else:
-        teile.append("ohne Person und Arbeitsplatz an LAGER-EG"
+        teile.append(f"ohne Person und Arbeitsplatz an {lauf.lager.kennung}"
                      if lauf.lager else "ohne Person und Arbeitsplatz")
     if w.defekt:
         teile.append("Defekt-Vermerk: Zustand 4")
@@ -1158,6 +1159,9 @@ def _verbleib_text(w: Zeilenwerte) -> str:
 def _gegen_geraet(lauf: _Lauf, zeile_nr: int, w: Zeilenwerte, gerat: Gerat) -> VorschauZeile:
     """Eine Zeile gegen ein vorhandenes Gerät: ergänzt oder Konflikt (F-84)."""
     nr = gerat.inventarnummer
+    # Manche Listen tragen die Seriennummer in der Spalte für die Kennung (Raumliste).
+    if not w.seriennummer and w.geraetename and w.geraetename.lower() == (gerat.seriennummer or "").lower():
+        w.seriennummer, w.geraetename = w.geraetename, ""
     if gerat.status == Gerat.STATUS_AUSGEMUSTERT:
         return VorschauZeile(zeile_nr, "uebersprungen",
                              f"{nr} ist ausgemustert und nur noch lesbar", gerat)

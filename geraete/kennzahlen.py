@@ -365,8 +365,26 @@ _ARBEITSLISTEN_DEF = (
 )
 
 
+def versand_offen(heute: date | None = None) -> list[dict]:
+    """F-139: Signierte Protokolle, deren PDF nicht hinausging. Die IT sendet es erneut."""
+    protokolle = (
+        Protokoll.objects.filter(pdf_versand_offen=True)
+        .exclude(stand=Protokoll.STAND_ERSETZT)
+        .select_related("person").order_by("nr")
+    )
+    return [
+        {
+            "nr": protokoll.nr,
+            "stand": "Versand offen",
+            "person": protokoll.person.voller_name() if protokoll.person else "",
+            "link": f"/protokolle/{protokoll.nr}/",
+        }
+        for protokoll in protokolle
+    ]
+
+
 def arbeitslisten(heute: date | None = None) -> list[dict]:
-    """Die acht Arbeitslisten (F-102) mit ihren data-id (Kapitel 4)."""
+    """Die acht Arbeitslisten (F-102) mit ihren data-id (Kapitel 4), dazu „Versand offen“, solange etwas offen ist."""
     if heute is None:
         heute = _heute()
     ergebnis = []
@@ -377,6 +395,9 @@ def arbeitslisten(heute: date | None = None) -> list[dict]:
             "zeilen": quelle(heute),
             "leer_text": leer_text,
         })
+    versand = versand_offen(heute)
+    if versand:
+        ergebnis.append({"data_id": "versand-offen", "titel": "Versand offen", "zeilen": versand, "leer_text": ""})
     return ergebnis
 
 

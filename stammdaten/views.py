@@ -731,23 +731,30 @@ def checklisten_pflegen(request):
         liste = request.POST.get("liste")
         punkte = list(Checklistenpunkt.objects.filter(liste=liste))
         fehler = "" if liste in dict(Checklistenpunkt.LISTEN) else "Unbekannte Liste."
+        laenge = Checklistenpunkt._meta.get_field("text").max_length
+        neu = (request.POST.get("neu") or "").strip()
+        if len(neu) > laenge:
+            fehler = f"Ein Punkt hat höchstens {laenge} Zeichen."
         for p in punkte:
             text = (request.POST.get(f"text-{p.pk}", p.text) or "").strip()
             roh = request.POST.get(f"reihenfolge-{p.pk}", str(p.reihenfolge))
             if not text:
                 fehler = "Ein Punkt braucht einen Text."
-            elif not roh.isdigit():
-                fehler = "Die Reihenfolge ist eine ganze Zahl."
+            elif len(text) > laenge:
+                fehler = f"Ein Punkt hat höchstens {laenge} Zeichen."
+            elif not roh.isdecimal() or len(roh) > 6:
+                fehler = "Die Reihenfolge ist eine ganze Zahl bis 999999."
             if fehler:
                 break
             p.text, p.reihenfolge = text, int(roh)
             p.aktiv = (liste, p.schluessel) in FESTE_PUNKTE or f"aktiv-{p.pk}" in request.POST
+        if not fehler and not neu and punkte and not any(p.aktiv for p in punkte):
+            fehler = "Mindestens ein Punkt bleibt aktiv."
         if fehler:
             messages.error(request, fehler)
             return redirect("/einstellungen/checklisten/")
         for p in punkte:
             p.save()
-        neu = (request.POST.get("neu") or "").strip()
         if neu:
             hoechste = max((p.reihenfolge for p in punkte), default=0)
             punkt = Checklistenpunkt.objects.create(liste=liste, schluessel="neu", text=neu, reihenfolge=hoechste + 10)

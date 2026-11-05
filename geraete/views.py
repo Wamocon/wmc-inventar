@@ -18,6 +18,7 @@ from django.conf import settings
 from django.db import transaction
 from django.db.models import Q
 from django.http import Http404, HttpResponse
+from django.utils.http import content_disposition_header
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
@@ -331,6 +332,7 @@ def detail(request, inventarnummer: str):
             "koennen_aendern": _darf_ändern(request.user),
             "ist_admin": request.user.ist_admin,
             "kann_loeschen": kann_loeschen,
+            "offener_entwurf": services._ausgabe_entwurf(gerat),
             "inventur": _inventur(request, gerat),
             # F-70: QR-Code im Gerätedetail
             "qr_inhalt": f"{settings.BASIS_URL}/g/{gerat.inventarnummer}",
@@ -1127,6 +1129,11 @@ def sammelausgabe(request):
             if protokoll is not None:
                 return redirect(f"/protokolle/{protokoll.nr}/")
             return redirect("/geraete/")
+    for g in geraete:
+        zustand = request.POST.get(f"zustand-{g.inventarnummer}", "")
+        g.eingabe_zustand = int(zustand) if zustand.isdecimal() else g.zustand
+        g.eingabe_zubehoer = request.POST.get(f"zubehoer-{g.inventarnummer}", "ja")
+        g.eingabe_anmerkung = request.POST.get(f"anmerkung-{g.inventarnummer}", "")
     return render(request, "geraete/sammelausgabe.html", {
         "form": form,
         "geraete": geraete,
@@ -1207,6 +1214,7 @@ def reparatur_start(request, inventarnummer: str):
     if not _darf_ändern(request.user):
         raise PermissionDenied("Zugriff verweigert: Vorgänge macht die IT.")
     gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
+    nachtragen = gerat.status == Gerat.STATUS_IN_REPARATUR
     if request.method == "POST":
         form = GeratReparaturStartForm(request.POST)
         if form.is_valid():
@@ -1217,16 +1225,23 @@ def reparatur_start(request, inventarnummer: str):
                     vorgangsnummer=form.cleaned_data.get("vorgangsnummer"),
                     notiz=form.cleaned_data.get("notiz", ""),
                     ausgefuehrt_von=request.user,
-                    nachtragen=gerat.status == Gerat.STATUS_IN_REPARATUR,
+                    nachtragen=nachtragen,
                 )
             except services.GeratFehler as fehler:
                 meldung_error(request, str(fehler))
                 return redirect("/geraete/" + gerat.inventarnummer + "/")
-            meldung_success(request, "Reparatur gestartet.")
+            text = "Angaben nachgetragen." if nachtragen else "Reparatur gestartet."
+            reserviert = Leihe.objects.filter(gerat=gerat, status=Leihe.STATUS_GENEHMIGT).order_by("beginn").first()
+            if reserviert is not None:
+                text += (
+                    f" Das Gerät ist für die Leihe {reserviert.nr} ab {reserviert.beginn:%d.%m.%Y} reserviert. "
+                    "Kommt es nicht rechtzeitig zurück, bitte die Reservierung aufheben."
+                )
+            meldung_success(request, text)
             return redirect("/geraete/" + gerat.inventarnummer + "/")
     else:
         form = GeratReparaturStartForm()
-    return render(request, "geraete/reparatur_start.html", {"gerat": gerat, "form": form})
+    return render(request, "geraete/reparatur_start.html", {"gerat": gerat, "form": form, "nachtragen": nachtragen})
 
 
 @login_required
@@ -1295,6 +1310,9 @@ def anhang_hochladen(request, inventarnummer: str):
     if not _darf_ändern(request.user):
         raise PermissionDenied("Zugriff verweigert: Vorgänge macht die IT.")
     gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
+    if gerat.status == Gerat.STATUS_AUSGEMUSTERT:
+        meldung_error(request, "Ausgemusterte Geräte sind nicht mehr änderbar.")
+        return redirect(f"/geraete/{gerat.inventarnummer}/")
     if request.method == "POST":
         try:
             services.anhang_hinzufuegen(gerat, request.FILES.get("datei"), request.user)
@@ -1317,7 +1335,7 @@ def anhang_zeigen(request, inventarnummer: str, anhang_id: int):
     with anhang.datei.open("rb") as handle:
         roh = handle.read()
     antwort = HttpResponse(roh, content_type=_typ_am_inhalt(roh) or "application/octet-stream")
-    antwort["Content-Disposition"] = f'attachment; filename="{anhang.datei.name.rsplit("/", 1)[-1]}"'
+    antwort["Content-Disposition"] = content_disposition_header(True, anhang.name)
     return antwort
 
 
@@ -1827,7 +1845,11 @@ def meine_geraete_leihe_neu(request):
                 gerat=form.cleaned_data.get("gerat"),
                 erzeugt_von=request.user,
             )
-            meldung_success(request, "Anfrage gesendet. Die IT entscheidet und meldet sich per E-Mail.")
+            meldung_success(request, "Anfrage gesendet. Die IT entscheidet" + (
+                " und meldet sich per E-Mail."
+                if services.bekommt_mail(person, Einstellungen.aktuelles().mail_verleih_genehmigung)
+                else "."
+            ))
             return redirect("/meine-geraete/")
         except GeratFehler as fehler_vorgang:
             fehler = str(fehler_vorgang)
@@ -2097,7 +2119,11 @@ def leihe_verlaengern_zeige(request, leih_id):
         except services.GeratFehler as fehler_vorgang:
             meldung_error(request, str(fehler_vorgang))
         else:
-            meldung_success(request, "Verlängerung abgelehnt. Die Mail an die Person ist unterwegs.")
+            meldung_success(request, "Verlängerung abgelehnt. " + (
+                "Die Mail an die Person ist unterwegs."
+                if services.bekommt_mail(leihe.person, Einstellungen.aktuelles().mail_verleih_ablehnung)
+                else "Eine Mail geht nicht hinaus."
+            ))
         return redirect("/verleih/")
     if request.method == "POST" and form.is_valid():
         try:
@@ -2137,6 +2163,7 @@ def leihe_ablehnen_zeige(request, leih_id):
         raise PermissionDenied
 
     leihe = get_object_or_404(Leihe, id=leih_id)
+    reservierung = leihe.status == Leihe.STATUS_GENEHMIGT
     form = LeiheAblehnenForm(request.POST or None)
     fehler = ""
     if request.method == "POST" and form.is_valid():
@@ -2148,7 +2175,7 @@ def leihe_ablehnen_zeige(request, leih_id):
             )
             meldung_success(
                 request,
-                "Abgelehnt. " + (
+                ("Reservierung aufgehoben. " if reservierung else "Abgelehnt. ") + (
                     f"{leihe.person.voller_name()} wird per E-Mail informiert."
                     if services.bekommt_mail(leihe.person, Einstellungen.aktuelles().mail_verleih_ablehnung)
                     else "Eine Mail geht nicht hinaus."
@@ -2165,6 +2192,7 @@ def leihe_ablehnen_zeige(request, leih_id):
             "form": form,
             "leihe": leihe,
             "fehler": fehler,
+            "reservierung": reservierung,
         },
     )
 
@@ -2202,7 +2230,12 @@ def protokoll_detail(request, protokoll_nr):
     _protokoll_berechtigt(protokoll, request)
 
     checkliste = [
-        {"schluessel": schluessel, "text": text, "wert": (protokoll.checkliste or {}).get(schluessel)}
+        {
+            "schluessel": schluessel,
+            "text": text,
+            "wert": (protokoll.checkliste or {}).get(schluessel),
+            "bemerkung": (protokoll.checkliste_bemerkung or {}).get(schluessel, ""),
+        }
         for schluessel, text in protokoll.punkte_zum_anzeigen("zugaenge")
     ]
     offboarding = []
@@ -2306,7 +2339,7 @@ def protokoll_checkliste_beantworten(request, protokoll_nr):
     werte = {}
     bemerkungen = {}
     # TESTSCHNITTSTELLE Kapitel 4: value = ausgegeben oder nicht-zutreffend.
-    for schluessel, _text in Protokoll.CHECKLISTE_PUNKTE:
+    for schluessel, _text in protokoll.punkte_zum_anzeigen("zugaenge"):
         roh = request.POST.get(f"checkliste.{schluessel}")
         if roh in ("1", "ausgegeben"):
             werte[schluessel] = 1
@@ -2337,7 +2370,7 @@ def protokoll_offboarding_beantworten(request, protokoll_nr):
     from . import protokoll as protokoll_services
 
     werte = {}
-    for schluessel, _text in Protokoll.OFFBOARDING_PUNKTE:
+    for schluessel, _text in protokoll.punkte_zum_anzeigen("offboarding"):
         roh = (request.POST.get(f"offboarding.{schluessel}") or "").replace("-", "_")
         if roh in ("erledigt", "in_klaerung", "nicht_zutreffend"):
             werte[schluessel] = roh

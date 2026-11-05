@@ -7,6 +7,7 @@
     <p class="muted lead">{{ gerat.inventarnummer }} · {{ gerat.hersteller }} {{ gerat.modell }}</p>
   </div>
 </div>
+{% if gerat.reserviert_aktiv %}<p class="muted" data-test="hinweis-reserviert">Das Gerät ist bis {{ gerat.reserviert_bis|date:"d.m.Y" }} reserviert. Ein Verleih in diesem Zeitraum geht nicht.</p>{% endif %}
 <div data-test="dialog" data-name="verleih">
   <form method="post" novalidate enctype="multipart/form-data" data-test="verleih-formular">
     {% csrf_token %}

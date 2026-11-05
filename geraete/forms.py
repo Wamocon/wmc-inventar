@@ -434,7 +434,7 @@ class GeratAusmusterungForm(forms.Form):
     datum = forms.DateField(
         required=True,
         label="Datum",
-        widget=forms.DateInput(attrs={"type": "date", "data-test": "ausmusterung-datum"}),
+        widget=forms.DateInput(format="%Y-%m-%d", attrs={"type": "date", "data-test": "ausmusterung-datum"}),
     )
     disposition = forms.CharField(
         required=False,

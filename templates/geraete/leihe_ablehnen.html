@@ -1,9 +1,9 @@
 {% extends "basis.html" %}
-{% block titel %}Leihanfrage ablehnen · WMC Inventar{% endblock %}
+{% block titel %}{% if reservierung %}Reservierung aufheben{% else %}Leihanfrage ablehnen{% endif %} · WMC Inventar{% endblock %}
 {% block inhalt %}
 <div class="page-head">
   <div>
-    <h1>Leihanfrage ablehnen</h1>
+    <h1>{% if reservierung %}Reservierung aufheben{% else %}Leihanfrage ablehnen{% endif %}</h1>
     <p class="muted lead">Leihe {{ leihe.nr }}: {{ leihe.person.vorname }} {{ leihe.person.nachname }}, {{ leihe.kat.name }}, {{ leihe.beginn|date:"d.m.Y" }} bis {{ leihe.ende|date:"d.m.Y" }}</p>
   </div>
 </div>
@@ -21,7 +21,7 @@
       </div>
     </div>
     <div class="actions">
-      <button type="submit" class="btn primary" data-test="speichern">Ablehnen</button>
+      <button type="submit" class="btn primary" data-test="speichern">{% if reservierung %}Aufheben{% else %}Ablehnen{% endif %}</button>
       <a class="btn link" href="/verleih/" data-test="abbrechen">Abbrechen</a>
     </div>
   </form>

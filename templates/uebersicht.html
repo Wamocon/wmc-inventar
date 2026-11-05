@@ -70,7 +70,7 @@
                 {{ z.standort }} · {{ z.mangel }}
               {% elif liste.data_id == "garantie" %}
                 {{ z.modell }} · Garantie bis {{ z.garantie_bis|date:"d.m.Y" }}
-              {% elif liste.data_id == "unterschriften-offen" %}
+              {% elif liste.data_id == "unterschriften-offen" or liste.data_id == "versand-offen" %}
                 {{ z.stand }} · {{ z.person }}
               {% elif liste.data_id == "daten-unvollstaendig" %}
                 {{ z.modell }} · fehlt: {{ z.luecken|join:", " }}

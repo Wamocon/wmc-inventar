@@ -25,9 +25,9 @@
           <tr data-test="zeile" data-id="{{ g.inventarnummer }}">
             <td><input type="hidden" name="auswahl" value="{{ g.inventarnummer }}"><span class="inv">{{ g.inventarnummer }}</span> {{ g.hersteller }} {{ g.modell }}</td>
             <td class="mono">{{ g.seriennummer|default:"ohne" }}</td>
-            <td><select name="zustand-{{ g.inventarnummer }}" aria-label="Zustand">{% for wert, text in zustaende %}<option value="{{ wert }}"{% if wert == g.zustand %} selected{% endif %}>{{ text }}</option>{% endfor %}</select></td>
-            <td><select name="zubehoer-{{ g.inventarnummer }}" aria-label="Zubehör komplett"><option value="ja">Ja</option><option value="nein">Nein</option></select></td>
-            <td><input type="text" name="anmerkung-{{ g.inventarnummer }}" aria-label="Bemerkung"></td>
+            <td><select name="zustand-{{ g.inventarnummer }}" aria-label="Zustand">{% for wert, text in zustaende %}<option value="{{ wert }}"{% if wert == g.eingabe_zustand %} selected{% endif %}>{{ text }}</option>{% endfor %}</select></td>
+            <td><select name="zubehoer-{{ g.inventarnummer }}" aria-label="Zubehör komplett"><option value="ja">Ja</option><option value="nein"{% if g.eingabe_zubehoer == "nein" %} selected{% endif %}>Nein</option></select></td>
+            <td><input type="text" name="anmerkung-{{ g.inventarnummer }}" value="{{ g.eingabe_anmerkung }}" aria-label="Bemerkung"></td>
           </tr>
           {% endfor %}
         </tbody>

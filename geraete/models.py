@@ -468,6 +468,7 @@ class Vorgang(models.Model):
         """F-40: „Garantie bis: 01.02.2028 → 03.03.2029“ statt der Rohwerte."""
         try:
             titel = str(Gerat._meta.get_field(self.aenderung_feld).verbose_name)
+            titel = titel[:1].upper() + titel[1:]
         except Exception:
             titel = self.aenderung_feld
         return f"{titel}: {self._wert_lesbar(self.aenderung_alter_wert)} → {self._wert_lesbar(self.aenderung_neuer_wert)}"
@@ -813,7 +814,7 @@ class Protokoll(models.Model):
             return []
         werte = self.checkliste or {}
         offene = []
-        for schluessel, text in self.CHECKLISTE_PUNKTE:
+        for schluessel, text in self.punkte_zum_anzeigen(checklisten.ZUGAENGE):
             if werte.get(schluessel) not in (0, 1):
                 offene.append(text)
         return offene
@@ -833,7 +834,7 @@ class Protokoll(models.Model):
             return []
         werte = self.offboarding or {}
         offene = []
-        for schluessel, text in self.OFFBOARDING_PUNKTE:
+        for schluessel, text in self.punkte_zum_anzeigen(checklisten.OFFBOARDING):
             wert = werte.get(schluessel)
             if wert is None:
                 offene.append(text)
@@ -843,7 +844,13 @@ class Protokoll(models.Model):
         return list(self.anhaenge or [])
 
     def punkte_zum_anzeigen(self, liste: str) -> tuple:
-        """Offen die aktuellen Punkte, signiert das, was damals beantwortet wurde (F-135)."""
+        """Die Punkte dieses Protokolls, festgehalten bei der Anlage (F-132, F-133, F-135).
+
+        Ohne festgehaltene Liste: offen die aktuellen, signiert das damals Beantwortete.
+        """
+        festgehalten = ((self.texte or {}).get("punkte") or {}).get(liste)
+        if festgehalten is not None:
+            return tuple((schluessel, text) for schluessel, text in festgehalten)
         if self.bearbeiter_signiert_am is None:
             return checklisten.aktive_punkte(liste)
         antworten = self.checkliste if liste == checklisten.ZUGAENGE else self.offboarding

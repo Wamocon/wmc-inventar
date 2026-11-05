@@ -341,14 +341,14 @@ def _checkliste_eintraege(protokoll: Protokoll) -> list[dict]:
     bemerkungen = protokoll.checkliste_bemerkung or {}
     return [
         {"text": text, "wert": werte.get(schluessel), "bemerkung": bemerkungen.get(schluessel, "")}
-        for schluessel, text in Protokoll.CHECKLISTE_PUNKTE
+        for schluessel, text in protokoll.punkte_zum_anzeigen("zugaenge")
     ]
 
 
 def _offboarding_eintraege(protokoll: Protokoll) -> list[dict]:
     werte = protokoll.offboarding or {}
     eintraege = []
-    for schluessel, text in Protokoll.OFFBOARDING_PUNKTE:
+    for schluessel, text in protokoll.punkte_zum_anzeigen("offboarding"):
         wert = werte.get(schluessel)
         if wert is True:
             wert = {"status": "erledigt"}

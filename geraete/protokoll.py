@@ -85,7 +85,7 @@ def checkliste_beantworten(
         raise GeratFehler(
             "Die Checkliste ist für ein abgeschlossenes Protokoll gesperrt."
         )
-    erlaubt = {schluessel for schluessel, _text in Protokoll.CHECKLISTE_PUNKTE}
+    erlaubt = {schluessel for schluessel, _text in protokoll.punkte_zum_anzeigen("zugaenge")}
     bereinigt: dict[str, int] = {}
     for schluessel, wert in (werte or {}).items():
         if schluessel not in erlaubt:
@@ -116,7 +116,7 @@ def offboarding_abhaken(
         raise GeratFehler(
             "Die Prüfpunkte sind für ein abgeschlossenes Protokoll gesperrt."
         )
-    erlaubt = {schluessel for schluessel, _text in Protokoll.OFFBOARDING_PUNKTE}
+    erlaubt = {schluessel for schluessel, _text in protokoll.punkte_zum_anzeigen("offboarding")}
     bereinigt: dict[str, bool] = {}
     for schluessel, wert in (werte or {}).items():
         if schluessel not in erlaubt:
@@ -135,6 +135,21 @@ def offboarding_abhaken(
 # Hardware-Inventar dokumentiert" setzt das Tool selbst (F-133).
 
 _OFFBOARDING_WERTE = ("erledigt", "in_klaerung", "nicht_zutreffend")
+
+
+def _datum_der_antwort(wert: str) -> str:
+    """F-133: TT.MM.JJJJ. Das ISO-Format wird umgeschrieben, Freitext abgelehnt."""
+    from datetime import datetime
+
+    wert = (wert or "").strip()
+    if not wert:
+        return ""
+    for muster in ("%d.%m.%Y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(wert, muster).strftime("%d.%m.%Y")
+        except ValueError:
+            continue
+    raise GeratFehler(f"Datum „{wert}“ bitte als TT.MM.JJJJ eingeben.")
 
 
 def offboarding_beantworten(
@@ -157,7 +172,7 @@ def offboarding_beantworten(
             "Die Prüfpunkte IT-Offboarding gehören nur zu einem Rücknahmeprotokoll."
         )
 
-    erlaubt = {schluessel for schluessel, _text in Protokoll.OFFBOARDING_PUNKTE}
+    erlaubt = {schluessel for schluessel, _text in protokoll.punkte_zum_anzeigen("offboarding")}
     heute = jetzt_aware().date()
     bearbeiter_kuerzel = ""
     if ausgefuehrt_von is not None and getattr(ausgefuehrt_von, "person", None) is not None:
@@ -168,7 +183,7 @@ def offboarding_beantworten(
         status = (werte or {}).get(schluessel)
         if status not in _OFFBOARDING_WERTE:
             continue  # un beantwortete Punkte bleiben un beantwortet
-        datum = (werte or {}).get(f"{schluessel}.datum") or (
+        datum = _datum_der_antwort((werte or {}).get(f"{schluessel}.datum")) or (
             heute.strftime("%d.%m.%Y")
             if status in ("erledigt", "in_klaerung")
             else ""

@@ -600,6 +600,13 @@ class ImportRegelnTests(Werkzeug):
         self.assertEqual(GeratKonflikt.objects.count(), konflikte)
         self.assertEqual(Vorgang.objects.count(), vorgaenge)
 
+    def test_zweiter_import_der_raumliste_ohne_falschen_konflikt(self):
+        """Kennung gleich Seriennummer gilt auch, wenn die Zeile schon bekannt ist (F-84)."""
+        self._blatt("Inventar")
+        self._blatt("Notebooks")
+        self._blatt("Raumliste Hardware")
+        self.assertEqual(self._blatt("Raumliste Hardware")["konflikt"], 0)
+
     def test_zweiter_import_wird_angekuendigt(self):
         self._blatt("Inventar")
         self._xlsx("Inventar", "3")
