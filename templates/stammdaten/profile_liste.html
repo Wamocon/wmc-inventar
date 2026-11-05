@@ -7,7 +7,7 @@
 </div>
 <div class="liste" data-test="liste">
   {% for p in profile %}
-  <div class="zeile" data-test="zeile" data-id="{{ p.name }}">
+  <div class="zeile spalten-vier" data-test="zeile" data-id="{{ p.name }}">
     {% if ist_admin %}<a href="/profile/{{ p.pk }}/aendern/">{{ p.name }}</a>{% else %}<span>{{ p.name }}</span>{% endif %}
     <span class="muted" data-test="positionen">{% for pos in p.positionen.all %}{{ pos.anzahl }} × {{ pos.kategorie.name }}{% if not forloop.last %}, {% endif %}{% empty %}keine Positionen{% endfor %}</span>
     <span class="muted">{{ p.plaetze.all|length }} Arbeitsplätze</span>

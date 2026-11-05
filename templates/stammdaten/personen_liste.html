@@ -11,7 +11,7 @@
 </div>
 <div class="liste" data-test="liste">
   {% for p in personen %}
-  <div class="zeile" data-test="zeile" data-id="{{ p.pk }}">
+  <div class="zeile spalten-person" data-test="zeile" data-id="{{ p.pk }}">
     <a href="/personen/{{ p.pk }}/">{{ p.nachname }} {{ p.vorname }}</a>
     <span class="muted">{{ p.email }}{% if p.abteilung %} · {{ p.abteilung }}{% endif %}</span>
     <span class="muted" data-test="arbeitsplatz">{% for o in p.feste_plaetze.all %}<a href="/arbeitsplaetze/{{ o.kennung }}/">{{ o.kennung }}</a>{% if not forloop.last %}, {% endif %}{% empty %}–{% endfor %}</span>

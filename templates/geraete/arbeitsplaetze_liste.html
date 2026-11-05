@@ -15,7 +15,7 @@
 <div class="liste" data-test="liste" data-liste="arbeitsplaetze-liste">
   <div data-test="arbeitsplaetze-liste"></div>
   {% for z in zeilen %}
-  <div class="zeile" data-test="zeile" data-id="{{ z.ort.kennung }}">
+  <div class="zeile spalten-platz" data-test="zeile" data-id="{{ z.ort.kennung }}">
     <span data-test="ort-kennung">{{ z.ort.kennung }}</span>
     <span class="muted" data-test="ort-raum">{{ z.ort.raum }}</span>
     <span data-test="feste-person">{% if z.ort.feste_person %}<a href="/personen/{{ z.ort.feste_person.pk }}/">{{ z.ort.feste_person.voller_name }}</a>{% else %}<span class="muted">{{ z.ort.notiz|default:"–" }}</span>{% endif %}</span>

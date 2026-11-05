@@ -227,11 +227,19 @@ form .actions{margin-top:8px}
 .plan-orte .orte.raum .raum-name{font-size:12px;font-weight:700}
 .plan-orte .orte.raum .raum-anzahl{font-size:11px;font-weight:500;color:var(--fg-2)}
 .pflegen .plan-orte .orte.raum{min-height:0;min-width:0;padding:4px 8px}
+@media (min-width:1000px){
+  .liste .zeile.spalten-platz{grid-template-columns:96px 150px 140px 84px 124px minmax(0,1fr) auto auto}
+  .liste .zeile.spalten-planliste{grid-template-columns:96px 150px 150px 124px minmax(0,1fr) auto}
+  .liste .zeile.spalten-bedarf{grid-template-columns:minmax(0,1fr) 90px 110px auto}
+  .liste .zeile.spalten-person{grid-template-columns:200px minmax(0,1fr) 110px 130px auto}
+  .liste .zeile.spalten-vier{grid-template-columns:auto minmax(0,1fr) auto auto}
+}
 .linkish{background:none;border:0;padding:0;font:inherit;font-weight:600;color:var(--fg);cursor:pointer;text-align:left;text-decoration:underline}
 .linkish:hover{color:var(--red)}
 .logo-vorschau{display:block;max-width:200px;max-height:80px;margin-top:8px;background:var(--paper)}
 .mail-hilfe{display:block}
-.profil-position{align-items:end;gap:12px}
+.liste .zeile.profil-position{grid-template-columns:minmax(0,1fr) 110px auto;align-items:end}
+.plan-unvollstaendig .muted{display:block}
 .card > .check{display:flex;gap:8px;align-items:flex-start;margin:6px 0}
 
 /* Abschnitte im Inventarbuch: Kopflinie statt Kasten (Prototyp: card) */

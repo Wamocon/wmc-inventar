@@ -111,7 +111,7 @@
         <h3>Unvollständige Plätze ({{ unvollstaendig|length }})</h3>
         <ul>
           {% for u in unvollstaendig %}
-          <li><a href="/arbeitsplaetze/{{ u.ort.kennung }}/" data-test="platz-link">{{ u.ort.kennung }}</a>{% for kategorie, anzahl in u.abgleich.fehlend %}<span class="muted small"> fehlt: {{ anzahl }} × {{ kategorie.name }}</span>{% endfor %}</li>
+          <li><a href="/arbeitsplaetze/{{ u.ort.kennung }}/" data-test="platz-link">{{ u.ort.kennung }}</a><span class="muted small">{% for kategorie, anzahl in u.abgleich.fehlend %}fehlt: {{ anzahl }} × {{ kategorie.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</span></li>
           {% endfor %}
         </ul>
       </div>
@@ -132,12 +132,12 @@
   {% else %}
   <div class="liste" data-test="arbeitsplaetze-liste">
     {% for o in plaetze %}
-    <div class="zeile" data-test="zeile" data-id="{{ o.ort.kennung }}">
+    <div class="zeile spalten-planliste" data-test="zeile" data-id="{{ o.ort.kennung }}">
       <a href="/arbeitsplaetze/{{ o.ort.kennung }}/" data-test="platz-link">{{ o.ort.kennung }}</a>
       <span class="muted">{{ o.ort.raum }}</span>
       <span data-test="feste-person">{% if o.ort.feste_person %}{{ o.ort.feste_person.voller_name }}{% else %}<span class="muted">{{ o.ort.notiz|default:"–" }}</span>{% endif %}</span>
       <span class="platz-chip {{ o.klasse }}" data-test="platz-chip">{{ o.zeichen }} {{ o.text }}</span>
-      {% for kategorie, anzahl in o.abgleich.fehlend %}<span class="muted small">fehlt: {{ anzahl }} × {{ kategorie.name }}</span>{% endfor %}
+      <span class="muted small" data-test="fehlliste">{% for kategorie, anzahl in o.abgleich.fehlend %}fehlt: {{ anzahl }} × {{ kategorie.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>
       <button type="button" class="btn sm" data-test="popup-oeffnen" data-pfad="/arbeitsplaetze/{{ o.ort.kennung }}/popup/">Details</button>
     </div>
     {% endfor %}

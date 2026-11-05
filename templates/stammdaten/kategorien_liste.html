@@ -11,7 +11,7 @@
 </div>
 <div class="liste" data-test="liste">
   {% for k in kategorien %}
-  <div class="zeile" data-test="zeile" data-id="{{ k.pk }}">
+  <div class="zeile spalten-vier" data-test="zeile" data-id="{{ k.pk }}">
     {% if ist_admin %}<a href="/kategorien/{{ k.pk }}/aendern/">{{ k.name }}</a>{% else %}<span>{{ k.name }}</span>{% endif %}
     <span class="muted">{% if k.hat_datentraeger %}hat Datenträger{% else %}kein Datenträger{% endif %}{% if k.seriennummer_pflicht %} · Seriennummer Pflicht{% endif %} · {{ k.geraete_anzahl }} Gerät(e){% if k.geraete_anzahl or k.profile_anzahl %} · nicht löschbar{% endif %}</span>
     {% if ist_admin %}
