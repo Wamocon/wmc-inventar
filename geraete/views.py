@@ -1318,12 +1318,13 @@ def meine_geraete_zeige(request):
     """
     person = _eigene_person(request)
 
-    geräte = list(Gerat.objects.filter(person=person).order_by("inventarnummer"))
+    # Ohne Person gäbe filter(person=None) die Geräte ohne Zuordnung aus (F-112).
+    geräte = list(Gerat.objects.filter(person=person).order_by("inventarnummer")) if person else []
 
     ausgaben = {}
     protokoll_je_gerat = {}
     for vorgang in Vorgang.objects.filter(
-        typ=Vorgang.TYP_AUSGABE, gerat__person=person
+        typ=Vorgang.TYP_AUSGABE, gerat__in=geräte
     ).order_by("-zeitpunkt"):
         if vorgang.gerat_id not in ausgaben:
             ausgaben[vorgang.gerat_id] = vorgang
@@ -1339,7 +1340,7 @@ def meine_geraete_zeige(request):
         )
         return {
             "gerat": gerat,
-            "ausgabe_datum": vorgang_ausgabe.zeitpunkt.date() if vorgang_ausgabe else None,
+            "ausgabe_datum": timezone.localdate(vorgang_ausgabe.zeitpunkt) if vorgang_ausgabe else None,
             "protokoll": protokoll,
             "leihe": Leihe.objects.filter(
                 gerat=gerat, person=person, status=Leihe.STATUS_AUSGEGEBEN
@@ -1486,7 +1487,7 @@ def meine_geraete_leihe_zurueckziehen(request, leih_id):
     leihe = get_object_or_404(Leihe, id=leih_id)
     if request.user.person_id is None or leihe.person_id != request.user.person_id:
         raise PermissionDenied
-    form = LeiheZurueckziehenForm(request.POST or None)
+    form = LeiheZurueckziehenForm(request.POST if request.method == "POST" else None)
 
     meldung = ""
     if request.method == "POST" and form.is_valid():
@@ -1620,7 +1621,10 @@ def leihe_ausgeben_zeige(request, leih_id):
         raise PermissionDenied
 
     leihe = get_object_or_404(Leihe, id=leih_id)
-    form = LeiheAusgebenForm(request.POST or None, initial={"unterschrift": "tool"})
+    form = LeiheAusgebenForm(
+        request.POST if request.method == "POST" else None,
+        initial={"unterschrift": "tool"},
+    )
     fehler = ""
     if request.method == "POST" and form.is_valid():
         try:

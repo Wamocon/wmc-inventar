@@ -2635,7 +2635,7 @@ class VerleihServiceTests(TestCase):
         """F-30: Verleih erstellt eine Leihe mit Status 'ausgegeben'."""
         from .models import Leihe, Protokoll
 
-        rueckgabe = date(2026, 11, 15)
+        rueckgabe = date(2036, 11, 15)
         leihe = services.leih_gerat_ausgeben(
             gerat=self.gerat, person=self.person, rueckgabe_bis=rueckgabe,
             zweck="Präsentation", ausgefuehrt_von=self.admin,
@@ -2648,7 +2648,7 @@ class VerleihServiceTests(TestCase):
         from .models import Leihe
         from datetime import date
 
-        rueckgabe = date(2026, 11, 15)
+        rueckgabe = date(2036, 11, 15)
         leihe = services.leih_gerat_ausgeben(
             gerat=self.gerat, person=self.person, rueckgabe_bis=rueckgabe,
             zweck="Präsentation", ausgefuehrt_von=self.admin,
@@ -2667,10 +2667,12 @@ class VerleihServiceTests(TestCase):
 
         # Rückgabedatum in der Vergangenheit
         rueckgabe = date(2026, 10, 1)
+        frist_zukunft = date(2036, 10, 1)
         leihe = services.leih_gerat_ausgeben(
-            gerat=self.gerat, person=self.person, rueckgabe_bis=rueckgabe,
+            gerat=self.gerat, person=self.person, rueckgabe_bis=frist_zukunft,
             zweck="Präsentation", ausgefuehrt_von=self.admin,
         )
+        Leihe.objects.filter(pk=leihe.pk).update(rueckgabe_bis=rueckgabe)
         ueberfaellige = list(services.leihen_ueberfaellig())
         self.assertEqual(len(ueberfaellige), 1)
         self.assertEqual(ueberfaellige[0].id, leihe.id)
@@ -2768,8 +2770,8 @@ class LeiheAnfrageServiceTests(TestCase):
         )
         self.gerat.leihpool = True
         self.gerat.save()
-        self.beginn = date(2026, 11, 2)
-        self.ende = date(2026, 11, 10)
+        self.beginn = date(2036, 11, 2)
+        self.ende = date(2036, 11, 10)
 
     def test_anfrage_ohne_gerat(self):
         leihe = leihe_anfragen(
@@ -2825,8 +2827,8 @@ class LeiheEntscheidungServiceTests(TestCase):
         )
         self.gerat.leihpool = True
         self.gerat.save()
-        self.beginn = date(2026, 11, 2)
-        self.ende = date(2026, 11, 10)
+        self.beginn = date(2036, 11, 2)
+        self.ende = date(2036, 11, 10)
 
     def _anfrage_erstellen(self, beginn=None, ende=None):
         return leihe_anfragen(
@@ -2890,8 +2892,8 @@ class LeiheZurueckziehenServiceTests(TestCase):
         )
         self.gerat.leihpool = True
         self.gerat.save()
-        self.beginn = date(2026, 11, 2)
-        self.ende = date(2026, 11, 10)
+        self.beginn = date(2036, 11, 2)
+        self.ende = date(2036, 11, 10)
 
     def _anfrage_erstellen(self):
         return leihe_anfragen(
@@ -2942,7 +2944,7 @@ class LeiheAnfrageViewTests(TestCase):
     def test_leihe_neu_antwortet_200(self):
         answer = self.client.get("/meine-geraete/leihe/neu/")
         self.assertEqual(answer.status_code, 200)
-        self.assertContains(answer, "Leihe anfragen")
+        self.assertContains(answer, "Leihgerät anfragen")
 
     def test_leihe_neu_zeigt_freie_geraete(self):
         answer = self.client.get("/meine-geraete/leihe/neu/")
@@ -2957,8 +2959,8 @@ class LeiheAnfrageViewTests(TestCase):
     def test_anfrage_wird_erstellt(self):
         answer = self.client.post("/meine-geraete/leihe/neu/", {
             "kat": self.kategorie.id,
-            "beginn": "2026-11-02",
-            "ende": "2026-11-10",
+            "beginn": "2036-11-02",
+            "ende": "2036-11-10",
             "zweck": "Vorführung",
         })
         self.assertEqual(answer.status_code, 302)
@@ -3290,8 +3292,8 @@ class LeiheAusgebenTests(TestCase):
         self.leihe = leihe_anfragen(
             person=self.person,
             kat=self.kategorie,
-            beginn=date(2026, 11, 15),
-            ende=date(2026, 11, 30),
+            beginn=date(2036, 11, 15),
+            ende=date(2036, 11, 30),
             zweck="Projektarbeit",
             gerat=self.gerat,
             erzeugt_von=self.admin,
@@ -3337,7 +3339,7 @@ class LeiheAusgebenTests(TestCase):
         self.assertEqual(answer.status_code, 200)
         content = answer.content.decode()
         self.assertIn('data-test="dialog"', content)
-        self.assertIn('data-name="ausgeben"', content)
+        self.assertIn('data-name="verleih"', content)
 
     def test_view_403_fuer_mitarbeiter(self):
         """F-33: /geraete/verleih/<id>/ausgeben/ antwortet für Mitarbeiter mit 403."""
@@ -3362,9 +3364,9 @@ class LeiheAusgebenTests(TestCase):
         leihe_neu = Leihe.objects.create(
             kat=self.kategorie,
             person=self.person,
-            beginn=date(2026, 12, 1),
-            ende=date(2026, 12, 15),
-            rueckgabe_bis=date(2026, 12, 15),
+            beginn=date(2036, 12, 1),
+            ende=date(2036, 12, 15),
+            rueckgabe_bis=date(2036, 12, 15),
             zweck="Test",
             status=Leihe.STATUS_ANGEFRAGT,
         )
@@ -3388,8 +3390,8 @@ class LeiheVerlaengernTests(TestCase):
         self.leihe = leihe_anfragen(
             person=self.person,
             kat=self.kategorie,
-            beginn=date(2026, 11, 15),
-            ende=date(2026, 11, 30),
+            beginn=date(2036, 11, 15),
+            ende=date(2036, 11, 30),
             zweck="Projektarbeit",
             gerat=self.gerat,
             erzeugt_von=self.admin,
@@ -3400,7 +3402,7 @@ class LeiheVerlaengernTests(TestCase):
 
     def test_verlaengern_geht(self):
         """F-35: Verlängerung ohne Folgereservierung verschiebt das Rückgabedatum."""
-        new_date = date(2026, 12, 15)
+        new_date = date(2036, 12, 15)
         leihe_verlaengern(
             self.leihe,
             rueckgabe_bis_neu=new_date,
@@ -3419,9 +3421,9 @@ class LeiheVerlaengernTests(TestCase):
         leihe2 = Leihe.objects.create(
             kat=self.kategorie,
             person=person2,
-            beginn=date(2026, 12, 10),
-            ende=date(2026, 12, 20),
-            rueckgabe_bis=date(2026, 12, 20),
+            beginn=date(2036, 12, 10),
+            ende=date(2036, 12, 20),
+            rueckgabe_bis=date(2036, 12, 20),
             zweck="Folgereservierung",
             gerat=self.gerat,
             genehmigt=True,
@@ -3429,13 +3431,13 @@ class LeiheVerlaengernTests(TestCase):
         )
         # Reservierung setzen
         self.gerat.reserviert = True
-        self.gerat.reserviert_bis = date(2026, 12, 20)
+        self.gerat.reserviert_bis = date(2036, 12, 20)
         self.gerat.save()
 
         with self.assertRaises(GeratFehler):
             leihe_verlaengern(
                 self.leihe,
-                rueckgabe_bis_neu=date(2026, 12, 15),
+                rueckgabe_bis_neu=date(2036, 12, 15),
                 ausgefuehrt_von=self.admin,
             )
 
@@ -3444,7 +3446,7 @@ class LeiheVerlaengernTests(TestCase):
         with self.assertRaises(GeratFehler):
             leihe_verlaengern(
                 self.leihe,
-                rueckgabe_bis_neu=date(2026, 11, 1),
+                rueckgabe_bis_neu=date(2036, 11, 1),
                 ausgefuehrt_von=self.admin,
             )
 
@@ -3466,7 +3468,7 @@ class LeiheVerlaengernTests(TestCase):
     def test_post_verlaengern(self):
         """F-35: POST verlängert die Leihe."""
         self.client.force_login(self.admin)
-        new_date = date(2026, 12, 15)
+        new_date = date(2036, 12, 15)
         answer = self.client.post(
             f"/geraete/verleih/{self.leihe.id}/verlaengern/",
             {"rueckgabe_bis_neu": new_date.strftime("%Y-%m-%d"), "bestätigung": "on"},
@@ -4591,8 +4593,8 @@ class A0128VerleihTest(TestCase):
         self.assertEqual(protokoll.stand, Protokoll.STAND_BEARBEITER_OFFEN)
         self.assertEqual(protokoll.unterschrift_art, "tool")
         self.assertIsNotNone(protokoll.leihe)
-        # Leihe ist „ausgegeben".
-        self.assertEqual(protokoll.leihe.status, Leihe.STATUS_AUSGEGEBEN)
+        # Vor der Signatur ist die Leihe noch nicht ausgegeben (F-30), sie hält das Gerät fest.
+        self.assertEqual(protokoll.leihe.status, Leihe.STATUS_GENEHMIGT)
         # Checkliste beantworten (F-132), damit die Signatur durchgeht.
         for schluessel, _text in Protokoll.CHECKLISTE_PUNKTE:
             protokoll.checkliste[schluessel] = 1
@@ -4608,7 +4610,7 @@ class A0128VerleihTest(TestCase):
         self.g1.refresh_from_db()
         self.assertEqual(self.g1.status, Gerat.STATUS_VERLIEHEN)
         self.assertEqual(self.g1.person, self.person)
-        # Leihe bleibt „ausgegeben".
+        # Mit der Signatur ist die Leihe „ausgegeben" (F-30, Zeitpunkt wie in F-21).
         protokoll.refresh_from_db()
         self.assertEqual(protokoll.leihe.status, Leihe.STATUS_AUSGEGEBEN)
 

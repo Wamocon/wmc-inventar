@@ -767,7 +767,7 @@ class Leihe(models.Model):
 
     def ist_zurueckziehbar(self) -> bool:
         """F-37: Rückziehbar, solange die Leihe nicht ausgegeben ist."""
-        return self.status in self.ZURUECKZIEHBAR
+        return self.status in self.ZURUECKZIEHBAR and not self.ist_direktentwurf
 
     nr = models.CharField("Leihnummer", max_length=16, blank=True, default="")
     gerat = models.ForeignKey(
