@@ -572,7 +572,7 @@ class AusmusterungTests(Grundlage):
         leihe = Leihe.objects.create(person=self.anna, gerat=gerat, kat=self.notebook, status=Leihe.STATUS_AUSGEGEBEN)
         services.ausmustern(gerat, grund="gestohlen", datum=date(2026, 1, 1), disposition="unbekannt", bestaetigt_gemeldt=True)
         leihe.refresh_from_db()
-        self.assertEqual(leihe.status, Leihe.STATUS_ZURUECKGEGEBEN)
+        self.assertEqual(leihe.status, Leihe.STATUS_VERLOREN)
 
     def test_verlust_verlangt_die_bestaetigung(self):
         gerat = self._ausgegeben(self._gerat())

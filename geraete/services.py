@@ -516,7 +516,7 @@ def ausmustern(
     if verloren:
         teile.append("Vorfall an Datenschutz bzw. Informationssicherheit gemeldet")
 
-    _leihen_beenden(gerat)
+    _leihen_beenden(gerat, verloren=verloren)
     # Verloren oder gestohlen: Die reservierte Leihe kann nicht stattfinden, die Person erfährt es.
     for leihe in reservierungen:
         leihe_ablehnen(leihe, f"Das Gerät wurde als {grund} gemeldet.", ausgefuehrt_von)
@@ -894,11 +894,14 @@ def gerat_reparatur_fertig(
     """Reparatur abschließen (F-42, M3).
 
     Abschluss mit neuem Zustand und Ziel „bisherige Zuordnung" oder „Lager".
+    Hatte das Gerät eine Person, läuft „Lager“ über dieselbe Rücknahme wie am Gerät,
+    mit Protokoll und Signatur (Erwin 05.11.).
     """
     if gerat.status != Gerat.STATUS_IN_REPARATUR:
         raise GeratFehler("Nur Geräte in Reparatur können repariert werden.")
 
     gerat.zustand = zustand
+    ruecknahme = ziel != "zuordnung" and gerat.person_id is not None
 
     if ziel == "zuordnung":
         # F-42: Ziel „Bisherige Zuordnung" – Gerät geht zurück zu Person/Ort.
@@ -908,6 +911,9 @@ def gerat_reparatur_fertig(
             gerat.ort = gerat.ort or standard_lager()
         else:
             gerat.status = Gerat.STATUS_IN_BENUTZUNG
+    elif ruecknahme:
+        # Zurück bei der Person, die Rücknahme setzt Lager und Person.
+        gerat.status = Gerat.STATUS_IN_BENUTZUNG
     else:
         # F-42: Ziel „Lager"
         gerat.status = Gerat.STATUS_AUF_LAGER
@@ -926,6 +932,13 @@ def gerat_reparatur_fertig(
         abschliesst=True,
     )
     gerat.save()
+    if ruecknahme:
+        geraete_zuruecknehmen(
+            gerat.person,
+            [{"gerat": gerat, "zustand_rueckgabe": zustand, "ziel": "lager", "lagerort": lagerort}],
+            ausgefuehrt_von=ausgefuehrt_von,
+            unterschrift="tool",
+        )
     return gerat
 
 
@@ -2042,14 +2055,15 @@ def leihe_verfuegbarkeit(
     return ergebnis
 
 
-def _leihen_beenden(gerat: Gerat) -> None:
+def _leihen_beenden(gerat: Gerat, verloren: bool = False) -> None:
     """Ausgegebene Leihen abschließen, wenn das Gerät zurück oder verloren ist.
 
     Rückgabe und Verlust laufen über das Gerät (F-50, F-52, F-57). Die Leihe
     endet mit ihnen, sonst liefen Erinnerungen und „überfällig“ weiter (F-92).
+    Bei Verlust steht sie auf „verloren“, nicht auf „zurückgegeben“.
     """
     Leihe.objects.filter(gerat=gerat, status=Leihe.STATUS_AUSGEGEBEN).update(
-        status=Leihe.STATUS_ZURUECKGEGEBEN,
+        status=Leihe.STATUS_VERLOREN if verloren else Leihe.STATUS_ZURUECKGEGEBEN,
         genehmigt=False,
         verlaengerung_bis=None,
     )

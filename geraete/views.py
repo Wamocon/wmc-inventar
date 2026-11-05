@@ -1253,6 +1253,7 @@ def reparatur_fertig(request, inventarnummer: str):
     if request.method == "POST":
         form = GeratReparaturFertigForm(request.POST, gerat=gerat)
         if form.is_valid():
+            ruecknahme = gerat.person_id is not None and form.cleaned_data.get("ziel", "lager") != "zuordnung"
             try:
                 services.gerat_reparatur_fertig(
                     gerat,
@@ -1266,7 +1267,11 @@ def reparatur_fertig(request, inventarnummer: str):
             except services.GeratFehler as fehler:
                 meldung_error(request, str(fehler))
                 return redirect("/geraete/" + gerat.inventarnummer + "/")
-            meldung_success(request, "Reparatur abgeschlossen.")
+            meldung_success(
+                request,
+                "Reparatur abgeschlossen. Das Rücknahmeprotokoll ist angelegt und wartet auf die Signatur."
+                if ruecknahme else "Reparatur abgeschlossen.",
+            )
             return redirect("/geraete/" + gerat.inventarnummer + "/")
     else:
         form = GeratReparaturFertigForm(gerat=gerat)

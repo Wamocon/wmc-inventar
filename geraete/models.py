@@ -895,6 +895,8 @@ class Leihe(models.Model):
     STATUS_AUSGEGEBEN = "ausgegeben"
     STATUS_ZURUECKGEGEBEN = "zurueckgegeben"
     STATUS_ZURUECKGEZOGEN = "zurueckgezogen"
+    # Erwin 05.11.: Das ausgegebene Gerät wurde als verloren oder gestohlen gemeldet.
+    STATUS_VERLOREN = "verloren"
     STATUSES = [
         (STATUS_ANGEFRAGT, "angefragt"),
         (STATUS_GENEHMIGT, "genehmigt"),
@@ -902,6 +904,7 @@ class Leihe(models.Model):
         (STATUS_AUSGEGEBEN, "ausgegeben"),
         (STATUS_ZURUECKGEGEBEN, "zurückgegeben"),
         (STATUS_ZURUECKGEZOGEN, "zurückgezogen"),
+        (STATUS_VERLOREN, "verloren"),
     ]
     # A-0118: Anzeigetext des Stands für die Leihliste (TESTSCHNITTSTELLE 5).
     STAND_ANZEIGE = {
@@ -911,6 +914,7 @@ class Leihe(models.Model):
         STATUS_AUSGEGEBEN: "ausgegeben",
         STATUS_ZURUECKGEGEBEN: "zurückgegeben",
         STATUS_ZURUECKGEZOGEN: "zurückgezogen",
+        STATUS_VERLOREN: "verloren",
     }
     # A-0118 (F-37): Aus diesen Zuständen darf die Leihe zurückgezogen werden.
     ZURUECKZIEHBAR = (STATUS_ANGEFRAGT, STATUS_GENEHMIGT)
@@ -1016,6 +1020,8 @@ class Leihe(models.Model):
         """Aktueller Stand: ausgegeben, zurueckgegeben oder ueberfaellig (F-36)."""
         if self.status == self.STATUS_ZURUECKGEGEBEN:
             return "zurueckgegeben"
+        if self.status == self.STATUS_VERLOREN:
+            return "verloren"
         if self.rueckgabe_bis is not None:
             from datetime import date
             from konten.zeit import jetzt_wie_im_entwicklungsmodus
@@ -1039,6 +1045,7 @@ class Leihe(models.Model):
             self.STATUS_AUSGEGEBEN: "ok",
             self.STATUS_ZURUECKGEGEBEN: "muted",
             self.STATUS_ZURUECKGEZOGEN: "muted",
+            self.STATUS_VERLOREN: "err",
         }
         return mapping.get(self.status, "muted")
 

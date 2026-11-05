@@ -390,3 +390,88 @@ class NachDerEngenPruefungTests(Grundlage):
         self._entwurf(gerat)
         seite = self.client.get(f"/geraete/{gerat.inventarnummer}/").content.decode()
         self.assertLess(seite.index('data-test="hinweis-entwurf"'), seite.index('data-test="aktionen"'))
+
+
+class VerlorenTests(Grundlage):
+    """Erwin 05.11.: Bei Verlust steht die Leihe auf „verloren“."""
+
+    def test_leihe_steht_auf_verloren(self):
+        from .models import Leihe
+        gerat = self._gerat("V-2", leihpool=True)
+        heute = zeit.jetzt_wie_im_entwicklungsmodus().date()
+        self.client.post(f"/geraete/{gerat.inventarnummer}/verleih/", {
+            "person": self.anna.pk, "rueckgabe_bis": (heute + timedelta(days=5)).isoformat(), "zweck": "Messe",
+            "unterschrift": "papier", "zustand": 2, "zubehoer_komplett": "ja",
+        })
+        leihe = Leihe.objects.get(gerat=gerat)
+        self.assertEqual(leihe.status, Leihe.STATUS_AUSGEGEBEN)
+        services.ausmustern(
+            Gerat.objects.get(pk=gerat.pk), grund="gestohlen", datum=heute, disposition="unbekannt",
+            bestaetigt_gemeldt=True, ausgefuehrt_von=self.admin,
+        )
+        leihe.refresh_from_db()
+        self.assertEqual(leihe.status, Leihe.STATUS_VERLOREN)
+        self.assertEqual(leihe.stand_wert, "verloren")
+        self.assertEqual(leihe.stand_anzeige, "verloren")
+        self.assertContains(self.client.get("/verleih/"), 'data-stand="verloren"')
+
+    def test_rueckgabe_bleibt_zurueckgegeben(self):
+        from .models import Leihe
+        gerat = self._gerat("V-3", leihpool=True)
+        heute = zeit.jetzt_wie_im_entwicklungsmodus().date()
+        self.client.post(f"/geraete/{gerat.inventarnummer}/verleih/", {
+            "person": self.anna.pk, "rueckgabe_bis": (heute + timedelta(days=5)).isoformat(), "zweck": "Messe",
+            "unterschrift": "papier", "zustand": 2, "zubehoer_komplett": "ja",
+        })
+        services.gerat_rueckgeben(Gerat.objects.get(pk=gerat.pk), ausgefuehrt_von=self.admin)
+        self.assertEqual(Leihe.objects.get(gerat=gerat).status, Leihe.STATUS_ZURUECKGEGEBEN)
+
+
+class ReparaturInsLagerTests(Grundlage):
+    """Erwin 05.11.: „Lager“ mit Person läuft über die Rücknahme."""
+
+    def _in_reparatur(self, sn, person=None):
+        gerat = self._gerat(sn)
+        if person is not None:
+            services.gerat_ausgeben(gerat, person, ausgefuehrt_von=self.admin, unterschrift="papier")
+            gerat = Gerat.objects.get(pk=gerat.pk)
+        services.gerat_in_reparatur_geschickt(
+            gerat, dienstleister="Fix", vorgangsnummer="R", notiz="", ausgefuehrt_von=self.admin,
+        )
+        return Gerat.objects.get(pk=gerat.pk)
+
+    def test_mit_person_entsteht_ein_ruecknahmeprotokoll(self):
+        gerat = self._in_reparatur("L-1", self.anna)
+        adresse = f"/geraete/{gerat.inventarnummer}/reparatur/fertig/"
+        self.assertContains(self.client.get(adresse), 'data-test="hinweis-ruecknahme"')
+        antwort = self.client.post(adresse, {"zustand": 3, "ziel": "lager"}, follow=True)
+        self.assertContains(antwort, "Rücknahmeprotokoll ist angelegt")
+        gerat = Gerat.objects.get(pk=gerat.pk)
+        self.assertEqual(gerat.status, Gerat.STATUS_AUF_LAGER)
+        self.assertIsNone(gerat.person)
+        self.assertEqual(gerat.ort, self.lager)
+        self.assertEqual(gerat.zustand, 3)
+        ausgabe = Protokoll.objects.get(art=Protokoll.ART_AUSGABE)
+        ruecknahme = Protokoll.objects.get(art=Protokoll.ART_RUECKNAHME)
+        self.assertEqual(ruecknahme.person, self.anna)
+        self.assertEqual(ruecknahme.stand, Protokoll.STAND_BEARBEITER_OFFEN)
+        self.assertEqual(ruecknahme.rueckgabe_zu_protokoll, ausgabe)
+        typen = [v.typ for v in Vorgang.objects.filter(gerat=gerat).order_by("id")]
+        self.assertEqual(typen[-2:], [Vorgang.TYP_REPARATUR, Vorgang.TYP_RUECKGABE])
+
+    def test_ohne_person_kein_protokoll(self):
+        gerat = self._in_reparatur("L-2")
+        self.assertNotContains(
+            self.client.get(f"/geraete/{gerat.inventarnummer}/reparatur/fertig/"), 'data-test="hinweis-ruecknahme"',
+        )
+        self.client.post(f"/geraete/{gerat.inventarnummer}/reparatur/fertig/", {"zustand": 2, "ziel": "lager"})
+        self.assertEqual(Gerat.objects.get(pk=gerat.pk).status, Gerat.STATUS_AUF_LAGER)
+        self.assertFalse(Protokoll.objects.filter(art=Protokoll.ART_RUECKNAHME).exists())
+
+    def test_bisherige_zuordnung_bleibt_bei_der_person(self):
+        gerat = self._in_reparatur("L-3", self.anna)
+        self.client.post(f"/geraete/{gerat.inventarnummer}/reparatur/fertig/", {"zustand": 2, "ziel": "zuordnung"})
+        gerat = Gerat.objects.get(pk=gerat.pk)
+        self.assertEqual(gerat.status, Gerat.STATUS_IN_BENUTZUNG)
+        self.assertEqual(gerat.person, self.anna)
+        self.assertFalse(Protokoll.objects.filter(art=Protokoll.ART_RUECKNAHME).exists())
