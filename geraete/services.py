@@ -297,6 +297,8 @@ def geraete_ausgeben(
     for gerat in geraete:
         werte = (eingaben or {}).get(gerat.inventarnummer, {})
         zustand = werte.get("zustand")
+        if zustand and str(zustand) not in {str(wert) for wert, _text in Gerat.ZUSTAENDE}:
+            raise GeratFehler(f"{gerat.inventarnummer}: Bitte einen der vier Zustände wählen.")
         positionen.append(position_aus_gerat(
             gerat,
             zustand_ausgabe=int(zustand) if zustand else None,
@@ -518,6 +520,8 @@ def ausmustern(
     # Verloren oder gestohlen: Die reservierte Leihe kann nicht stattfinden, die Person erfährt es.
     for leihe in reservierungen:
         leihe_ablehnen(leihe, f"Das Gerät wurde als {grund} gemeldet.", ausgefuehrt_von)
+    for leihe in Leihe.objects.filter(gerat=gerat, status=Leihe.STATUS_ANGEFRAGT):
+        leihe_ablehnen(leihe, "Das Gerät wurde ausgemustert.", ausgefuehrt_von)
     gerat.reserviert = False
     gerat.reserviert_bis = None
     gerat.status = Gerat.STATUS_AUSGEMUSTERT
@@ -575,8 +579,10 @@ def anhang_hinzufuegen(gerat: Gerat, datei, ausgefuehrt_von: Konto | None = None
         raise GeratFehler("Ausgemusterte Geräte sind nicht mehr änderbar.")
     if datei is None:
         raise GeratFehler("Bitte eine Datei wählen.")
-    name = (getattr(datei, "name", "") or "Anhang")[:200]
     pfad, inhalt = _nachweis_pruefen(datei, "Anhang")
+    # Die Endung kommt vom geprüften Typ, nicht vom Hochladenden.
+    stamm = (getattr(datei, "name", "") or "Anhang").rsplit(".", 1)[0][:190] or "Anhang"
+    name = f"{stamm}.{pfad.rsplit('.', 1)[-1]}"
     anhang = GeratAnhang(gerat=gerat, name=name, hochgeladen_am=jetzt_aware(), hochgeladen_von=ausgefuehrt_von)
     anhang.datei.save(pfad.replace("nachweis-", "anhang-"), inhalt, save=False)
     anhang.save()

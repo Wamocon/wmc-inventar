@@ -162,7 +162,7 @@ Vor dem Go-live einmal testen (N-06).
 ## Tests
 
 ```bash
-# Alle Tests
+# Alle Tests (legt das Testsiegel selbst an, wenn es fehlt)
 INVENTAR_DEBUG=1 .venv/bin/python manage.py test
 
 # System-Check

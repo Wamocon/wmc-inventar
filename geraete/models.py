@@ -470,7 +470,7 @@ class Vorgang(models.Model):
             titel = str(Gerat._meta.get_field(self.aenderung_feld).verbose_name)
             titel = titel[:1].upper() + titel[1:]
         except Exception:
-            titel = self.aenderung_feld
+            titel = {"rueckgabe_bis": "Rückgabe bis"}.get(self.aenderung_feld, self.aenderung_feld)
         return f"{titel}: {self._wert_lesbar(self.aenderung_alter_wert)} → {self._wert_lesbar(self.aenderung_neuer_wert)}"
 
     def _wert_lesbar(self, wert: str) -> str:

@@ -235,3 +235,5 @@ LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/anmelden/"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+TEST_RUNNER = "inventar.testlauf.Testlauf"

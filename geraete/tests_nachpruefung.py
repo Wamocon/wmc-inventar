@@ -327,3 +327,66 @@ class KleinigkeitenTests(Grundlage):
         services.gerat_bearbeiten(gerat, werte={"kaufdatum_nicht_ermittelbar": True}, erzeugt_von=self.admin)
         vorgang = Vorgang.objects.filter(gerat=gerat, aenderung_feld="kaufdatum_nicht_ermittelbar").first()
         self.assertTrue(vorgang.aenderung_anzeige.startswith("Kaufdatum nicht ermittelbar"))
+
+
+class NachDerEngenPruefungTests(Grundlage):
+    """Befunde der engen Nachprüfung an d006dbe."""
+
+    def test_anhang_traegt_die_endung_des_geprueften_typs(self):
+        gerat = self._gerat("E-1")
+        self.client.post(f"/geraete/{gerat.inventarnummer}/anhang/", {
+            "datei": SimpleUploadedFile("page.html", b"%PDF-1.4 <script>alert(1)</script>"),
+        })
+        anhang = GeratAnhang.objects.get(gerat=gerat)
+        self.assertEqual(anhang.name, "page.pdf")
+        antwort = self.client.get(f"/geraete/{gerat.inventarnummer}/anhang/{anhang.pk}/")
+        self.assertIn('filename="page.pdf"', antwort["Content-Disposition"])
+        self.assertEqual(antwort["Content-Type"], "application/pdf")
+
+    def test_langer_name_behaelt_die_endung(self):
+        gerat = self._gerat("E-2")
+        self.client.post(f"/geraete/{gerat.inventarnummer}/anhang/", {
+            "datei": SimpleUploadedFile("a" * 180 + ".pdf", b"%PDF-1.4 inhalt"),
+        })
+        self.assertTrue(GeratAnhang.objects.get(gerat=gerat).name.endswith(".pdf"))
+
+    def test_sammelausgabe_prueft_den_zustand(self):
+        a = self._gerat("E-3")
+        for wert in ("abc", "9"):
+            antwort = self.client.post("/geraete/sammelausgabe/", {
+                "auswahl": [a.inventarnummer], f"zustand-{a.inventarnummer}": wert,
+                "ziel_person": self.anna.pk, "unterschrift": "tool",
+            })
+            self.assertEqual(antwort.status_code, 200)
+            self.assertContains(antwort, "Bitte einen der vier Zustände wählen.")
+        self.assertFalse(Protokoll.objects.exists())
+        self.assertEqual(Gerat.objects.get(pk=a.pk).status, Gerat.STATUS_AUF_LAGER)
+
+    def test_verlaengerung_in_worten(self):
+        gerat = self._gerat("E-4")
+        vorgang = Vorgang.objects.create(
+            gerat=gerat, typ=Vorgang.TYP_AENDERUNG, zeitpunkt=zeit.jetzt_wie_im_entwicklungsmodus(),
+            erzeugt_von=self.admin, aenderung_feld="rueckgabe_bis",
+            aenderung_alter_wert="10.11.2026", aenderung_neuer_wert="12.11.2026", abschliesst=False,
+        )
+        self.assertTrue(vorgang.aenderung_anzeige.startswith("Rückgabe bis: "))
+
+    def test_ausmustern_beendet_anfragen(self):
+        from .models import Leihe
+        gerat = self._gerat("E-5", leihpool=True)
+        heute = zeit.jetzt_wie_im_entwicklungsmodus().date()
+        leihe = Leihe.objects.create(
+            person=self.anna, kat=self.kat, gerat=gerat, beginn=heute, ende=heute + timedelta(days=2),
+            rueckgabe_bis=heute + timedelta(days=2), status=Leihe.STATUS_ANGEFRAGT, zweck="Messe",
+        )
+        mail.outbox.clear()
+        services.ausmustern(gerat, grund="defekt", datum=heute, disposition="Entsorgt", ausgefuehrt_von=self.admin)
+        leihe.refresh_from_db()
+        self.assertEqual(leihe.status, Leihe.STATUS_ABGELEHNT)
+        self.assertEqual(mail.outbox[0].subject, "Leihanfrage abgelehnt")
+
+    def test_hinweis_steht_ueber_den_knoepfen(self):
+        gerat = self._gerat("E-6")
+        self._entwurf(gerat)
+        seite = self.client.get(f"/geraete/{gerat.inventarnummer}/").content.decode()
+        self.assertLess(seite.index('data-test="hinweis-entwurf"'), seite.index('data-test="aktionen"'))

@@ -19,10 +19,12 @@
   </div>
 </div>
 
+{% if ist_admin and offener_entwurf %}
+<p class="muted" data-test="hinweis-entwurf">Für dieses Gerät steht das offene Protokoll <a href="/protokolle/{{ offener_entwurf.nr }}/">{{ offener_entwurf.nr }}</a>. Erst signieren oder verwerfen, dann gehen weitere Vorgänge.</p>
+{% endif %}
 <div class="actions" data-test="aktionen">
 {% if ist_admin %}
   {% if offener_entwurf %}
-  <p class="muted" data-test="hinweis-entwurf">Für dieses Gerät steht das offene Protokoll <a href="/protokolle/{{ offener_entwurf.nr }}/">{{ offener_entwurf.nr }}</a>. Erst signieren oder verwerfen, dann gehen weitere Vorgänge.</p>
   {% elif gerat.status == "auf-lager" %}
   <div class="actions" data-test="lebenszyklus">
     {% if not gerat.reserviert_aktiv %}<a href="/geraete/{{ gerat.inventarnummer }}/ausgeben/" class="btn primary schnell" data-test="aktion-ausgabe">Ausgeben</a>{% endif %}
