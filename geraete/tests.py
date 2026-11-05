@@ -1386,9 +1386,9 @@ class M4ArbeitsplatzTests(TestCase):
     def test_soll_ist_vollstaendig(self):
         for i in range(2):
             g = self._gerat(self.kat_monitor, ort=self.ort)
-            services.gerat_umziehen(g, self.ort, ausgefuehrt_von=self.admin)
+            services.gerat_ausgeben(g, self.ort, ausgefuehrt_von=self.admin)
         g = self._gerat(self.kat_docking, ort=self.ort)
-        services.gerat_umziehen(g, self.ort, ausgefuehrt_von=self.admin)
+        services.gerat_ausgeben(g, self.ort, ausgefuehrt_von=self.admin)
         abgleich = services.soll_ist_abgleich(self.ort)
         self.assertEqual(abgleich["ergebnis"], "vollstaendig")
         self.assertEqual(abgleich["fehlend"], [])
@@ -1396,7 +1396,7 @@ class M4ArbeitsplatzTests(TestCase):
 
     def test_soll_ist_unvollstaendig(self):
         g = self._gerat(self.kat_monitor, ort=self.ort)
-        services.gerat_umziehen(g, self.ort, ausgefuehrt_von=self.admin)
+        services.gerat_ausgeben(g, self.ort, ausgefuehrt_von=self.admin)
         abgleich = services.soll_ist_abgleich(self.ort)
         self.assertEqual(abgleich["ergebnis"], "unvollstaendig")
         self.assertEqual(len(abgleich["fehlend"]), 2)
@@ -1407,16 +1407,16 @@ class M4ArbeitsplatzTests(TestCase):
     def test_soll_ist_mehr_als_soll(self):
         for i in range(3):
             g = self._gerat(self.kat_monitor, ort=self.ort)
-            services.gerat_umziehen(g, self.ort, ausgefuehrt_von=self.admin)
+            services.gerat_ausgeben(g, self.ort, ausgefuehrt_von=self.admin)
         g = self._gerat(self.kat_docking, ort=self.ort)
-        services.gerat_umziehen(g, self.ort, ausgefuehrt_von=self.admin)
+        services.gerat_ausgeben(g, self.ort, ausgefuehrt_von=self.admin)
         abgleich = services.soll_ist_abgleich(self.ort)
         self.assertEqual(abgleich["ergebnis"], "mehr-als-soll")
         self.assertEqual(abgleich["zuviel"], [(self.kat_monitor, 1)])
 
     def test_geraete_aus_reparatur_nicht_im_abgleich(self):
         g = self._gerat(self.kat_monitor, ort=self.ort)
-        services.gerat_umziehen(g, self.ort, ausgefuehrt_von=self.admin)
+        services.gerat_ausgeben(g, self.ort, ausgefuehrt_von=self.admin)
         services.gerat_in_reparatur_geschickt(
             g, dienstleister="FixIT", vorgangsnummer="VR-M4",
             notiz="Defekt", ausgefuehrt_von=self.admin,
@@ -1430,7 +1430,7 @@ class M4ArbeitsplatzTests(TestCase):
     def test_geraete_ausgemustert_nicht_im_abgleich(self):
         from datetime import date
         g = self._gerat(self.kat_monitor, ort=self.ort)
-        services.gerat_umziehen(g, self.ort, ausgefuehrt_von=self.admin)
+        services.gerat_ausgeben(g, self.ort, ausgefuehrt_von=self.admin)
         services.ausmustern(
             g, grund="defekt", datum=date(2026, 10, 1),
             disposition="Recycling", ausgefuehrt_von=self.admin,
@@ -1937,8 +1937,8 @@ class PlanPflegeTests(TestCase):
         self.assertEqual(antwort.status_code, 200)
         self.plan.refresh_from_db()
         self.assertTrue(self.plan.grundriss, "Grundriss ist leer")
-        self.assertTrue(self.plan.grundriss.name.endswith("grundriss.png"),
-                        f"Name ist '{self.plan.grundriss.name}', erwartet Ende mit 'grundriss.png'")
+        self.assertTrue(self.plan.grundriss.name.endswith(f"plan-{self.plan.id}.png"),
+                        f"Name ist '{self.plan.grundriss.name}', jeder Plan hat seine eigene Datei")
 
     def test_upload_einseitiges_pdf_wird_zum_bild(self):
         """Kapitel 1: Einseitiges PDF wird mit pypdfium2 zum Bild."""
@@ -1951,7 +1951,7 @@ class PlanPflegeTests(TestCase):
         self.assertEqual(antwort.status_code, 200)
         self.plan.refresh_from_db()
         self.assertTrue(self.plan.grundriss)
-        self.assertTrue(self.plan.grundriss.name.endswith("grundriss.png"))
+        self.assertTrue(self.plan.grundriss.name.endswith(f"plan-{self.plan.id}.png"))
 
     def test_position_erscheint_im_raumplan(self):
         """Kapitel 2 und 4: Gespeicherte Position steht als data-x/data-y am platz."""
