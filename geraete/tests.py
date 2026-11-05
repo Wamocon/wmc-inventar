@@ -1542,7 +1542,7 @@ class LoeschenTests(TestCase):
         g = self._gerat()
         self.client.login(username=self.mitarbeiter.email, password="test-passwort-123")
         antwort = self.client.post(f"/geraete/{g.inventarnummer}/loeschen/bestaetigen/")
-        self.assertEqual(antwort.status_code, 302)
+        self.assertEqual(antwort.status_code, 403)
         self.assertTrue(Gerat.objects.filter(inventarnummer=g.inventarnummer).exists())
 
     def test_admin_mit_vorgang_kann_nicht_loeschen(self):

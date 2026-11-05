@@ -615,6 +615,8 @@ class UeberfaelligTests(VerleihTestCase):
         c = self.client_fuer(self.admin)
         self.assertContains(c.get("/verleih/"), f'data-id="{self.leihe.nr}" data-stand="ausgegeben"')
         self.stellen(self.bis + timedelta(days=1))
+        # Die Uhr springt um Tage, die Sitzung ist damit vorbei (F-05, Testschnittstelle 1.2).
+        c = self.client_fuer(self.admin)
         seite = c.get("/verleih/")
         self.assertContains(seite, f'data-id="{self.leihe.nr}" data-stand="ueberfaellig"')
         self.assertContains(seite, 'data-test="symbol-ueberfaellig"')
