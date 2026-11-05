@@ -2,8 +2,6 @@
 
 Internes Web-Tool der WAMOCON-IT für die Verwaltung von Bürohardware: Bestand, Ausgabe, Verleih, Rückgabe, Ausmusterung, Soll-Ausstattung je Arbeitsplatz mit Raumplan und digital signierte Übergabeprotokolle nach WMC-IT-FRM-001 und -002.
 
-**Stand:** M7 Abschluss, Version 1 fertig. Alle 320 Tests grün. Zweig: `gregor/inventar`.
-
 ## Pfade
 
 | Pfad | Inhalt |
@@ -14,30 +12,30 @@ Internes Web-Tool der WAMOCON-IT für die Verwaltung von Bürohardware: Bestand,
 | `docs/TESTSCHNITTSTELLE.md` | Start, Beispieldaten, Adressen und Markierungen |
 | `docs/UEBERGABE.md` | Übergabe mit Stand je Anforderung und Meilenstein |
 | `Dockerfile` | Docker-Image für die Anwendung |
-| `docker-compose.yml` | Betrieb: `db` (PostgreSQL 16), `web` (Django), `cron` (Tageslauf) |
+| `docker-compose.yml` | Betrieb: `proxy` (HTTPS), `web` (gunicorn), `db` (PostgreSQL 16), `cron` (Tageslauf), `sicherung` |
+| `deploy/nginx.conf` | Reverse Proxy mit internem Zertifikat |
 | `scripts/sicherung.sh` | Tägliche Sicherung: Datenbank-Dump + Dateiablage |
 | `requirements.txt` | Python-Pakete für die Anwendung |
 | `static/` | htmx und Schrift Archivo, lokal |
 
 ## Einrichtung
 
-### Mit Docker (empfohlen)
+### Betrieb mit Docker
+
+Voraussetzung: internes TLS-Zertifikat, Firmenzertifikat für das Siegel (PKCS#12), SMTP-Zugang, ein Verzeichnis, das UrBackup erfasst.
 
 ```bash
-# 1. Umgebungsvariablen setzen
-export INVENTAR_SECRET_KEY="ein-langer-zufaelliger-schluessel"
+# 1. Werte eintragen
+cp .env.example .env
 
-# 2. Starten
-docker compose up -d
+# 2. Starten; web migriert beim Start
+docker compose up -d --build
 
-# 3. Migrations und Beispieldaten
-docker compose exec web python manage.py migrate --noinput
-docker compose exec web python manage.py beispieldaten --neu
-
-# 4. Im Browser öffnen
-# http://127.0.0.1:8000/
-# Admin: it-admin@beispiel.test / Beispiel-Passwort-2026
+# 3. Einmalig: Kategorien, erster Lagerort und Admin-Konto
+docker compose exec -e ADMIN_EMAIL=it@firma.example -e ADMIN_PASSWORT='...' web python manage.py startdaten
 ```
+
+Danach unter `BASIS_URL` anmelden und in den Einstellungen Firmendaten, Logo und die verbindlichen Texte der Protokolle eintragen. Beispieldaten laufen nur im Entwicklungsmodus (`INVENTAR_DEBUG=1`).
 
 ### Ohne Docker (lokale Entwicklung)
 
@@ -68,24 +66,31 @@ docker build --build-arg BASIS=wmc-inventar-basis:1 --build-arg WHEELHOUSE=wheel
 
 ### Umgebungsvariablen
 
+Die vollständige Liste mit Pflichtwerten steht in `.env.example`.
+
 | Variable | Zweck | Standard |
 |---|---|---|
-| `INVENTAR_DEBUG` | `1` für Entwicklung (SQLite), `0` für Produktion (PostgreSQL) | `1` |
-| `INVENTAR_SECRET_KEY` | Django-Secret-Key | – |
-| `DATABASE_URL` | PostgreSQL-Verbindung (bei `INVENTAR_DEBUG=0`) | – |
-| `BASIS_URL` | Basis-URL für Mails und QR-Codes | `http://127.0.0.1:8000` |
-| `MAIL_ABLAGE` | Pfad der Mailablage | `var/mails` |
+| `INVENTAR_DEBUG` | `1` für Entwicklung, sonst aus | aus |
+| `INVENTAR_SECRET_KEY` | Django-Schlüssel, ohne Entwicklungsmodus Pflicht | – |
+| `BASIS_URL` | Adresse für Mails und QR-Codes, ihr Host ist erlaubt | `http://127.0.0.1:8000` |
+| `INVENTAR_HOSTS` | weitere erlaubte Hostnamen, kommagetrennt | – |
+| `INVENTAR_PROXY` | `1` hinter dem eigenen Proxy: IP-Adresse aus `X-Forwarded-For` | aus |
+| `DATABASE_URL` | PostgreSQL-Verbindung, ohne Angabe SQLite | – |
+| `MAIL_ABSENDER`, `SMTP_*` | Mailversand | – |
+| `MAIL_ABLAGE` | nur für Tests: Mails als Datei statt Versand | – |
 | `DATEIABLAGE` | Pfad der Dateiablage | `var/dateien` |
+| `SIEGEL_P12`, `SIEGEL_PASSWORT` | Siegel-Zertifikat (F-138). Ohne Siegel schließt kein Protokoll ab | im Entwicklungsmodus das Testsiegel |
 | `KENNZAHLEN_TOKEN` | Bearer-Token für `/api/kennzahlen` (F-105) | – |
-| `SIEGEL_P12` | Pfad zum Siegel-Zertifikat (F-138) | – |
 
 ### Dienste (docker-compose)
 
 | Dienst | Aufgabe | Port |
 |---|---|---|
-| `db` | PostgreSQL 16, Datenbestand | 5432 (intern) |
-| `web` | Django + WhiteNoise, HTTP | 8000 |
-| `cron` | Stündlicher `tageslauf` (Mails, Deaktivierungen, Zählerstände) | – |
+| `proxy` | nginx, HTTPS mit internem Zertifikat, setzt `X-Forwarded-For` | 443, 80 leitet um |
+| `web` | gunicorn, Django, WhiteNoise | intern 8000 |
+| `db` | PostgreSQL 16 | intern 5432 |
+| `cron` | stündlicher `tageslauf` | – |
+| `sicherung` | täglicher Dump und Kopie der Dateiablage nach `SICHERUNG_ZIEL` | – |
 
 ### Tageslauf
 
@@ -109,21 +114,16 @@ curl -H "Authorization: Bearer <KENNZAHLEN_TOKEN>" http://127.0.0.1:8000/api/ken
 
 ### Tägliche Sicherung
 
-```bash
-# Manuell
-scripts/sicherung.sh [Zielverzeichnis]
-
-# Über cron (empfohlen)
-0 3 * * * /path/zu/inventar/scripts/sicherung.sh /srv/inventar/sicherung
-```
+Der Dienst `sicherung` ruft `scripts/sicherung.sh /sicherung` einmal am Tag auf, `SICHERUNG_ZIEL` ist das Verzeichnis, das UrBackup erfasst. Stände älter als 30 Tage (`SICHERUNG_TAGE`) räumt das Skript weg.
 
 Das Skript erzeugt unter `<Ziel>/<Stempel>/`:
 
 | Datei/Ordner | Inhalt |
 |---|---|
-| `inventar.sql.gz` | PostgreSQL-Dump (komprimiert) |
-| `dateien/` | Kopie der Dateiablage (DATEIABLAGE) |
-| `mails/` | Kopie der Mailablage (MAIL_ABLAGE) |
+| `inventar.sql.gz` | PostgreSQL-Dump, komprimiert (ohne `DATABASE_URL`: `inventar.sqlite3`) |
+| `dateien/` | Kopie der Dateiablage |
+
+Scheitert ein Teil, endet es mit einem Fehler, und der Ordner behält die Endung `.unvollstaendig`.
 
 ### Rücksicherung
 
@@ -154,18 +154,19 @@ cp -a /srv/inventar/sicherung/<Stempel>/mails/ var/mails/
 #### Docker
 
 ```bash
-# 1. Backup einspielen
-docker compose exec -T db pg_restore -d inventar -c < /pfad/zum/inventar.sql
+# 1. Dump einspielen; er löscht vorhandene Tabellen und legt sie neu an
+gunzip -c /pfad/zum/<Stempel>/inventar.sql.gz | docker compose exec -T db psql -U inventar -d inventar
 
 # 2. Dateien zurückkopieren
-docker compose cp /pfad/zum/dateien web:/srv/inventar/var/dateien
-docker compose cp /pfad/zum/mails web:/srv/inventar/var/mails
+docker compose cp /pfad/zum/<Stempel>/dateien/. web:/srv/inventar/var/dateien
 ```
+
+Vor dem Go-live einmal testen (N-06).
 
 ## Tests
 
 ```bash
-# Alle Tests (320)
+# Alle Tests
 INVENTAR_DEBUG=1 .venv/bin/python manage.py test
 
 # System-Check
