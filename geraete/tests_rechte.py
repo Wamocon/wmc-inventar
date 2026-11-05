@@ -95,7 +95,7 @@ class RechteTests(TestCase):
         p = Protokoll.objects.create(
             nr="UP-2026-9001", art=Protokoll.ART_AUSGABE, geraet=self.gerat,
             person=self.mitarbeiter.person, stand=Protokoll.STAND_BEARBEITER_OFFEN,
-            ersteller=self.admin, erstellt_am=timezone.now(),
+            erzeugt_von=self.admin, datum=timezone.now().date(),
         )
         for konto in (self.mitarbeiter, self.leser):
             c = self._client(konto)
@@ -110,7 +110,7 @@ class RechteTests(TestCase):
         p = Protokoll.objects.create(
             nr="UP-2026-9002", art=Protokoll.ART_AUSGABE, geraet=self.gerat,
             person=self.felix, stand=Protokoll.STAND_BEARBEITER_OFFEN,
-            ersteller=self.admin, erstellt_am=timezone.now(),
+            erzeugt_von=self.admin, datum=timezone.now().date(),
         )
         self.assertEqual(self._client(self.mitarbeiter).get(f"/protokolle/{p.nr}/").status_code, 403)
 
@@ -126,7 +126,6 @@ class RechteTests(TestCase):
 
     def test_anmeldung_folgt_next(self):
         c = self._client()
-        Konto.objects.filter(pk=self.admin.pk).update()
         self.admin.set_password("Passwort-fuer-den-Test-1")
         self.admin.save()
         antwort = c.post("/anmelden/", {"email": "IT-Admin@beispiel.test", "passwort": "Passwort-fuer-den-Test-1", "next": f"/g/{self.gerat.inventarnummer}"})
@@ -150,8 +149,11 @@ class RechteTests(TestCase):
         self.assertIn("/anmelden/", antwort["Location"])
 
     def test_rahmen_marker(self):
-        html = self._client(self.admin).get("/").content.decode()
+        c = self._client(self.admin)
+        html = c.get("/").content.decode()
         self.assertIn('name="csrf-token"', html)
+        c.post("/geraete/speichern/", {"kategorie": self.maus.pk, "hersteller": "H", "modell": "Marker", "zustand": 2})
+        html = c.get("/geraete/").content.decode()
         self.assertIn('data-test="meldungen"', html)
         self.assertIn('data-test="nav-verleih"', html)
         html = self._client(self.leser).get("/").content.decode()

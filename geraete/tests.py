@@ -767,9 +767,10 @@ class DetailAktionenTests(TestCase):
         self.assertNotIn('data-test="aktion-ausmustern"', text)
 
     def test_mitarbeiter_zeigt_keine_aktionen(self):
+        """Kapitel 3: Das Gerätedetail ist für Mitarbeiter gesperrt, auch für eigene Geräte."""
         g = services.gerat_anlegen(kategorie=self.kat, hersteller="Lenovo", modell="T14")
         antwort = self._detail(g, self.mitarbeiter)
-        self.assertEqual(antwort.status_code, 200)
+        self.assertEqual(antwort.status_code, 403)
         text = antwort.content.decode()
         self.assertNotIn('data-test="aktion-ausgabe"', text)
         self.assertNotIn('data-test="aktion-rueckgabe"', text)

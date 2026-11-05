@@ -731,8 +731,7 @@ def notiz_zeigen(request, inventarnummer: str):
     """
     gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
     if not _darf_ändern(request.user):
-        meldung_error(request, "Zugriff verweigert: Notiz eintragen ist Ihnen nicht erlaubt.")
-        return redirect("/geraete/" + gerat.inventarnummer + "/")
+        raise PermissionDenied("Zugriff verweigert: Vorgänge macht die IT.")
     if request.method == "POST":
         form = GeratNotizForm(request.POST)
         if form.is_valid():
@@ -753,8 +752,7 @@ def pruefen(request, inventarnummer: str):
     """Prüfung abhaken (F-16): Datum und Kontext."""
     gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
     if not _darf_ändern(request.user):
-        meldung_error(request, "Zugriff verweigert: Prüfen ist Ihnen nicht erlaubt.")
-        return redirect("/geraete/" + gerat.inventarnummer + "/")
+        raise PermissionDenied("Zugriff verweigert: Vorgänge macht die IT.")
     services.gerat_pruefen(gerat, request.user)
     meldung_success(request, f"Prüfung für {gerat.inventarnummer} erfasst.")
     return redirect("/geraete/" + gerat.inventarnummer + "/")
@@ -768,8 +766,7 @@ def konflikt_loesen(request, inventarnummer: str, konflikt_id: int):
     """Konflikt: alten Wert behalten oder neuen übernehmen (F-86)."""
     gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
     if not _darf_ändern(request.user):
-        meldung_error(request, "Zugriff verweigert: Konflikte lösen ist Ihnen nicht erlaubt.")
-        return redirect("/geraete/" + gerat.inventarnummer + "/")
+        raise PermissionDenied("Zugriff verweigert: Vorgänge macht die IT.")
     konflikt = get_object_or_404(GeratKonflikt, pk=konflikt_id, gerat=gerat)
     nehmen = request.POST.get("nehmen", "")
     try:
@@ -798,8 +795,7 @@ def arbeitsliste(request):
 def ausgeben(request, inventarnummer: str):
     """Gerät ausgeben (F-20 bis F-23, M3)."""
     if not _darf_ändern(request.user):
-        meldung_error(request, "Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
-        return redirect("/")
+        raise PermissionDenied("Zugriff verweigert: Vorgänge macht die IT.")
     gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
     if request.method == "POST":
         form = GeratAusgabeForm(request.POST, gerat=gerat)
@@ -834,8 +830,7 @@ def ausgeben(request, inventarnummer: str):
 def rueckgeben(request, inventarnummer: str):
     """Gerät zurückgeben (F-50, M3)."""
     if not _darf_ändern(request.user):
-        meldung_error(request, "Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
-        return redirect("/")
+        raise PermissionDenied("Zugriff verweigert: Vorgänge macht die IT.")
     gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
     if request.method == "POST":
         form = GeratRueckgabeForm(request.POST)
@@ -864,8 +859,7 @@ def rueckgeben(request, inventarnummer: str):
 def umziehen(request, inventarnummer: str):
     """Gerät umziehen (F-41, M3)."""
     if not _darf_ändern(request.user):
-        meldung_error(request, "Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
-        return redirect("/")
+        raise PermissionDenied("Zugriff verweigert: Vorgänge macht die IT.")
     gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
     if request.method == "POST":
         form = GeratUmzugForm(request.POST)
@@ -890,8 +884,7 @@ def umziehen(request, inventarnummer: str):
 def reparatur_start(request, inventarnummer: str):
     """Reparatur starten (F-42, M3)."""
     if not _darf_ändern(request.user):
-        meldung_error(request, "Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
-        return redirect("/")
+        raise PermissionDenied("Zugriff verweigert: Vorgänge macht die IT.")
     gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
     if request.method == "POST":
         form = GeratReparaturStartForm(request.POST)
@@ -918,8 +911,7 @@ def reparatur_start(request, inventarnummer: str):
 def reparatur_fertig(request, inventarnummer: str):
     """Reparatur abschließen (F-42, M3)."""
     if not _darf_ändern(request.user):
-        meldung_error(request, "Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
-        return redirect("/")
+        raise PermissionDenied("Zugriff verweigert: Vorgänge macht die IT.")
     gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
     if request.method == "POST":
         form = GeratReparaturFertigForm(request.POST)
@@ -947,8 +939,7 @@ def reparatur_fertig(request, inventarnummer: str):
 def ausmustern(request, inventarnummer: str):
     """Gerät ausmustern (F-55 bis F-58, M3)."""
     if not _darf_ändern(request.user):
-        meldung_error(request, "Zugriff verweigert: Diese Ansicht ist Ihnen nicht erlaubt.")
-        return redirect("/")
+        raise PermissionDenied("Zugriff verweigert: Vorgänge macht die IT.")
     gerat = get_object_or_404(Gerat, inventarnummer=inventarnummer)
     if request.method == "POST":
         form = GeratAusmusterungForm(request.POST, request.FILES, gerat=gerat)
