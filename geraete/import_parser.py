@@ -527,6 +527,14 @@ def person_vorschlag(wert: str) -> str:
     return wert if len(wert.split()) >= 2 else ""
 
 
+def person_mehrdeutig(wert: str) -> str:
+    """Passt ein Vor- oder Nachname auf mehrere Personen, entscheidet der Mensch (F-82)."""
+    klein = wert.strip().lower()
+    treffer = sorted(p.voller_name() for p in Person.objects.all()
+                     if klein in (p.vorname.lower(), p.nachname.lower()))
+    return "Passt auf: " + ", ".join(treffer) if len(treffer) > 1 else ""
+
+
 def ort_vorschlag(wert: str) -> str:
     """Nur ein vorhandener Ort wird vorgeschlagen; anlegen ist eine Entscheidung."""
     ort = _ort_finden(wert)

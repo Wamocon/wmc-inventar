@@ -914,7 +914,7 @@ def konflikt_loesen(request, inventarnummer: str, konflikt_id: int):
     except services.GeratFehler as fehler:
         meldung_error(request, str(fehler))
         return redirect("/geraete/" + gerat.inventarnummer + "/")
-    meldung_success(request, f"Konflikt zu „{konflikt.feld}“ gelöst.")
+    meldung_success(request, f"Konflikt zu „{konflikt.feld_anzeige}“ gelöst.")
     return redirect("/geraete/" + gerat.inventarnummer + "/")
 
 

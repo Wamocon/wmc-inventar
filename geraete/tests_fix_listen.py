@@ -470,6 +470,9 @@ class ImportWerteTests(Werkzeug):
         Person.objects.create(vorname="Anna", nachname="Wolf")
         self.assertIsNone(import_parser._person_finden("Anna"))
         self.assertEqual(import_parser._person_finden("Anna Wolf").nachname, "Wolf")
+        self._csv("Typ;Modell;Seriennummer;Nutzer\nNotebook;T14;S-1;Anna\n")
+        self.client.post("/import/spalten/", self._spalten_wie_vorgeschlagen())
+        self.assertContains(self.client.get("/import/"), "Passt auf: Anna Becker, Anna Wolf")
 
 
 class ImportRegelnTests(Werkzeug):
@@ -545,6 +548,16 @@ class ImportRegelnTests(Werkzeug):
         self._speichern()
         services.konflikt_loesen(g.konflikte.get(), "alt", ausgefuehrt_von=self.admin)
         self.assertEqual(self._lesen(text), {2: "ergaenzt"})
+
+    def test_konflikt_meldung_in_worten(self):
+        g = self._gerat(seriennummer="SN-1", geraetename="ALT")
+        konflikt = GeratKonflikt.objects.create(gerat=g, feld="geraetename", alter_wert="ALT", neuer_wert="NEU")
+        antwort = self.client.post(f"/geraete/{g.inventarnummer}/konflikt/{konflikt.pk}/loesen/",
+                                   {"nehmen": "neu"}, follow=True)
+        self.assertContains(antwort, "Konflikt zu „Gerätename“ gelöst.")
+        g.refresh_from_db()
+        self.assertEqual(g.geraetename, "NEU")
+        self.assertTrue(Vorgang.objects.filter(gerat=g, aenderung_feld="geraetename", aenderung_neuer_wert="NEU").exists())
 
     def test_konflikt_neuer_wert_datum_und_person(self):
         g = self._gerat(seriennummer="SN-1", kaufdatum=date(2024, 1, 1))

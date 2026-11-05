@@ -103,7 +103,8 @@ def _werte_zeilen(vorlage, feld: str, stand: dict, schluessel: str, vorschlag) -
     gespeichert = stand.get(schluessel, {})
     return [
         {"wert": wert, "anzahl": anzahl,
-         "wahl": gespeichert.get(wert, "") if gesetzt else vorschlag(wert)}
+         "wahl": gespeichert.get(wert, "") if gesetzt else vorschlag(wert),
+         "mehrdeutig": import_parser.person_mehrdeutig(wert) if feld == "Person" else ""}
         for wert, anzahl in vorlage.werte_mit_anzahl(feld, stand.get("spalten_ziel")).items()
     ]
 
