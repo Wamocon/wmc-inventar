@@ -9,6 +9,8 @@ eine Funktion je Vorgang, eine Transaktion.
 """
 from __future__ import annotations
 
+import re
+
 from django.db import models
 from django.utils import timezone
 from typing import TYPE_CHECKING
@@ -178,6 +180,35 @@ class Gerat(models.Model):
             gerat=self, offen=True
         ).exists()
 
+    # F-88: Die Lücken in Worten, wie sie Liste, Detail, Übersicht und Export zeigen.
+    LUECKEN_TEXTE = {
+        "seriennummer": "Seriennummer",
+        "kaufdatum": "Kaufdatum",
+        "garantie": "Garantieende",
+        "verbleib": "Verbleib",
+        "zustand-ungeprueft": "Zustand ungeprüft",
+    }
+
+    def datenluecken_text(self) -> list[str]:
+        texte = [self.LUECKEN_TEXTE.get(l, l) for l in self.datenluecken()]
+        if GeratKonflikt.objects.filter(gerat=self, offen=True).exists():
+            texte.append("offener Importkonflikt")
+        return texte
+
+    def seriennummer_vermerk(self) -> str:
+        """F-84: Die Nummer aus „Seriennummer … doppelt im Blatt“ in der Notiz."""
+        if self.seriennummer or "doppelt im Blatt" not in (self.notiz or ""):
+            return ""
+        treffer = re.search(r"Seriennummer (\S+) doppelt im Blatt", self.notiz)
+        return treffer.group(1) if treffer else ""
+
+    def seriennummer_auch_bei(self) -> list["Gerat"]:
+        """F-84: Geräte, die dieselbe Nummer tragen wie dieses oder wie sein Vermerk."""
+        vermerk = self.seriennummer_vermerk()
+        if not vermerk:
+            return self.doppelte_seriennummern()
+        return list(Gerat.objects.filter(seriennummer__iexact=vermerk).exclude(pk=self.pk))
+
     # --- F-84: Hinweise auf doppelte Namen ----------------------------------
     def doppelte_namen(self) -> list["Gerat"]:
         """Geräte mit gleichem Gerätenamen (Hinweis im Detail, F-84)."""
@@ -222,6 +253,17 @@ class GeratKonflikt(models.Model):
 
     def __str__(self):
         return f"{self.gerat.inventarnummer}: {self.feld}"
+
+    @property
+    def feld_anzeige(self) -> str:
+        """F-88: Das Feld in Worten statt des technischen Namens."""
+        return {
+            "seriennummer": "Seriennummer", "geraetename": "Gerätename",
+            "hersteller": "Hersteller", "modell": "Modell", "kaufdatum": "Kaufdatum",
+            "kaufpreis_netto": "Kaufpreis netto", "lieferant": "Lieferant",
+            "rechnungsnummer": "Rechnungsnummer", "garantie_bis": "Garantie bis",
+            "person": "Person", "ort": "Arbeitsplatz",
+        }.get(self.feld, self.feld)
 
 
 class Importlauf(models.Model):
@@ -330,6 +372,9 @@ class Vorgang(models.Model):
     abschliesst = models.BooleanField("Abschließend", default=False)
     notiz = models.TextField("Notiz", blank=True, default="")
 
+    # F-85: Vorgänge, die ein Gerät bewegen. Mit dem ersten endet „Altbestand ohne Protokoll“.
+    BEWEGUNGEN = (TYP_AUSGABE, TYP_RUECKGABE, TYP_REPARATUR, TYP_AUSMUSTERUNG, TYP_UMZUG)
+
     class Meta:
         verbose_name = "Vorgang"
         verbose_name_plural = "Vorgänge"
@@ -337,6 +382,15 @@ class Vorgang(models.Model):
 
     def __str__(self):
         return f"{self.gerat.inventarnummer}: {dict(self.TYPEN).get(self.typ, self.typ)}"
+
+    def save(self, *args, **kwargs):
+        neu = self._state.adding
+        super().save(*args, **kwargs)
+        # Kapitel 4: Altbestand, „bis es das nächste Mal bewegt wird“. Hier statt in
+        # jedem Vorgang; auch die Instanz, weil die Dienste sie danach noch speichern.
+        if neu and self.typ in self.BEWEGUNGEN and self.gerat.altbestand_ohne_protokoll:
+            self.gerat.altbestand_ohne_protokoll = False
+            Gerat.objects.filter(pk=self.gerat_id).update(altbestand_ohne_protokoll=False)
 
     @property
     def ist_offen(self) -> bool:

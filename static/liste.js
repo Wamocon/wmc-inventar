@@ -4,7 +4,7 @@
   var formular = document.querySelector('[data-test="etiketten-formular"]');
   if (!formular) return;
   var alle = formular.querySelector('[data-test="auswahl-alle"]');
-  var knopf = formular.querySelector('[data-test="etiketten-drucken"]');
+  var knoepfe = formular.querySelectorAll('[data-test="etiketten-drucken"],[data-test="etiketten-vorschau"]');
   var anzahl = formular.querySelector('[data-test="auswahl-anzahl"]');
   var leiste = formular.querySelector('.bulk');
   var felder = formular.querySelectorAll('[data-test="auswahl"]');
@@ -17,7 +17,7 @@
       if (zeile) zeile.classList.toggle('gewaehlt', feld.checked);
     });
     anzahl.textContent = n + ' ausgewählt';
-    knopf.disabled = n === 0;
+    knoepfe.forEach(function (knopf) { knopf.disabled = n === 0; });
     leiste.classList.toggle('leer', n === 0);
     if (alle) alle.checked = n > 0 && n === felder.length;
   }

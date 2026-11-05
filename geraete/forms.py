@@ -65,8 +65,9 @@ class GeratForm(forms.ModelForm):
             "kategorie", "hersteller", "modell", "seriennummer",
             "zustand", "leihpool", "person", "ort", "geraetename",
             "standardzuehoer", "technische_daten",
-            "kaufdatum", "kaufpreis_netto", "lieferant", "rechnungsnummer",
-            "garantie_bis", "notiz",
+            "kaufdatum", "kaufdatum_nicht_ermittelbar",
+            "kaufpreis_netto", "lieferant", "rechnungsnummer",
+            "garantie_bis", "garantie_nicht_ermittelbar", "notiz",
         ]
         widgets = {
             "kategorie": forms.Select,
@@ -84,8 +85,13 @@ class GeratForm(forms.ModelForm):
         self.fields["leihpool"].label = "Leihpool"
         self.fields["person"].label = "Zuweisende Person (optional)"
         self.fields["ort"].label = "Ort (optional)"
+        # F-88: „nicht ermittelbar“ markiert man an einem vorhandenen Gerät.
+        self.fields["kaufdatum_nicht_ermittelbar"].label = "Kaufdatum nicht ermittelbar"
+        self.fields["garantie_nicht_ermittelbar"].label = "Garantieende nicht ermittelbar"
         if not kwargs.get("instance", None):
             self.fields["status"].widget.attrs.pop("data-ke-status", None)
+            del self.fields["kaufdatum_nicht_ermittelbar"]
+            del self.fields["garantie_nicht_ermittelbar"]
         else:
             # A-0112 (F-11): Das Feld seriennummern gilt nur fürs Anlegen.
             del self.fields["seriennummern"]
@@ -100,11 +106,15 @@ class GeratForm(forms.ModelForm):
         hat_seriennummern = bool(seriennummern_ruh)
         # F-14: Seriennummer nur Pflicht, wenn die Kategorie es verlangt
         # und keine zeilenweise Liste vorliegt.
+        # F-83: Ein importiertes Gerät darf die Lücke behalten (Arbeitsliste F-88);
+        # eine vorhandene Nummer löschen geht nicht.
+        hat_luecke_aus_import = bool(self.instance.pk) and not self.instance.seriennummer
         if (
             kategorie is not None
             and kategorie.seriennummer_pflicht
             and not seriennummer
             and not hat_seriennummern
+            and not hat_luecke_aus_import
         ):
             self.add_error(
                 "seriennummer", "Diese Kategorie verlangt eine Seriennummer."
@@ -129,8 +139,9 @@ class GeratBearbeitungsForm(GeratForm):
             "kategorie", "hersteller", "modell", "seriennummer",
             "zustand", "leihpool", "person", "ort", "geraetename",
             "standardzuehoer", "technische_daten",
-            "kaufdatum", "kaufpreis_netto", "lieferant", "rechnungsnummer",
-            "garantie_bis", "notiz",
+            "kaufdatum", "kaufdatum_nicht_ermittelbar",
+            "kaufpreis_netto", "lieferant", "rechnungsnummer",
+            "garantie_bis", "garantie_nicht_ermittelbar", "notiz",
         ]
 
 
@@ -262,6 +273,28 @@ class GeratUmzugForm(forms.Form):
         label="Neuer Arbeitsplatz",
         widget=forms.Select(attrs={"data-test": "umzug-ort"}),
     )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from stammdaten.models import Ort
+        # Kapitel 4: Umzug an einen Arbeitsplatz oder Raum; ins Lager führt die Rückgabe.
+        self.fields["ziel_ort"].queryset = Ort.objects.exclude(typ=Ort.TYP_LAGER).order_by("kennung")
+
+
+class ErstinventurForm(forms.Form):
+    """Erstinventur am Gerät (F-89): alles freiwillig, „Geprüft“ gilt auch ohne Eingabe."""
+
+    DATUM = ["%d.%m.%Y", "%Y-%m-%d"]
+
+    seriennummer = forms.CharField(required=False, max_length=160)
+    zustand = forms.TypedChoiceField(
+        required=False, choices=Gerat.ZUSTAENDE, coerce=int, empty_value=None,
+    )
+    kaufdatum = forms.DateField(required=False, input_formats=DATUM, label="Kaufdatum")
+    kaufdatum_nicht_ermittelbar = forms.BooleanField(required=False)
+    garantie_bis = forms.DateField(required=False, input_formats=DATUM, label="Garantie bis")
+    garantie_nicht_ermittelbar = forms.BooleanField(required=False)
+    ziel_ort = forms.ModelChoiceField(queryset=None, required=False, label="Verbleib")
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

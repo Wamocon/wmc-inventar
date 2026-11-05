@@ -55,13 +55,23 @@ def uebersicht(request):
         return _keine_berechtigung(request)
 
     heute = _kz._heute()
-    delta = _kz.delta_zum_vortag() or {}
+    # F-101: Zum Vortag von heute, sonst zeigt ein alter Zählerstand ein altes Delta.
+    delta = _kz.delta_zum_vortag(heute) or {}
     kennzahlen = [
         {**kz, "delta": delta.get(kz["data_id"]), "delta_abs": abs(delta.get(kz["data_id"], 0) or 0),
          "unterzeile": UNTERZEILEN.get(kz["data_id"], ""),
          "achtung": kz["data_id"] in ACHTUNG and bool(kz.get("ist"))}
         for kz in _kz.kennzahlen(heute)
+        # F-100: „geprüft“ ist sichtbar, bis alle aktiven Geräte geprüft sind.
+        if not (kz["data_id"] == "geprueft" and kz["gesamt"] and kz["ist"] >= kz["gesamt"])
     ]
+    arbeitslisten = _kz.arbeitslisten(heute)
+    if not request.user.ist_admin:
+        # Testschnittstelle 3: /verleih/ ist nur für den Admin.
+        for liste in arbeitslisten:
+            for zeile in liste["zeilen"]:
+                if "link_leser" in zeile:
+                    zeile["link"] = zeile["link_leser"]
     # Bestand nach Status (Prototyp: stock-bar)
     from .models import Gerat
     _STATUS_ORDNUNG = (
@@ -82,7 +92,7 @@ def uebersicht(request):
         {
             "stand": heute.strftime("%d.%m.%Y"),
             "kennzahlen": kennzahlen,
-            "arbeitslisten": _kz.arbeitslisten(heute),
+            "arbeitslisten": arbeitslisten,
             "inventarwert": _kz.inventarwert(),
             "status_zahlen": status_zahlen,
             "aktive_zahl": aktive_zahl,
@@ -150,7 +160,11 @@ def liste_export(request):
     zeilen = _EXPORT_DEF[liste_id]["quelle"](heute)
     kopfzeile = _EXPORT_DEF[liste_id]["kopfzeile"]
     felder = _EXPORT_DEF[liste_id]["felder"]
-    daten = [{feld: zeile.get(feld) for feld in felder} for zeile in zeilen]
+    # Die Spalten heißen wie die Kopfzeile, die Werte stehen unter den Feldern der Liste.
+    daten = [
+        {kopf: zeile.get(feld) for kopf, feld in zip(kopfzeile, felder)}
+        for zeile in zeilen
+    ]
     if format_export == "csv":
         return _export.antwort_csv(kopfzeile, daten, liste_id)
     return _export.antwort_xlsx(kopfzeile, daten, liste_id)

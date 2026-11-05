@@ -1,27 +1,75 @@
 {% extends "basis.html" %}
 {% block titel %}Etiketten · WMC Inventar{% endblock %}
+{% block stile %}<link rel="stylesheet" href="/static/listen.css">{% endblock %}
 {% block inhalt %}
 <div class="page-head">
   <div>
     <h1>Etiketten</h1>
-    <p class="muted lead">Bogen je Arbeitsplatz oder Lagerort, sortiert nach bisheriger Kennung (F-89). Startposition wählbar (F-73).</p>
+    <p class="muted lead">Bogen je Arbeitsplatz oder Lagerort, sortiert nach bisheriger Kennung, oder für eine Auswahl aus der Geräteliste. QR-Code mit Link zur Gerätedetailseite, Inventarnummer in Klarschrift.</p>
   </div>
 </div>
 
-<form method="get" action="/etiketten/" data-test="etiketten-ort-formular" class="filter-bar">
-  <div class="filter-row">
-    <label for="f-ort">Ort</label>
-    <select name="ort" id="f-ort" data-test="etiketten-ort-auswahl">
-      <option value="">— Ort wählen —</option>
-      {% for o in orte %}
-      <option value="{{ o.kennung }}" {% if o.kennung == ausgewaehlt %}selected{% endif %}>{{ o.kennung }}{% if o.name %} · {{ o.name }}{% endif %}</option>
-      {% endfor %}
-    </select>
-    <label for="f-startposition">Startposition</label>
-    <input type="number" name="startposition" id="f-startposition" value="1" min="1" max="24" data-test="startposition" title="Startposition auf dem Bogen (F-73)">
-    <button type="submit" class="btn primary" data-test="etiketten-drucken">Bogen drucken</button>
+<div class="etikett-auftrag">
+<section class="card">
+  <div class="card-head"><h2>Druckauftrag</h2>{% if anzahl_etiketten %}<span class="muted" data-test="etiketten-anzahl">{{ anzahl_etiketten }} Etiketten auf {{ seiten|length }} {% if seiten|length == 1 %}Bogen{% else %}Bögen{% endif %}</span>{% endif %}</div>
+  <div class="card-text">
+  {% if auswahl_nummern %}
+  <form method="post" action="/etiketten/auswahl/" data-test="etiketten-auswahl-formular">
+    {% csrf_token %}
+    {% for nr in auswahl_nummern %}<input type="hidden" name="auswahl" value="{{ nr }}">{% endfor %}
+    <p class="small" data-test="etiketten-format">Format: {{ format.text }} (aus den Einstellungen)</p>
+    <div class="field">
+      <label for="f-startposition">Startposition auf dem Bogen</label>
+      <input type="number" name="startposition" id="f-startposition" value="{{ startposition }}" min="1" max="{{ format.pro_bogen }}" data-test="startposition">
+      <span class="help">Für angebrochene Bögen: Position 1 ist oben links, gezählt wird zeilenweise.</span>
+    </div>
+    <div class="actions">
+      <button type="submit" class="btn primary" data-test="etiketten-drucken">PDF erzeugen</button>
+      <button type="submit" class="btn" name="vorschau" value="1" data-test="etiketten-vorschau-aktualisieren">Vorschau</button>
+      <a class="btn link" href="/geraete/" data-test="abbrechen">Zur Geräteliste</a>
+    </div>
+  </form>
+  {% else %}
+  <form method="get" action="/etiketten/" data-test="etiketten-ort-formular">
+    <p class="small" data-test="etiketten-format">Format: {{ format.text }} (aus den Einstellungen)</p>
+    <div class="field">
+      <label for="f-ort">Ort</label>
+      <select name="ort" id="f-ort" data-test="etiketten-ort-auswahl">
+        <option value="">— Ort wählen —</option>
+        {% for o in orte %}
+        <option value="{{ o.kennung }}" {% if o.kennung == ausgewaehlt %}selected{% endif %}>{{ o.kennung }}{% if o.name %} · {{ o.name }}{% endif %}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="f-startposition">Startposition auf dem Bogen</label>
+      <input type="number" name="startposition" id="f-startposition" value="{{ startposition }}" min="1" max="{{ format.pro_bogen }}" data-test="startposition">
+      <span class="help">Für angebrochene Bögen: Position 1 ist oben links, gezählt wird zeilenweise.</span>
+    </div>
+    <div class="actions">
+      <button type="submit" class="btn primary" data-test="etiketten-drucken">Bogen drucken</button>
+      <button type="submit" class="btn" name="vorschau" value="1" data-test="etiketten-vorschau">Vorschau</button>
+    </div>
+  </form>
+  <p class="muted small" data-test="etiketten-ort-anzahl">{{ anzahl_orte }} Orte</p>
+  {% endif %}
   </div>
-</form>
+</section>
 
-<p class="muted small" data-test="etiketten-ort-anzahl">{{ anzahl_orte }} Orte</p>
+{% if seiten %}
+<div class="bogen-wrap" data-test="etiketten-vorschau-bogen">
+  {% for seite in seiten %}
+  <div class="bogen {{ format.schluessel }}" role="img" aria-label="Vorschau Bogen {{ forloop.counter }}" data-test="bogen">
+    {% for feld in seite %}
+      {% if feld %}
+      <div class="lbl" data-test="etikett" data-id="{{ feld.nr }}"><span class="q">{{ feld.qr }}</span><span class="t"><span class="nr">{{ feld.nr }}</span><span class="m">{{ feld.text }}</span><span class="own">Eigentum der WAMOCON GmbH</span></span></div>
+      {% else %}
+      <div class="lbl leer"></div>
+      {% endif %}
+    {% endfor %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+</div>
 {% endblock %}

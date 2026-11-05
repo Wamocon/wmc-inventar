@@ -23,10 +23,10 @@
     <span class="chip-status in-benutzung" data-test="vollstaendig">✓ vollständig</span>
     {% endif %}
     <a class="btn sm" href="/geraete/?ort={{ z.ort.kennung }}" data-test="liste-link">In der Liste</a>
-    <a class="btn sm" href="/arbeitsplaetze/{{ z.ort.kennung }}/" data-test="detail-link">Ansehen</a>
+    {% if z.ort.typ == "arbeitsplatz" %}<a class="btn sm" href="/arbeitsplaetze/{{ z.ort.kennung }}/" data-test="detail-link">Ansehen</a>{% endif %}
   </div>
   {% empty %}
-  <div class="zeile muted">Keine Arbeitsplätze gefunden.</div>
+  <div class="zeile muted">Keine Orte gefunden.</div>
   {% endfor %}
 </div>
 {% endblock %}

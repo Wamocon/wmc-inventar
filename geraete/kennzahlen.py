@@ -12,6 +12,7 @@ from decimal import Decimal
 from django.db.models import Sum
 from django.utils import timezone
 
+from konten.zeit import jetzt_aware
 from stammdaten.models import Ort, Zaehlerstand
 
 from .models import Gerat, Leihe, Protokoll
@@ -23,7 +24,38 @@ def _aktive_geraete():
 
 
 def _heute() -> date:
-    return timezone.now().date()
+    """Heute nach der Uhr der Anwendung (TESTSCHNITTSTELLE 1.2)."""
+    return jetzt_aware().date()
+
+
+def _ueberfaellige_leihen(heute: date):
+    """Überfällig: Frist vorbei und das Gerät noch nicht zurück (F-36, F-100).
+
+    Ein Gerät, das nicht mehr verliehen ist, ist auch nicht überfällig, selbst
+    wenn die Leihe nach einer Rückgabe am Gerät noch „ausgegeben“ heißt.
+    """
+    return Leihe.objects.filter(
+        rueckgabe_bis__lt=heute,
+        status=Leihe.STATUS_AUSGEGEBEN,
+        gerat__status=Gerat.STATUS_VERLIEHEN,
+    )
+
+
+def _arbeitsplaetze_unvollstaendig():
+    """Arbeitsplätze mit Soll-Ist „unvollständig“ und was fehlt (F-62, F-100, F-102)."""
+    from .services import soll_ist_abgleich
+
+    ergebnis = []
+    for ort in Ort.objects.filter(typ=Ort.TYP_ARBEITSPLATZ).order_by("kennung"):
+        abgleich = soll_ist_abgleich(ort)
+        if abgleich["ergebnis"] == "unvollstaendig":
+            ergebnis.append((ort, abgleich["fehlend"]))
+    return ergebnis
+
+
+def arbeitsplaetze_vollstaendig_zahl() -> int:
+    """Plätze, deren Soll erfüllt ist; auch „mehr als Soll“ fehlt nichts (F-100)."""
+    return Ort.objects.filter(typ=Ort.TYP_ARBEITSPLATZ).count() - len(_arbeitsplaetze_unvollstaendig())
 
 
 # --- Kennzahlen (F-100) ------------------------------------------------------
@@ -36,7 +68,7 @@ _KENNZAHLEN_DEF = (
      lambda heute: _aktive_geraete().filter(status=Gerat.STATUS_IN_BENUTZUNG).count(),
      lambda heute: _aktive_geraete().count()),
     ("ueberfaellig", "Überfällige Leihen",
-     lambda heute: Leihe.objects.filter(rueckgabe_bis__lt=heute, status=Leihe.STATUS_AUSGEGEBEN).count(),
+     lambda heute: _ueberfaellige_leihen(heute).count(),
      None),
     ("anfragen-offen", "Offene Leihanfragen",
      lambda heute: Leihe.objects.filter(status=Leihe.STATUS_ANGEFRAGT).count(),
@@ -56,7 +88,7 @@ _KENNZAHLEN_DEF = (
      ).count(),
      None),
     ("arbeitsplaetze-vollstaendig", "Arbeitsplätze vollständig",
-     lambda heute: Ort.objects.filter(typ=Ort.TYP_ARBEITSPLATZ, feste_person__isnull=False).count(),
+     lambda heute: arbeitsplaetze_vollstaendig_zahl(),
      lambda heute: Ort.objects.filter(typ=Ort.TYP_ARBEITSPLATZ).count()),
     ("verliehen", "Verliehene Geräte",
      lambda heute: _aktive_geraete().filter(status=Gerat.STATUS_VERLIEHEN).count(),
@@ -128,8 +160,8 @@ def ueberfaellig(heute: date | None = None) -> list[dict]:
     """Überfällige Leihen (F-36): Rückgabedatum überschritten, Status „ausgegeben“."""
     if heute is None:
         heute = _heute()
-    leihen = _leihen_select().filter(
-        rueckgabe_bis__lt=heute, status=Leihe.STATUS_AUSGEGEBEN
+    leihen = _ueberfaellige_leihen(heute).select_related(
+        "gerat", "person", "kat"
     ).order_by("rueckgabe_bis", "id")
     zeilen = []
     for leihe in leihen:
@@ -157,25 +189,24 @@ def offene_anfragen(heute: date | None = None) -> list[dict]:
             "gerat": gerat.inventarnummer if gerat else (leihe.kat.name if leihe.kat else ""),
             "person": f"{leihe.person.vorname} {leihe.person.nachname}".strip() if leihe.person else "",
             "zweck": leihe.zweck or "",
-            "link": "/verleih/",
+            # F-102: Sprung ins Detail ist die Entscheidung über diese Anfrage (nur Admin,
+            # die Übersicht nimmt für den Leser den Sprung aufs Gerät).
+            "link": f"/geraete/verleih/{leihe.pk}/genehmigen/",
+            "link_leser": f"/geraete/{gerat.inventarnummer}/" if gerat else "",
         })
     return zeilen
 
 
 def arbeitsplaetze_unvollstaendig(heute: date | None = None) -> list[dict]:
-    """Unvollständige Arbeitsplätze (F-36): Arbeitsplatz ohne feste Person."""
-    orte = (
-        Ort.objects.filter(typ=Ort.TYP_ARBEITSPLATZ, feste_person__isnull=True)
-        .order_by("kennung")
-    )
+    """Unvollständige Arbeitsplätze (F-102): Soll-Ist fehlt etwas (Testschnittstelle 5)."""
     return [
         {
             "kennung": ort.kennung,
             "standort": f"{ort.standort} · {ort.raum}".strip(" ·") if ort.standort else "",
-            "mangel": "keine feste Person",
+            "mangel": "fehlt: " + ", ".join(f"{anzahl} × {kategorie.name}" for kategorie, anzahl in fehlend),
             "link": f"/arbeitsplaetze/{ort.kennung}/",
         }
-        for ort in orte
+        for ort, fehlend in _arbeitsplaetze_unvollstaendig()
     ]
 
 
@@ -206,7 +237,11 @@ def unterschreibungen_offen(heute: date | None = None) -> list[dict]:
     Liefert jedes nicht abgeschlossene Protokoll mit Sprung ins Protokoll.
     """
     protokolle = (
-        Protokoll.objects.exclude(stand=Protokoll.STAND_ABGESCHLOSSEN)
+        Protokoll.objects.filter(stand__in=[
+            Protokoll.STAND_SCAN_OFFEN,
+            Protokoll.STAND_BEARBEITER_OFFEN,
+            Protokoll.STAND_GEGENZEICHNUNG_OFFEN,
+        ])
         .select_related("person", "geraet")
         .order_by("nr")
     )
@@ -230,7 +265,8 @@ def daten_unvollstaendig(heute: date | None = None) -> list[dict]:
     geraete = _aktive_geraete().order_by("inventarnummer", "id")
     zeilen = []
     for gerat in geraete:
-        luecken = gerat.datenluecken()
+        # F-88: Auch ein offener Importkonflikt setzt das Gerät auf die Liste.
+        luecken = gerat.datenluecken_text()
         if not luecken:
             continue
         zeilen.append({
@@ -365,6 +401,6 @@ def uebersicht(heute: date | None = None) -> dict:
         eintrag["delta"] = delta.get(kz["data_id"])
         kennzahlen_json[kz["data_id"]] = eintrag
     return {
-        "stand": heute.isoformat(),
+        "stand": jetzt_aware().strftime("%Y-%m-%dT%H:%M"),
         "kennzahlen": kennzahlen_json,
     }

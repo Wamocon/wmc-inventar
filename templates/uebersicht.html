@@ -1,5 +1,6 @@
 {% extends "basis.html" %}{% load betraegeuro %}
 {% block titel %}Übersicht · WMC Inventar{% endblock %}
+{% block stile %}<link rel="stylesheet" href="/static/listen.css">{% endblock %}
 {% block inhalt %}
 <div class="page-head">
   <div>
@@ -35,7 +36,7 @@
       <li data-test="kennzahl" data-id="{{ kz.data_id }}"{% if kz.achtung %} class="attn"{% endif %}>
         <span class="k-name">{{ kz.titel }}{% if kz.unterzeile %}<small>{{ kz.unterzeile }}</small>{% endif %}</span>
         <span class="k-val"><span data-test="ist">{% if kz.ist is not None %}{{ kz.ist }}{% else %}–{% endif %}</span>{% if kz.gesamt is not None %}<small> / <span data-test="gesamt">{{ kz.gesamt }}</span></small>{% endif %}</span>
-        <span class="delta{% if not kz.delta %} flat{% endif %}" data-test="delta">{% if kz.delta is None %}–{% elif kz.delta == 0 %}±0{% elif kz.delta > 0 %}+{{ kz.delta }}{% else %}−{{ kz.delta_abs }}{% endif %}</span>
+        {% if kz.delta is None %}<span class="delta flat"></span>{% else %}<span class="delta{% if not kz.delta %} flat{% endif %}" data-test="delta">{% if kz.delta == 0 %}±0{% elif kz.delta > 0 %}+{{ kz.delta }}{% else %}−{{ kz.delta_abs }}{% endif %}</span>{% endif %}
       </li>
       {% endfor %}
     </ul>
@@ -56,11 +57,11 @@
         </span>
       </div>
       {% if liste.zeilen %}
-      <ul class="worklist">
+      <ul class="worklist{% if liste.zeilen|length > 8 %} lang{% endif %}"{% if liste.zeilen|length > 8 %} tabindex="0"{% endif %}>
         {% for z in liste.zeilen %}
         <li data-test="zeile" data-id="{% if z.nr %}{{ z.nr }}{% elif z.kennung %}{{ z.kennung }}{% else %}{{ z.person|default:z.name }}{% endif %}">
           <span class="what">
-            <a href="{{ z.link }}" data-test="sprung">{% if z.nr %}{{ z.nr }}{% elif z.kennung %}{{ z.kennung }}{% else %}{{ z.person|default:z.name }}{% endif %}</a>
+            {% if z.link %}<a href="{{ z.link }}" data-test="sprung">{% if z.nr %}{{ z.nr }}{% elif z.kennung %}{{ z.kennung }}{% else %}{{ z.person|default:z.name }}{% endif %}</a>{% else %}<b>{{ z.nr }}</b>{% endif %}
             <small>
               {% if liste.data_id == "ueberfaellig" or liste.data_id == "anfragen" %}
                 {{ z.gerat }} · {{ z.person }}{% if z.frist %} · Rückgabe {{ z.frist|date:"d.m.Y" }}{% endif %}{% if z.zweck %} · {{ z.zweck }}{% endif %}
@@ -83,6 +84,7 @@
         </li>
         {% endfor %}
       </ul>
+      {% if liste.data_id == "daten-unvollstaendig" %}<p class="alle-link"><a href="/geraete/?unvollstaendig=1" data-test="alle-anzeigen">Alle in der Geräteliste</a></p>{% endif %}
       {% else %}
       <p class="leer-text" data-test="leer">{{ liste.leer_text }}</p>
       {% endif %}
