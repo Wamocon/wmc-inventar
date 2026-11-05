@@ -713,6 +713,33 @@ class ImportVerbleibTests(Werkzeug):
         self.assertEqual(g.person, self.felix)
 
 
+    def test_altbestand_endet_auch_mit_der_rueckgabe(self):
+        self._csv("Typ;Modell;Seriennummer;Nutzer\nNotebook;T14;S-1;Felix Hoffmann\n")
+        self._weiter_mit_vorschlaegen()
+        self._speichern()
+        g = Gerat.objects.get()
+        self.assertTrue(g.altbestand_ohne_protokoll)
+        services.gerat_rueckgeben(g, zustand_rueckgabe=2, ausgefuehrt_von=self.admin)
+        g.refresh_from_db()
+        self.assertEqual(g.status, Gerat.STATUS_AUF_LAGER)
+        self.assertFalse(g.altbestand_ohne_protokoll)
+
+    def test_nach_der_rueckgabe_setzt_der_import_nicht_zurueck(self):
+        text = "Typ;Modell;Seriennummer;Nutzer\nNotebook;T14;S-1;Felix Hoffmann\n"
+        self._csv(text, name="a.csv")
+        self._weiter_mit_vorschlaegen()
+        self._speichern()
+        g = Gerat.objects.get()
+        services.gerat_rueckgeben(g, zustand_rueckgabe=2, ausgefuehrt_von=self.admin)
+        self._csv(text, name="b.csv")
+        self._weiter_mit_vorschlaegen()
+        self.assertIn("nicht übernommen", self.client.get("/import/").content.decode())
+        self._speichern()
+        g.refresh_from_db()
+        self.assertEqual(g.status, Gerat.STATUS_AUF_LAGER)
+        self.assertIsNone(g.person)
+
+
 class ImportVorschauTests(Werkzeug):
     def test_feste_texte_und_marker(self):
         self._gerat(seriennummer="SN-1", geraetename="WMC-A")

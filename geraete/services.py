@@ -539,7 +539,7 @@ def gerat_umziehen(
     Vorgang.objects.create(
         gerat=gerat,
         typ=Vorgang.TYP_UMZUG,
-        zeitpunkt=timezone.now(),
+        zeitpunkt=jetzt_aware(),
         erzeugt_von=ausgefuehrt_von,
         umzug_ziel_ort=ziel_ort,
         notiz=f"Umzug von {alter_ort.kennung if alter_ort else 'Lager'} zu {ziel_ort.kennung}",
@@ -1307,7 +1307,7 @@ def import_speichern(
 
     with transaction.atomic():
         lauf = Importlauf.objects.create(
-            dateiname=dateiname, blatt=blatt, erzeugt_von=konto,
+            dateiname=dateiname, blatt=blatt, erzeugt_von=konto, erzeugt_am=jetzt_aware(),
         )
         if neuer_person_name:
             _person_aus_ziel(neuer_person_name)

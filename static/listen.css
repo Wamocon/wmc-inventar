@@ -32,12 +32,12 @@
 .lbl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:2.2cqw;align-items:center;padding:2cqw 2.4cqw;border:1px dashed var(--paper-line);margin:-.5px;overflow:hidden;position:relative}
 .lbl:not(.leer)::before{content:"";position:absolute;inset:0 0 auto;height:.7cqw;background:var(--signal)}
 .lbl.leer{border-style:dotted}
-.lbl .q{display:block;width:9.5cqw;height:9.5cqw}
+.lbl .q{display:block;width:8.5cqw;height:8.5cqw}
 .lbl .q svg{width:100%;height:100%;display:block}
 .lbl .t{display:flex;flex-direction:column;min-width:0;line-height:1.1}
 .lbl .nr{font-family:var(--font-cond);font-stretch:var(--narrow);font-weight:800;font-size:3.1cqw;font-variant-numeric:tabular-nums}
 .lbl .m{font-size:1.7cqw;margin-top:.4cqw;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-.lbl .own{font-size:1.35cqw;color:var(--paper-muted);margin-top:.5cqw;white-space:nowrap}
+.lbl .own{font-size:1.2cqw;color:var(--paper-muted);margin-top:.5cqw;white-space:nowrap}
 
 /* Gerätedetail: Erstinventur (Prototyp 17-erstinventur-mobil) */
 .inventur-balken{display:block;width:100%;height:8px;margin-top:8px;accent-color:var(--signal)}

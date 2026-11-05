@@ -37,7 +37,7 @@
       <select name="ort" id="f-ort" data-test="etiketten-ort-auswahl">
         <option value="">— Ort wählen —</option>
         {% for o in orte %}
-        <option value="{{ o.kennung }}" {% if o.kennung == ausgewaehlt %}selected{% endif %}>{{ o.kennung }}{% if o.name %} · {{ o.name }}{% endif %}</option>
+        <option value="{{ o.kennung }}" {% if o.kennung == ausgewaehlt %}selected{% endif %}>{{ o.kennung }}{% if o.name and o.name != o.kennung %} · {{ o.name }}{% endif %}</option>
         {% endfor %}
       </select>
     </div>
