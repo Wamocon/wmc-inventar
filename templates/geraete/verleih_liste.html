@@ -3,7 +3,7 @@
 {% block inhalt %}
 <div class="page-head">
     <div><h1>Verleih</h1>
-        <p class="lead">Alle Leihen: angefragt, genehmigt, ausgegeben, überfällig, zurückgegeben, abgelehnt, zurückgezogen</p>
+        <p class="lead"><span data-test="anzahl">{{ leihen|length }}</span> Leihen: angefragt, genehmigt, ausgegeben, überfällig, zurückgegeben, abgelehnt, zurückgezogen</p>
     </div>
     <div class="actions">
         <a class="btn" href="/verleih/?format=xlsx" data-test="export-xlsx">Export .xlsx</a>
