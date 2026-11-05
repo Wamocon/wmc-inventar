@@ -9,12 +9,12 @@ import io
 import os
 import re
 from datetime import date, timedelta
-from decimal import Decimal
+from urllib.parse import urlencode
 
-from django.core.management import call_command
 from django.test import Client, TestCase
 from openpyxl import Workbook, load_workbook
 
+from konten.management.commands.beispieldaten import KATEGORIEN
 from konten.models import Konto
 from stammdaten.models import (Ausstattungsprofil, Einstellungen, Kategorie, Ort,
                                Person, Zaehlerstand)
@@ -38,12 +38,8 @@ class Grund(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        for name, pflicht in (
-            ("Notebook", True), ("Monitor", True), ("Headset", False), ("Smartphone", True),
-            ("Tablet", True), ("Desktop-PC", True), ("Dockingstation", True), ("Maus", False),
-            ("Tastatur", False), ("Sonstiges", False), ("NAS", True),
-        ):
-            Kategorie.objects.create(name=name, seriennummer_pflicht=pflicht)
+        for name, datentraeger, pflicht in KATEGORIEN:
+            Kategorie.objects.create(name=name, hat_datentraeger=datentraeger, seriennummer_pflicht=pflicht)
         cls.notebook = Kategorie.objects.get(name="Notebook")
         cls.monitor = Kategorie.objects.get(name="Monitor")
         cls.headset = Kategorie.objects.get(name="Headset")
@@ -189,7 +185,8 @@ class UmzugTests(Grund):
 
 class EtikettenTests(Grund):
     def _seiten(self, pdf: bytes) -> int:
-        return len(re.findall(rb"/Type\s*/Page\b", pdf))
+        from pyhanko.pdf_utils.reader import PdfFileReader
+        return int(PdfFileReader(io.BytesIO(pdf)).root["/Pages"]["/Count"])
 
     def _nummern(self, n: int) -> list[str]:
         return [self._gerat().inventarnummer for _ in range(n)]
@@ -265,7 +262,7 @@ class EtikettenTests(Grund):
         gast = Client()
         ziel = f"/g/{g.inventarnummer}"
         antwort = gast.get(ziel)
-        self.assertEqual(antwort["Location"], f"/anmelden/?next={ziel}")
+        self.assertEqual(antwort["Location"], "/anmelden/?" + urlencode({"next": ziel}))
         seite = gast.get(antwort["Location"])
         self.assertContains(seite, f'name="next" value="{ziel}"')
         antwort = gast.post("/anmelden/", {"email": self.admin.email, "passwort": "test-passwort-123", "next": ziel})
@@ -396,7 +393,7 @@ class ImportDateiTests(Werkzeug):
     def test_nicht_angemeldet_zur_anmeldung(self):
         antwort = Client().get("/import/")
         self.assertEqual(antwort.status_code, 302)
-        self.assertEqual(antwort["Location"], "/anmelden/?next=/import/")
+        self.assertEqual(antwort["Location"], "/anmelden/?" + urlencode({"next": "/import/"}))
 
 
 class ImportVorschlagTests(Werkzeug):
@@ -824,8 +821,7 @@ class LueckenTests(Grund):
         self.assertContains(seite, a.inventarnummer)
 
     def test_pflicht_wie_in_der_testschnittstelle(self):
-        call_command("beispieldaten", "--neu", verbosity=0, stdout=io.StringIO())
-        ohne = set(Kategorie.objects.filter(seriennummer_pflicht=False).values_list("name", flat=True))
+        ohne = {name for name, _, pflicht in KATEGORIEN if not pflicht}
         self.assertEqual(ohne, {"Tastatur", "Maus", "Headset", "Notebook-Ständer", "Powerbank", "USB-Hub", "Sonstiges"})
 
 
