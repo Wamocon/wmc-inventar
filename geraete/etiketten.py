@@ -102,8 +102,8 @@ def _kuerzen(text: str, zeichen: int) -> str:
 
 
 def _modell_zeichen(fmt: EtikettenFormat) -> int:
-    # Platz neben dem QR-Code bei 2,8 mm Schrift, rund 1,45 mm je Zeichen.
-    return int((fmt.breite_mm - 26) / 1.45)
+    # Platz neben dem QR-Code bei 2,8 mm Schrift, rund 1,7 mm je Zeichen.
+    return int((fmt.breite_mm - 26) / 1.7)
 
 
 def etikett_html(gerat: Gerat, fmt: EtikettenFormat = STANDARD_FORMAT) -> str:
