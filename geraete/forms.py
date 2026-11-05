@@ -347,6 +347,32 @@ class GeratReparaturFertigForm(forms.Form):
 
     ZIEL = [("zuordnung", "Bisherige Zuordnung"), ("lager", "Ins Lager")]
 
+    # Nur für „Ins Lager“ mit Person: Angaben für das Rücknahmeprotokoll (Erwin 05.11.).
+    zubehoer_komplett = forms.ChoiceField(
+        choices=[("ja", "Ja"), ("nein", "Nein")],
+        required=False,
+        initial="ja",
+        label="Zubehör komplett",
+        widget=forms.Select(attrs={"data-test": "zubehoer-komplett"}),
+    )
+    maengel = forms.CharField(
+        required=False,
+        label="Bemerkung, Mängel",
+        widget=forms.Textarea(attrs={"rows": 2, "data-test": "maengel"}),
+    )
+    unterschrift = forms.ChoiceField(
+        choices=GeratAusgabeForm.UNTERSCHRIFT,
+        required=False,
+        initial="tool",
+        label="Unterschrift",
+        widget=forms.RadioSelect,
+    )
+    empfaenger = forms.EmailField(
+        required=False,
+        label="Adresse für den Link, bei Rückgabe per Post",
+        widget=forms.EmailInput(attrs={"data-test": "code-senden-empfaenger"}),
+    )
+
     def __init__(self, *args, gerat: Gerat | None = None, **kwargs):
         super().__init__(*args, **kwargs)
         if gerat is not None:

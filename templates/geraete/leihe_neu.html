@@ -7,9 +7,6 @@
     <p class="muted lead">Die IT prüft die Anfrage und meldet sich per E-Mail.</p>
   </div>
 </div>
-{% if not darf_anfragen %}
-<p class="meldung info" data-test="hinweis-leser">Mit der Rolle Leser können Sie keine Leihgeräte anfragen.</p>
-{% endif %}
 <form method="post" novalidate data-test="leih-anfrage" data-frei-url="/meine-geraete/leihe/frei/">
   {% csrf_token %}
   <div class="meldungen">

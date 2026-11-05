@@ -55,12 +55,9 @@ INVENTAR_DEBUG=1 .venv/bin/python manage.py beispieldaten --neu
 INVENTAR_DEBUG=1 .venv/bin/python manage.py runserver 0.0.0.0:8000
 ```
 
-### Ohne Internet (Offline-Bau)
+### Ohne Internet
 
-```bash
-# Wheelhouse auf dem Zielsystem ablegen, dann:
-docker build --build-arg BASIS=wmc-inventar-basis:1 --build-arg WHEELHOUSE=wheelhouse .
-```
+Der Bau braucht Internet. Hat das Zielsystem keins: das Image auf einem Rechner mit Internet bauen und mit `docker save` und `docker load` übertragen. Das ist bisher nicht erprobt.
 
 ## Betrieb
 
@@ -150,7 +147,8 @@ rm -rf var/dateien && cp -a /srv/inventar/sicherung/<Stempel>/dateien var/dateie
 #### Docker
 
 ```bash
-# 1. Nur die Datenbank starten, damit beim Einspielen niemand schreibt
+# 1. Alle Dienste anhalten und nur die Datenbank starten, damit beim Einspielen niemand schreibt
+docker compose down
 docker compose up -d db
 
 # 2. Dump einspielen; er löscht vorhandene Tabellen und legt sie neu an

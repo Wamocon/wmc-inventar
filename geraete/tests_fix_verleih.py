@@ -321,27 +321,22 @@ class AnfrageTests(VerleihTestCase):
         self.anfragen(self.VON, self.BIS)
         self.assertEqual(mail.outbox, [])
 
-    def test_leser_sieht_die_seite_und_fragt_nicht_an(self):
+    def test_leser_mit_eigener_person_fragt_an(self):
+        """Testschnittstelle 3, Erwin 30.10.: Leihanfrage mit eigener Person."""
         c = self.client_fuer(self.leser)
         antwort = c.get("/meine-geraete/leihe/neu/")
         self.assertEqual(antwort.status_code, 200)
-        self.assertNotContains(antwort, 'data-test="anfragen"')
+        self.assertContains(antwort, 'data-test="anfragen"')
+        vorher = Leihe.objects.count()
         antwort = c.post("/meine-geraete/leihe/neu/", {
             "kat": self.smartphone.pk,
             "beginn": self.VON.isoformat(),
             "ende": self.BIS.isoformat(),
             "zweck": "Messe",
         })
-        self.assertEqual(antwort.status_code, 403)
-        self.assertFalse(Leihe.objects.exists())
-        self.assertNotContains(c.get("/meine-geraete/"), 'data-test="leihe-anfragen"')
-
-
-class EntscheidungTests(VerleihTestCase):
-    """F-32, F-93: Genehmigen mit Gerät, Ablehnen mit Pflichtbegründung, Mail."""
-
-    VON = HEUTE + timedelta(days=30)
-    BIS = HEUTE + timedelta(days=40)
+        self.assertEqual(antwort.status_code, 302)
+        self.assertEqual(Leihe.objects.count(), vorher + 1)
+        self.assertEqual(Leihe.objects.order_by("-id").first().person_id, self.leser.person_id)
 
     def test_ablehnen_ueber_die_seite(self):
         leihe = self.anfragen(self.VON, self.BIS)

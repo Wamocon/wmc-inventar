@@ -216,6 +216,15 @@ def _ausgabe_entwurf(gerat: Gerat) -> Protokoll | None:
     ).first()
 
 
+def _zustand_pruefen(wert, gerat: Gerat) -> int | None:
+    """Der Zustand kommt aus dem Formular: leer oder eine der vier Stufen (Kapitel 3.2)."""
+    if wert in (None, ""):
+        return None
+    if str(wert) not in {str(stufe) for stufe, _text in Gerat.ZUSTAENDE}:
+        raise GeratFehler(f"{gerat.inventarnummer}: Bitte einen der vier Zustände wählen.")
+    return int(wert)
+
+
 def _ohne_ausgabe_entwurf(gerat: Gerat) -> None:
     """F-21: Solange ein Entwurf offen ist, ändert sich am Gerät nichts."""
     entwurf = _ausgabe_entwurf(gerat)
@@ -296,12 +305,9 @@ def geraete_ausgeben(
     positionen = []
     for gerat in geraete:
         werte = (eingaben or {}).get(gerat.inventarnummer, {})
-        zustand = werte.get("zustand")
-        if zustand and str(zustand) not in {str(wert) for wert, _text in Gerat.ZUSTAENDE}:
-            raise GeratFehler(f"{gerat.inventarnummer}: Bitte einen der vier Zustände wählen.")
         positionen.append(position_aus_gerat(
             gerat,
-            zustand_ausgabe=int(zustand) if zustand else None,
+            zustand_ausgabe=_zustand_pruefen(werte.get("zustand"), gerat),
             zubehoer_komplett=werte.get("zubehoer_komplett", True),
             bemerkung=(werte.get("anmerkung") or "").strip(),
         ))
@@ -656,7 +662,7 @@ def geraete_zuruecknehmen(
         positionen.append(position_aus_gerat(
             gerat,
             zustand_ausgabe=zustand_bei_ausgabe(gerat),
-            zustand_rueckgabe=int(eintrag["zustand_rueckgabe"]),
+            zustand_rueckgabe=_zustand_pruefen(eintrag["zustand_rueckgabe"], gerat) or gerat.zustand,
             zubehoer_komplett=_ja(eintrag.get("zubehoer_komplett", True)),
             bemerkung=(eintrag.get("maengel") or "").strip(),
             ausgabe_protokoll=quelle.nr if quelle is not None else "",
@@ -890,6 +896,10 @@ def gerat_reparatur_fertig(
     beleg: str = "",
     ausgefuehrt_von: Konto | None = None,
     lagerort: Ort | None = None,
+    zubehoer_komplett: bool = True,
+    maengel: str = "",
+    unterschrift: str = "tool",
+    empfaenger: str = "",
 ) -> Gerat:
     """Reparatur abschließen (F-42, M3).
 
@@ -911,10 +921,7 @@ def gerat_reparatur_fertig(
             gerat.ort = gerat.ort or standard_lager()
         else:
             gerat.status = Gerat.STATUS_IN_BENUTZUNG
-    elif ruecknahme:
-        # Zurück bei der Person, die Rücknahme setzt Lager und Person.
-        gerat.status = Gerat.STATUS_IN_BENUTZUNG
-    else:
+    elif not ruecknahme:
         # F-42: Ziel „Lager"
         gerat.status = Gerat.STATUS_AUF_LAGER
         gerat.person = None
@@ -933,11 +940,17 @@ def gerat_reparatur_fertig(
     )
     gerat.save()
     if ruecknahme:
+        # Die Rücknahme setzt Lager und Person; die Historie bleibt ohne Zwischenstand.
+        gerat.status = Gerat.STATUS_IN_BENUTZUNG
         geraete_zuruecknehmen(
             gerat.person,
-            [{"gerat": gerat, "zustand_rueckgabe": zustand, "ziel": "lager", "lagerort": lagerort}],
+            [{
+                "gerat": gerat, "zustand_rueckgabe": zustand, "ziel": "lager", "lagerort": lagerort,
+                "zubehoer_komplett": zubehoer_komplett, "maengel": maengel,
+            }],
             ausgefuehrt_von=ausgefuehrt_von,
-            unterschrift="tool",
+            unterschrift=unterschrift or "tool",
+            empfaenger=empfaenger,
         )
     return gerat
 

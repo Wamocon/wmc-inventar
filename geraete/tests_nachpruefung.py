@@ -475,3 +475,49 @@ class ReparaturInsLagerTests(Grundlage):
         self.assertEqual(gerat.status, Gerat.STATUS_IN_BENUTZUNG)
         self.assertEqual(gerat.person, self.anna)
         self.assertFalse(Protokoll.objects.filter(art=Protokoll.ART_RUECKNAHME).exists())
+
+
+class LetztePruefungTests(ReparaturInsLagerTests):
+    """Befunde an 0de9e80."""
+
+    def test_dialog_fragt_was_das_protokoll_sagt(self):
+        gerat = self._in_reparatur("P-1", self.anna)
+        self.client.post(f"/geraete/{gerat.inventarnummer}/reparatur/fertig/", {
+            "zustand": 3, "ziel": "lager", "zubehoer_komplett": "nein", "maengel": "Netzteil fehlt",
+            "unterschrift": "papier", "empfaenger": "privat@example.org",
+        })
+        ruecknahme = Protokoll.objects.get(art=Protokoll.ART_RUECKNAHME)
+        self.assertEqual(ruecknahme.stand, Protokoll.STAND_SCAN_OFFEN)
+        self.assertEqual(ruecknahme.gegenzeichnung_empfaenger, "privat@example.org")
+        position = ruecknahme.positionen[0]
+        self.assertFalse(position["zubehoer_komplett"])
+        self.assertEqual(position["bemerkung"], "Netzteil fehlt")
+
+    def test_historie_ohne_zwischenstand(self):
+        gerat = self._in_reparatur("P-2", self.anna)
+        self.client.post(f"/geraete/{gerat.inventarnummer}/reparatur/fertig/", {"zustand": 2, "ziel": "lager"})
+        staende = [v.status_nachher for v in Vorgang.objects.filter(gerat=gerat).order_by("id")]
+        self.assertEqual(staende[-2:], [Gerat.STATUS_IN_REPARATUR, Gerat.STATUS_AUF_LAGER])
+
+    def test_altbestand_behauptet_keinen_zustand_bei_ausgabe(self):
+        from . import pdf as pdf_modul
+        gerat = self._gerat("P-3")
+        Gerat.objects.filter(pk=gerat.pk).update(
+            status=Gerat.STATUS_IN_BENUTZUNG, person=self.anna, ort=None, altbestand_ohne_protokoll=True,
+        )
+        services.gerat_rueckgeben(Gerat.objects.get(pk=gerat.pk), ausgefuehrt_von=self.admin)
+        ruecknahme = Protokoll.objects.get(art=Protokoll.ART_RUECKNAHME)
+        html = pdf_modul._render_inhalt(ruecknahme)
+        self.assertIn("Zum Zustand bei Ausgabe liegt kein Protokoll vor.", html)
+        self.assertNotIn("im bei Ausgabe dokumentierten Zustand", html)
+
+    def test_offboarding_prueft_den_zustand(self):
+        gerat = self._gerat("P-4")
+        services.gerat_ausgeben(gerat, self.anna, ausgefuehrt_von=self.admin, unterschrift="papier")
+        for wert in ("abc", "9"):
+            antwort = self.client.post(f"/personen/{self.anna.pk}/offboarding/zuruecknehmen/", {
+                f"zustand-{gerat.inventarnummer}": wert, "unterschrift": "tool",
+            }, follow=True)
+            self.assertEqual(antwort.status_code, 200)
+            self.assertContains(antwort, "Bitte einen der vier Zustände wählen.")
+        self.assertEqual(Gerat.objects.get(pk=gerat.pk).person, self.anna)

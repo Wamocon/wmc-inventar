@@ -3,7 +3,7 @@
 {% block inhalt %}
 <div class="page-head">
     <div><h1>Verleih</h1>
-        <p class="lead"><span data-test="anzahl">{{ leihen|length }}</span> Leihen: angefragt, genehmigt, ausgegeben, überfällig, zurückgegeben, abgelehnt, zurückgezogen</p>
+        <p class="lead"><span data-test="anzahl">{{ leihen|length }}</span> Leihen: angefragt, genehmigt, ausgegeben, überfällig, zurückgegeben, verloren, abgelehnt, zurückgezogen</p>
     </div>
     <div class="actions">
         {% if request.user.ist_admin %}<a class="btn primary" href="/geraete/?status=auf-lager&amp;leihpool=1" data-test="direkt-verleihen">Direkt verleihen</a>{% endif %}

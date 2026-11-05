@@ -1263,6 +1263,10 @@ def reparatur_fertig(request, inventarnummer: str):
                     beleg=form.cleaned_data.get("beleg", ""),
                     ausgefuehrt_von=request.user,
                     lagerort=form.cleaned_data.get("lager_ort"),
+                    zubehoer_komplett=form.cleaned_data.get("zubehoer_komplett") != "nein",
+                    maengel=form.cleaned_data.get("maengel", ""),
+                    unterschrift=form.cleaned_data.get("unterschrift") or "tool",
+                    empfaenger=form.cleaned_data.get("empfaenger", ""),
                 )
             except services.GeratFehler as fehler:
                 meldung_error(request, str(fehler))
@@ -1804,8 +1808,8 @@ def meine_geraete_zeige(request):
                 if person is not None else []
             ),
             "leihen": leihen,
-            # Kapitel 2: Der Leser fragt nicht an und ändert nichts.
-            "darf_anfragen": not request.user.ist_leser,
+            # Testschnittstelle 3: jede Rolle mit eigener Person fragt an (Erwin 30.10.).
+            "darf_anfragen": person is not None,
         },
     )
 
@@ -1824,8 +1828,6 @@ def meine_geraete_leihe_neu(request):
 
     person = _eigene_person(request)
     if person is None:
-        raise PermissionDenied
-    if request.method == "POST" and request.user.ist_leser:
         raise PermissionDenied
 
     heute = jetzt_wie_im_entwicklungsmodus().date()
@@ -1877,7 +1879,7 @@ def meine_geraete_leihe_neu(request):
             "fehler": fehler,
             "auswahl": _anfrage_auswahl(kategorie, von, bis),
             "gewaehlt": str(form["gerat"].value() or ""),
-            "darf_anfragen": not request.user.ist_leser,
+            "darf_anfragen": person is not None,
         },
     )
 
@@ -1912,9 +1914,6 @@ def meine_geraete_leihe_zurueckziehen(request, leih_id):
     from .forms import LeiheZurueckziehenForm
     from .models import Leihe
     from .services import GeratFehler, leihe_zurueckziehen
-
-    if request.user.ist_leser:
-        raise PermissionDenied
 
     leihe = get_object_or_404(Leihe, id=leih_id)
     if request.user.person_id is None or leihe.person_id != request.user.person_id:
@@ -1951,9 +1950,6 @@ def meine_geraete_leihe_verlaengern(request, leih_id):
     from .forms import LeiheVerlaengerungAnfragenForm
     from .models import Leihe
     from .services import GeratFehler, leihe_verlaengerung_anfragen
-
-    if request.user.ist_leser:
-        raise PermissionDenied
 
     leihe = get_object_or_404(Leihe, id=leih_id)
     if request.user.person_id is None or leihe.person_id != request.user.person_id:

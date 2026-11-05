@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| Version | 0.5 (Stand für die Umsetzung; Raumplan nach dem Fluchtplan, IDs N-01 bis N-11 für Kapitel 7) |
-| Datum | 22.10.2026 |
+| Version | 0.6 (Stand der Abnahme; Raumplan nach dem Fluchtplan, IDs N-01 bis N-11 für Kapitel 7; Entscheidungen von Erwin vom 30.10. und 05.11. eingearbeitet) |
+| Datum | 05.11.2026 |
 | Verantwortlich | Erwin Moretz, IT |
 | Mockup | Claude Design: [WMC Inventar Mockup](https://claude.ai/artifact/JsCkL37DMg5Vi3tsDXY8cq); klickbarer Prototyp: `mockup/wmc-inventar-prototyp.html`, online [WMC Inventar Prototyp](https://claude.ai/artifact/VNqKqetybNXhGuMwrCm3kv) |
 | Protokollvorlagen | WMC-IT-FRM-001 Ausgabeprotokoll v1.1, WMC-IT-FRM-002 Rücknahmeprotokoll v1.1. Aufbau und Wortlaut ohne Personendaten in `docs/vorlagen/FRM-001.md` und `FRM-002.md`; die Beispiel-PDFs enthalten Personendaten und gehören nicht ins Repository. |
@@ -392,7 +392,7 @@ Das Mockup in Claude Design ([WMC Inventar Mockup](https://claude.ai/artifact/Js
 | Erstinventur | Admin | mobile Gerätedetailseite nach dem Scan mit den Lücken des Geräts und „Geprüft“; Fortschritt je Ort | F-74, F-88, F-89 |
 | Etiketten | Admin | Druckvorschau Etikettenbogen | F-70 bis F-73 |
 | Einstellungen | Admin | Kategorien, Profile, Konten, E-Mail, Protokollvorlagen, Checklisten | F-02, F-61, F-90, F-120, F-122, F-130 |
-| Meine Geräte / Leihgerät anfragen | Mitarbeiter | eigene Geräte, Protokolle, Anfrageformular, eigene Leihen | F-110 bis F-113 |
+| Meine Geräte / Leihgerät anfragen | Mitarbeiter, jede andere Rolle mit eigener Person | eigene Geräte, Protokolle, Anfrageformular, eigene Leihen | F-110 bis F-113 |
 | Protokoll signieren | Mitarbeiter über Mail-Link | PDF-Vorschau, Einmalcode, Signieren | F-136, F-137 |
 | Protokollvorschau | Admin | erzeugtes PDF nach Vorlage vor der Signatur | F-130, F-135 |
 

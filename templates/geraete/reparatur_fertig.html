@@ -22,7 +22,13 @@
         {% endfor %}
         {% if form.ziel.errors %}<div class="meldung error">{% for e in form.ziel.errors %}{{ e }}{% endfor %}</div>{% endif %}
       </div>
-      {% if gerat.person %}<p class="muted full" data-test="hinweis-ruecknahme">Ins Lager heißt: {{ gerat.person.voller_name }} gibt das Gerät zurück. Es entsteht ein Rücknahmeprotokoll.</p>{% endif %}
+      {% if gerat.person %}
+      <p class="muted full" data-test="hinweis-ruecknahme">Ins Lager heißt: {{ gerat.person.voller_name }} gibt das Gerät zurück. Es entsteht ein Rücknahmeprotokoll, dafür gelten die folgenden Angaben.</p>
+      <div class="field"><label for="id_zubehoer_komplett">Zubehör komplett</label>{{ form.zubehoer_komplett }}</div>
+      <div class="field full"><label for="id_maengel">Bemerkung, Mängel</label>{{ form.maengel }}</div>
+      <div class="field full" data-test="unterschrift"><label>Unterschrift</label>{% for radio in form.unterschrift %}<label class="radio">{{ radio }}</label>{% endfor %}</div>
+      <div class="field full"><label for="id_empfaenger">Adresse für den Link, bei Rückgabe per Post</label>{{ form.empfaenger }}{% if form.empfaenger.errors %}<div class="meldung error">{% for e in form.empfaenger.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+      {% endif %}
       <div class="field"><label for="id_lager_ort">Lagerort, falls ins Lager</label>{{ form.lager_ort }}</div>
       <div class="field"><label for="id_kosten">Kosten (EUR, optional)</label>{{ form.kosten }}{% if form.kosten.errors %}<div class="meldung error">{% for e in form.kosten.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
       <div class="field"><label for="id_beleg">Beleg (optional)</label>{{ form.beleg }}{% if form.beleg.errors %}<div class="meldung error">{% for e in form.beleg.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>

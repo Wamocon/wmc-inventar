@@ -215,6 +215,8 @@ _HTML_RUECKNAHME = _KOPF + """
 <h2>4. Festgestellte Mängel und offene Punkte</h2>
 {% if maengel_liste %}
 <ul>{% for m in maengel_liste %}<li>{{ m }}</li>{% endfor %}</ul>
+{% elif ohne_ausgabeprotokoll %}
+<p>Keine. Die Hardware wurde vollständig mit Zubehör zurückgegeben. Zum Zustand bei Ausgabe liegt kein Protokoll vor.</p>
 {% else %}
 <p>Keine. Die Hardware wurde vollständig mit Zubehör und im bei Ausgabe dokumentierten Zustand zurückgegeben.</p>
 {% endif %}
@@ -472,6 +474,7 @@ def _render_inhalt(protokoll: Protokoll) -> str:
         "checkliste": _checkliste_eintraege(protokoll),
         "offboarding": offboarding,
         "maengel_liste": _maengel_liste(positionen, offboarding),
+        "ohne_ausgabeprotokoll": protokoll.rueckgabe_zu_protokoll_id is None,
         "bezug": bezug,
         "grundlage": grundlage,
         "anhaenge": _anhaenge(protokoll),

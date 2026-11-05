@@ -1,13 +1,10 @@
 # WMC Inventar – Docker-Image (N-01)
-# Ohne Internet: docker build --build-arg BASIS=wmc-inventar-basis:1 --build-arg WHEELHOUSE=wheelhouse .
-# Mit Internet:  docker build .
+# Der Bau braucht Internet (Basis-Image, Systempakete, Python-Pakete).
 
 ARG BASIS=python:3.12-slim
 FROM ${BASIS}
 
-ARG WHEELHOUSE=
-
-# Systempakete (Pango, HarfBuzz für WeasyPrint) – nur nachinstallieren, wenn sie fehlen
+# Systempakete (Pango, HarfBuzz für WeasyPrint)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         libpango-1.0-0 \
@@ -22,11 +19,7 @@ RUN apt-get update && \
 WORKDIR /srv/inventar
 
 COPY requirements.txt requirements-test.txt /srv/inventar/
-RUN if [ -n "${WHEELHOUSE}" ]; then \
-      pip install --no-index --find-links /srv/inventar/wheelhouse -r requirements.txt; \
-    else \
-      pip install -r requirements.txt; \
-    fi
+RUN pip install -r requirements.txt
 
 COPY . /srv/inventar/
 
