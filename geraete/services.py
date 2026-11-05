@@ -190,7 +190,7 @@ def gerat_ausgeben(
 ) -> Gerat:
     """Gerät ausgeben (F-20 bis F-23, F-131, M3).
 
-    Ziel ist eine Person oder ein Ort (Arbeitsplatz, Raum, Lager).
+    Ziel ist eine Person oder ein Ort (Arbeitsplatz, Raum). Das Gerät steht „Auf Lager“.
     Status wird „In Benutzung", Person und/oder Ort werden gesetzt.
     Ein Vorgang wird geschrieben.
 

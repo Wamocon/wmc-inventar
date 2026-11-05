@@ -35,6 +35,20 @@ class Migration(migrations.Migration):
             field=models.CharField(default="1.1", max_length=8, verbose_name="Fassung"),
         ),
         migrations.AlterField(
+            model_name="protokoll",
+            name="stand",
+            field=models.CharField(
+                choices=[
+                    ("scan-offen", "Scan offen"),
+                    ("bearbeiter-offen", "Bearbeiter offen"),
+                    ("gegenzeichnung-offen", "Gegenzeichnung offen"),
+                    ("abgeschlossen", "Abgeschlossen"),
+                    ("ersetzt", "Ersetzt durch eine neue Fassung"),
+                ],
+                default="scan-offen", max_length=24, verbose_name="Stand",
+            ),
+        ),
+        migrations.AlterField(
             model_name="signaturcode",
             name="code",
             field=models.CharField(max_length=6, verbose_name="Code"),

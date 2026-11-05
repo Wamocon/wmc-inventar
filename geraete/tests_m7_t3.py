@@ -441,10 +441,12 @@ class GegenzeichnungsseiteTests(TestCase):
             person=self.person, gerat=self.g1,
             erzeugt_von=self.admin,
         )
-        # Checkliste beantworten (F-132), damit Signatur und PDF funktionieren.
+        # Checkliste beantworten (F-132), Entwurf auf dem Tool-Weg.
         from .models import Protokoll
         for schluessel, _text in Protokoll.CHECKLISTE_PUNKTE:
             self.protokoll.checkliste[schluessel] = 1
+        self.protokoll.stand = Protokoll.STAND_BEARBEITER_OFFEN
+        self.protokoll.unterschrift_art = "tool"
         self.protokoll.save()
         # Bearbeiter signiert.
         self.client.force_login(self.admin)

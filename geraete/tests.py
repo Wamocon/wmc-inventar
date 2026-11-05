@@ -427,10 +427,11 @@ class M3LebenszyklusTests(TestCase):
         self.assertTrue(v.abschliesst)
 
     def test_ausgabe_an_ort(self):
-        services.gerat_ausgeben(self.gerat, self.ort, ausgefuehrt_von=self.admin)
+        platz = Ort.objects.create(typ=Ort.TYP_ARBEITSPLATZ, kennung="M3-AP", name="M3-Platz")
+        services.gerat_ausgeben(self.gerat, platz, ausgefuehrt_von=self.admin)
         self.gerat.refresh_from_db()
         self.assertEqual(self.gerat.status, Gerat.STATUS_IN_BENUTZUNG)
-        self.assertEqual(self.gerat.ort, self.ort)
+        self.assertEqual(self.gerat.ort, platz)
 
     def test_ausgabe_verweigert_aus_ausgemustert(self):
         from datetime import date
@@ -501,7 +502,8 @@ class M3LebenszyklusTests(TestCase):
 
     def test_umzug(self):
         ort2 = Ort.objects.create(typ=Ort.TYP_LAGER, kennung="M3-LAG2", name="M3-Lager2")
-        services.gerat_ausgeben(self.gerat, self.ort, ausgefuehrt_von=self.admin)
+        platz = Ort.objects.create(typ=Ort.TYP_ARBEITSPLATZ, kennung="M3-AP", name="M3-Platz")
+        services.gerat_ausgeben(self.gerat, platz, ausgefuehrt_von=self.admin)
         self.gerat.refresh_from_db()
         services.gerat_umziehen(self.gerat, ort2, ausgefuehrt_von=self.admin)
         self.gerat.refresh_from_db()
@@ -3516,6 +3518,10 @@ class ProtokollAusgabeTests(TestCase):
 
     def test_pdf_liefert_application_pdf(self):
         """F-130: /protokolle/<Nummer>/pdf/ liefert application/pdf."""
+        from stammdaten.models import Einstellungen
+        einstellungen = Einstellungen.aktuelles()
+        einstellungen.firmenname = "Wamocon GmbH"
+        einstellungen.save()
         self._ausgeben()
         protokoll = Protokoll.objects.first()
         # Checkliste beantworten (F-132)
@@ -3762,9 +3768,13 @@ class M6Teil2SignaturTests(TestCase):
             person=self.person, gerat=self.g1,
             erzeugt_von=self.admin,
         )
-        # Checkliste beantworten (F-132), damit Signatur und PDF funktionieren.
+        # Checkliste und Prüfpunkte beantworten (F-132, F-133), Entwurf auf dem Tool-Weg.
         for schluessel, _text in Protokoll.CHECKLISTE_PUNKTE:
             self.protokoll.checkliste[schluessel] = 1
+        for schluessel, _text in Protokoll.OFFBOARDING_PUNKTE:
+            self.protokoll.offboarding[schluessel] = {"status": "erledigt"}
+        self.protokoll.stand = Protokoll.STAND_BEARBEITER_OFFEN
+        self.protokoll.unterschrift_art = "tool"
         self.protokoll.save()
 
     def test_bearbeiter_signieren_ungueltiges_passwort(self):
@@ -3882,9 +3892,13 @@ class M6Teil2GegenzeichnungTests(TestCase):
             person=self.person, gerat=self.g1,
             erzeugt_von=self.admin,
         )
-        # Checkliste beantworten (F-132), damit Signatur und PDF funktionieren.
+        # Checkliste und Prüfpunkte beantworten (F-132, F-133), Entwurf auf dem Tool-Weg.
         for schluessel, _text in Protokoll.CHECKLISTE_PUNKTE:
             self.protokoll.checkliste[schluessel] = 1
+        for schluessel, _text in Protokoll.OFFBOARDING_PUNKTE:
+            self.protokoll.offboarding[schluessel] = {"status": "erledigt"}
+        self.protokoll.stand = Protokoll.STAND_BEARBEITER_OFFEN
+        self.protokoll.unterschrift_art = "tool"
         self.protokoll.save()
         # Bearbeiter signiert.
         self.client.force_login(self.admin)
@@ -4075,9 +4089,13 @@ class M6Teil2RuecknahmeTests(TestCase):
             erzeugt_von=self.admin,
             art=Protokoll.ART_RUECKNAHME,
         )
-        # Checkliste beantworten (F-132), damit Signatur und PDF funktionieren.
+        # Checkliste und Prüfpunkte beantworten (F-132, F-133), Entwurf auf dem Tool-Weg.
         for schluessel, _text in Protokoll.CHECKLISTE_PUNKTE:
             self.protokoll.checkliste[schluessel] = 1
+        for schluessel, _text in Protokoll.OFFBOARDING_PUNKTE:
+            self.protokoll.offboarding[schluessel] = {"status": "erledigt"}
+        self.protokoll.stand = Protokoll.STAND_BEARBEITER_OFFEN
+        self.protokoll.unterschrift_art = "tool"
         self.protokoll.save()
 
     def test_ruecknahme_ohne_gegenzeichnung_nicht_abgeschlossen(self):
@@ -4985,7 +5003,7 @@ class OffboardingFormularTests(TestCase):
         antwort = self.client.get(f"/protokolle/{protokoll.nr}/")
         self.assertEqual(antwort.status_code, 200)
         inhalt = antwort.content.decode("utf-8")
-        self.assertIn("Checkliste Zugänge", inhalt)
+        self.assertIn("Zugänge und Zugangsmittel", inhalt)
         self.assertNotIn("Prüfpunkte IT-Offboarding", inhalt)
 
     def test_offboarding_post_speichert_werte(self):
