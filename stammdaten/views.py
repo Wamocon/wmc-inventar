@@ -299,6 +299,12 @@ def offboarding_zuruecknehmen(request, pk):
         gewaehlt = set(request.POST.getlist("auswahl"))
         gerate = [g for g in gerate if g.inventarnummer in gewaehlt]
     lagerort = Ort.objects.filter(pk=request.POST.get("lager_ort") or None, typ=Ort.TYP_LAGER).first()
+    # F-50: Der Zustand bei Rückgabe ist Pflicht. Das Formular wählt immer eine Stufe vor;
+    # ein leerer Wert gilt nicht stillschweigend als der bisherige Zustand.
+    for g in gerate:
+        if request.POST.get(f"zustand-{g.inventarnummer}") == "":
+            meldung_error(request, f"{g.inventarnummer}: Bitte einen der vier Zustände wählen.")
+            return redirect(reverse("stammdaten:offboarding", kwargs={"pk": pk}))
     posten = [
         {
             "gerat": g,

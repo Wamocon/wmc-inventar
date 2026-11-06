@@ -18,11 +18,11 @@
             <thead>
                 <tr>
                     <th>Nr.</th>
-                    <th>Gerät</th>
                     <th>Person</th>
+                    <th>Gerät</th>
                     <th>Zeitraum</th>
                     <th>Zweck</th>
-                    <th>Stand</th>
+                    <th>Status</th>
                     <th>Aktionen</th>
                 </tr>
             </thead>
@@ -30,6 +30,7 @@
             {% for leihe in leihen %}
                 <tr data-test="zeile" data-id="{{ leihe.nr }}" data-stand="{{ leihe.stand_wert }}">
                     <td class="mono nowrap">{{ leihe.nr }}</td>
+                    <td>{{ leihe.person.vorname }} {{ leihe.person.nachname }}</td>
                     <td>
                         {% if leihe.gerat %}
                             <a href="{% url 'geraete:detail' leihe.gerat.inventarnummer %}" class="inv">
@@ -40,7 +41,6 @@
                             <span class="muted">{{ leihe.kat.name }}, noch kein Gerät</span>
                         {% endif %}
                     </td>
-                    <td>{{ leihe.person.vorname }} {{ leihe.person.nachname }}</td>
                     <td class="nowrap">
                         {% if leihe.beginn %}
                             {{ leihe.beginn|date:"d.m.Y" }} bis {{ leihe.rueckgabe_bis|default:leihe.ende|date:"d.m.Y" }}

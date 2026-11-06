@@ -177,6 +177,7 @@ def offene_anfragen(heute: date | None = None) -> list[dict]:
             "nr": leihe.nr,
             "gerat": gerat.inventarnummer if gerat else (leihe.kat.name if leihe.kat else ""),
             "person": f"{leihe.person.vorname} {leihe.person.nachname}".strip() if leihe.person else "",
+            "person_id": leihe.person_id,
             "zweck": leihe.zweck or "",
             # F-102: Sprung ins Detail ist die Entscheidung über diese Anfrage (nur Admin,
             # die Übersicht nimmt für den Leser den Sprung aufs Gerät).

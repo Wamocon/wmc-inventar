@@ -215,8 +215,10 @@ _HTML_RUECKNAHME = _KOPF + """
 <h2>4. Festgestellte Mängel und offene Punkte</h2>
 {% if maengel_liste %}
 <ul>{% for m in maengel_liste %}<li>{{ m }}</li>{% endfor %}</ul>
-{% elif ohne_ausgabeprotokoll %}
+{% elif zustand_grundlage == "keine" %}
 <p>Keine. Die Hardware wurde vollständig mit Zubehör zurückgegeben. Zum Zustand bei Ausgabe liegt kein Protokoll vor.</p>
+{% elif zustand_grundlage == "teils" %}
+<p>Keine. Die Hardware wurde vollständig mit Zubehör zurückgegeben, die Geräte mit Ausgabeprotokoll im dort dokumentierten Zustand. Zum Zustand des Altbestands bei Ausgabe liegt kein Protokoll vor.</p>
 {% else %}
 <p>Keine. Die Hardware wurde vollständig mit Zubehör und im bei Ausgabe dokumentierten Zustand zurückgegeben.</p>
 {% endif %}
@@ -417,6 +419,19 @@ def _bezug_rueckgabe(protokoll: Protokoll) -> tuple[list[str], str]:
     return bezug, f"Grundlage sind die Ausgabeprotokolle vom {', '.join(daten[:-1])} und {daten[-1]}."
 
 
+def _zustand_grundlage(protokoll: Protokoll) -> str:
+    """FRM-002 Abschnitt 4: Haben die Geräte ein Ausgabeprotokoll? „alle“, „keine“ oder „teils“.
+
+    Entschieden wird je Gerät, nicht am Protokoll: Eine gemeinsame Rücknahme kann
+    Altbestand ohne Protokoll und Geräte mit Ausgabeprotokoll enthalten.
+    """
+    positionen = protokoll.positionen or []
+    mit = sum(1 for p in positionen if p.get("ausgabe_protokoll"))
+    if mit == 0:
+        return "alle" if protokoll.rueckgabe_zu_protokoll_id else "keine"
+    return "alle" if mit == len(positionen) else "teils"
+
+
 def _maengel_liste(positionen: list[dict], offboarding: list[dict]) -> list[str]:
     """FRM-002 Abschnitt 4: zuerst Mängel und fehlendes Zubehör je Gerät, dann „in Klärung“."""
     liste = []
@@ -474,7 +489,7 @@ def _render_inhalt(protokoll: Protokoll) -> str:
         "checkliste": _checkliste_eintraege(protokoll),
         "offboarding": offboarding,
         "maengel_liste": _maengel_liste(positionen, offboarding),
-        "ohne_ausgabeprotokoll": protokoll.rueckgabe_zu_protokoll_id is None,
+        "zustand_grundlage": _zustand_grundlage(protokoll),
         "bezug": bezug,
         "grundlage": grundlage,
         "anhaenge": _anhaenge(protokoll),

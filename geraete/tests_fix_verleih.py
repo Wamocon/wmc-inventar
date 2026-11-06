@@ -338,6 +338,13 @@ class AnfrageTests(VerleihTestCase):
         self.assertEqual(Leihe.objects.count(), vorher + 1)
         self.assertEqual(Leihe.objects.order_by("-id").first().person_id, self.leser.person_id)
 
+
+class EntscheidungTests(VerleihTestCase):
+    """F-32, F-93: Genehmigen mit Gerät, Ablehnen mit Pflichtbegründung, Mail."""
+
+    VON = HEUTE + timedelta(days=30)
+    BIS = HEUTE + timedelta(days=40)
+
     def test_ablehnen_ueber_die_seite(self):
         leihe = self.anfragen(self.VON, self.BIS)
         mail.outbox.clear()

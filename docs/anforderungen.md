@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Version | 0.6 (Stand der Abnahme; Raumplan nach dem Fluchtplan, IDs N-01 bis N-11 für Kapitel 7; Entscheidungen von Erwin vom 30.10. und 05.11. eingearbeitet) |
+| Version | 0.6 (Stand der Abnahme; Raumplan nach dem Fluchtplan, IDs N-01 bis N-11 für Kapitel 7; Entscheidungen von Erwin vom 30.10., 05.11. und 06.11. eingearbeitet) |
 | Datum | 05.11.2026 |
 | Verantwortlich | Erwin Moretz, IT |
 | Mockup | Claude Design: [WMC Inventar Mockup](https://claude.ai/artifact/JsCkL37DMg5Vi3tsDXY8cq); klickbarer Prototyp: `mockup/wmc-inventar-prototyp.html`, online [WMC Inventar Prototyp](https://claude.ai/artifact/VNqKqetybNXhGuMwrCm3kv) |
@@ -66,7 +66,7 @@ Nicht in Version 1:
 |---|---|---|
 | Admin | IT | Pflegt alles: Geräte, Personen, Arbeitsplätze, Vorgänge, Konten, Einstellungen, Import. |
 | Mitarbeiter | alle Beschäftigten | Sieht nur eigene Geräte, Protokolle und Leihen. Fragt Leihgeräte an. |
-| Leser | Geschäftsführung | Sieht Dashboard, alle Listen außer dem Verleih und alle Historien, darf exportieren. Fragt mit eigener Person Leihgeräte an. Ändert sonst nichts. |
+| Leser | Geschäftsführung | Sieht Dashboard, alle Listen außer dem Verleih und alle Historien, darf exportieren. Von den offenen Leihanfragen sieht er nur die eigenen. Fragt mit eigener Person Leihgeräte an. Ändert sonst nichts. |
 
 | Funktion | Admin | Mitarbeiter | Leser |
 |---|---|---|---|

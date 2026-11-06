@@ -1820,8 +1820,8 @@ def meine_geraete_leihe_neu(request):
 
     GET: Formular mit Leihkategorien und der Anzahl freier Geräte der
     Kategorie im Zeitraum. POST: Anfrage speichern, danach mit data-stand
-    „angefragt\" in /verleih/ (O-12). Der Leser sieht die Seite
-    (TESTSCHNITTSTELLE 3), fragt aber nicht an (Kapitel 2).
+    „angefragt\" in /verleih/ (O-12). Anfragen darf jedes Konto mit eigener
+    Person, auch der Leser (Testschnittstelle Abschnitt 3, Erwin 30.10.2026).
     """
     from .forms import LeiheAnfrageForm
     from .services import GeratFehler, leihe_anfragen
@@ -1909,7 +1909,8 @@ def meine_geraete_leihe_zurueckziehen(request, leih_id):
 
     POST: Leihe auf „zurueckgezogen\" setzen; die Reservierung endet
     damit. GET: Seite mit dem Knopf. Wer anfragen darf, darf die eigene
-    Anfrage zurückziehen (Kapitel 2): Mitarbeiter und Admin, nicht der Leser.
+    Anfrage zurückziehen: jedes Konto mit eigener Person, auch der Leser
+    (Erwin 30.10.2026).
     """
     from .forms import LeiheZurueckziehenForm
     from .models import Leihe
@@ -1945,7 +1946,7 @@ def meine_geraete_leihe_zurueckziehen(request, leih_id):
 def meine_geraete_leihe_verlaengern(request, leih_id):
     """F-35, F-111: Verlängerung der eigenen Leihe anfragen, die IT gewährt.
 
-    Kapitel 2: Mitarbeiter und Admin dürfen anfragen, der Leser nicht.
+    Anfragen darf jedes Konto mit eigener Person, auch der Leser (Erwin 30.10.2026).
     """
     from .forms import LeiheVerlaengerungAnfragenForm
     from .models import Leihe

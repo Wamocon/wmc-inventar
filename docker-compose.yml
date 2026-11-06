@@ -66,9 +66,11 @@ services:
     image: nginx:1.27-alpine
     depends_on:
       - web
+    # N-01: Docker öffnet veröffentlichte Ports an der Firewall vorbei. Deshalb nur an der
+    # Adresse aus OEFFENTLICHE_ADRESSE, Vorgabe 127.0.0.1; auf der VM ihre interne Adresse.
     ports:
-      - "${HTTPS_PORT:-443}:443"
-      - "${HTTP_PORT:-80}:80"
+      - "${OEFFENTLICHE_ADRESSE:-127.0.0.1}:${HTTPS_PORT:-443}:443"
+      - "${OEFFENTLICHE_ADRESSE:-127.0.0.1}:${HTTP_PORT:-80}:80"
     volumes:
       - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - ${TLS_ZERTIFIKAT:?TLS_ZERTIFIKAT fehlt in .env}:/etc/nginx/tls/zertifikat.pem:ro
@@ -86,13 +88,19 @@ services:
 
   sicherung:
     <<: *anwendung
+    environment:
+      <<: *umgebung
+      SICHERUNG_TAGE: ${SICHERUNG_TAGE:-30}
     volumes:
       - var-data:/srv/inventar/var
       - ${SICHERUNG_ZIEL:?SICHERUNG_ZIEL fehlt in .env}:/sicherung
+    # Erst sichern, wenn die Migrationen durch sind; dabei legt die Anwendung auch die
+    # Dateiablage an. Scheitert eine Sicherung, meldet das Skript es und der nächste
+    # Versuch folgt nach einer Stunde, ohne Neustart des Dienstes.
     command: >
-      sh -c "while true; do
-               scripts/sicherung.sh /sicherung || exit 1;
-               sleep 86400;
+      sh -c "until python manage.py migrate --check > /dev/null 2>&1; do sleep 5; done;
+             while true; do
+               if scripts/sicherung.sh /sicherung; then sleep 86400; else sleep 3600; fi;
              done"
 
 volumes:

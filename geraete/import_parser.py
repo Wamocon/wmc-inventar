@@ -589,6 +589,7 @@ class Zeilenwerte:
     kategorie_wert: str = ""            # Wert in der Datei
     kategorie: Kategorie | None = None  # Ergebnis der Zuordnung oder Blatt-Kategorie
     kategorie_abgewaehlt: bool = False  # Wert steht auf „nicht übernehmen“
+    nicht_vorhanden: bool = False       # Kennung „Nicht vorhanden“: kein Gerät (Erwin 06.11.)
     person_ziel: str = ""               # Zuordnung: Name, leer = keine Person
     person: Person | None = None        # vorhandene Person
     person_neu: str = ""                # Name einer anzulegenden Person
@@ -753,9 +754,11 @@ def zeile_lesen(vorlage: Vorlage, eintrag: dict, spalten_ziel: dict[str, str],
         garantie_bis=datum_aus_text(wert("Garantie bis")),
         kaufpreis=_preis_aus_text(wert("Kaufpreis netto")) if wert("Kaufpreis netto") else None,
     )
-    # „Nicht vorhanden“ in der Raumliste ist kein Gerät, sondern eine Lücke am Platz (F-62, F-83).
+    # „Nicht vorhanden“ in der Raumliste ist kein Gerät, sondern eine Lücke am Platz (F-62, F-83),
+    # auch wenn Hersteller, Typ und Modell daneben stehen (Entscheidung 7, Erwin 06.11.2026).
     if w.geraetename.strip().lower() == "nicht vorhanden":
         w.geraetename = ""
+        w.nicht_vorhanden = True
     w.defekt = _ist_defekt(wert(ZIEL_DEFEKT), w.notiz)
 
     for spalte in vorlage.spalten:
@@ -1055,6 +1058,10 @@ def _name_hinweis(lauf: _Lauf, zeile_nr: int, name: str, gerat: Gerat | None,
 
 def _zeile_berechnen(lauf: _Lauf, eintrag: dict, w: Zeilenwerte) -> VorschauZeile:
     zeile_nr = eintrag["zeile"]
+
+    # Entscheidung 7: Eine Zeile mit der Kennung „Nicht vorhanden“ beschreibt eine Lücke am Platz.
+    if w.nicht_vorhanden:
+        return VorschauZeile(zeile_nr, "uebersprungen", "„Nicht vorhanden“: kein Gerät am Platz")
 
     # F-84: Schon importierte Zeile, dann Seriennummer.
     gerat = _aus_herkunft(lauf, eintrag, w) or _aus_seriennummer(lauf, w)

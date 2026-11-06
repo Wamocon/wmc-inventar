@@ -41,6 +41,14 @@ def _darf_lesen(request) -> bool:
     return request.user.is_authenticated and _darf_sehen(request.user)
 
 
+def _nur_eigene_anfragen(konto, zeilen: list[dict]) -> list[dict]:
+    """Kapitel 2: Der Leser sieht alle Listen außer dem Verleih. Von den offenen
+    Leihanfragen bleiben ihm nur die eigenen, ohne Name und Zweck anderer (Erwin 06.11.2026)."""
+    if konto.ist_admin:
+        return zeilen
+    return [z for z in zeilen if konto.person_id and z.get("person_id") == konto.person_id]
+
+
 @login_required
 def uebersicht(request):
     """/ – Übersicht für Admin und Leser (F-100 bis F-104).
@@ -69,6 +77,8 @@ def uebersicht(request):
     if not request.user.ist_admin:
         # Testschnittstelle 3: /verleih/ ist nur für den Admin.
         for liste in arbeitslisten:
+            if liste["data_id"] == "anfragen":
+                liste["zeilen"] = _nur_eigene_anfragen(request.user, liste["zeilen"])
             for zeile in liste["zeilen"]:
                 if "link_leser" in zeile:
                     zeile["link"] = zeile["link_leser"]
@@ -163,6 +173,8 @@ def liste_export(request):
         return _keine_berechtigung(request)
     heute = _kz._heute()
     zeilen = _EXPORT_DEF[liste_id]["quelle"](heute)
+    if liste_id == "anfragen":
+        zeilen = _nur_eigene_anfragen(request.user, zeilen)
     kopfzeile = _EXPORT_DEF[liste_id]["kopfzeile"]
     felder = _EXPORT_DEF[liste_id]["felder"]
     # Die Spalten heißen wie die Kopfzeile, die Werte stehen unter den Feldern der Liste.

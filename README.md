@@ -25,7 +25,7 @@ Internes Web-Tool der WAMOCON-IT für die Verwaltung von Bürohardware: Bestand,
 Voraussetzung: internes TLS-Zertifikat, Firmenzertifikat für das Siegel (PKCS#12), SMTP-Zugang, ein Verzeichnis, das UrBackup erfasst.
 
 ```bash
-# 1. Werte eintragen
+# 1. Werte eintragen, auf der VM auch OEFFENTLICHE_ADRESSE (siehe unten)
 cp .env.example .env
 
 # 2. Starten; web migriert beim Start
@@ -78,12 +78,16 @@ Die vollständige Liste mit Pflichtwerten steht in `.env.example`.
 | `DATEIABLAGE` | Pfad der Dateiablage | `var/dateien` |
 | `SIEGEL_P12`, `SIEGEL_PASSWORT` | Siegel-Zertifikat (F-138). Ohne Siegel schließt kein Protokoll ab | im Entwicklungsmodus das Testsiegel |
 | `KENNZAHLEN_TOKEN` | Bearer-Token für `/api/kennzahlen` (F-105) | – |
+| `OEFFENTLICHE_ADRESSE` | Adresse, an der Docker die Ports 443 und 80 veröffentlicht | `127.0.0.1` |
+| `SICHERUNG_TAGE` | wie viele Tage Sicherungen aufgehoben werden | `30` |
+
+**Erreichbarkeit (N-01):** Docker öffnet veröffentlichte Ports an der Firewall des Servers vorbei, eine Regel in `ufw` schützt sie nicht. Deshalb lauscht der Proxy ohne weitere Angabe nur auf `127.0.0.1`. Auf der VM im Büronetz trägt man in `.env` die interne Adresse der VM als `OEFFENTLICHE_ADRESSE` ein, nicht `0.0.0.0`. Von außerhalb des Büronetzes geht es dann nur über das VPN.
 
 ### Dienste (docker-compose)
 
 | Dienst | Aufgabe | Port |
 |---|---|---|
-| `proxy` | nginx, HTTPS mit internem Zertifikat, setzt `X-Forwarded-For` | 443, 80 leitet um |
+| `proxy` | nginx, HTTPS mit internem Zertifikat, setzt `X-Forwarded-For` | 443, 80 leitet um, nur an `OEFFENTLICHE_ADRESSE` |
 | `web` | gunicorn, Django, WhiteNoise | intern 8000 |
 | `db` | PostgreSQL 16 | intern 5432 |
 | `cron` | stündlicher `tageslauf` | – |
@@ -111,7 +115,7 @@ curl -H "Authorization: Bearer <KENNZAHLEN_TOKEN>" http://127.0.0.1:8000/api/ken
 
 ### Tägliche Sicherung
 
-Der Dienst `sicherung` ruft `scripts/sicherung.sh /sicherung` einmal am Tag auf, `SICHERUNG_ZIEL` ist das Verzeichnis, das UrBackup erfasst. Stände älter als 30 Tage (`SICHERUNG_TAGE`) räumt das Skript weg.
+Der Dienst `sicherung` wartet nach dem Start, bis die Migrationen durch sind, und ruft dann `scripts/sicherung.sh /sicherung` einmal am Tag auf. `SICHERUNG_ZIEL` ist das Verzeichnis, das UrBackup erfasst. Stände älter als `SICHERUNG_TAGE` Tage (Vorgabe 30) räumt das Skript weg. Scheitert eine Sicherung, steht die Meldung im Protokoll des Dienstes (`docker compose logs sicherung`), und der nächste Versuch folgt nach einer Stunde.
 
 Das Skript erzeugt unter `<Ziel>/<Stempel>/`:
 
@@ -120,7 +124,7 @@ Das Skript erzeugt unter `<Ziel>/<Stempel>/`:
 | `inventar.sql.gz` | PostgreSQL-Dump, komprimiert (ohne `DATABASE_URL`: `inventar.sqlite3`) |
 | `dateien/` | Kopie der Dateiablage |
 
-Scheitert ein Teil, endet es mit einem Fehler, und der Ordner behält die Endung `.unvollstaendig`.
+Scheitert ein Teil, endet es mit einem Fehler, und der Ordner behält die Endung `.unvollstaendig`. Der nächste Versuch ersetzt ihn, so sammeln sich bei einem dauerhaften Fehler keine Ordner an.
 
 ### Rücksicherung
 
@@ -154,14 +158,17 @@ docker compose up -d db
 # 2. Dump einspielen; er löscht vorhandene Tabellen und legt sie neu an
 gunzip -c /pfad/zum/<Stempel>/inventar.sql.gz | docker compose exec -T db psql -q -U inventar -d inventar
 
-# 3. Alle Dienste starten und die Dateien zurückkopieren
-docker compose up -d
+# 3. Nur die Anwendung starten und die Dateien zurückkopieren, noch ohne Sicherung und Tageslauf
+docker compose up -d web
 docker compose cp -a /pfad/zum/<Stempel>/dateien/. web:/srv/inventar/var/dateien
+
+# 4. Alle übrigen Dienste starten; die erste Sicherung danach enthält Datenbank und Dateien
+docker compose up -d
 ```
 
 Das Image bringt `pg_dump` 17 mit, die Datenbank ist PostgreSQL 16. Deshalb meldet Schritt 2 einmal `unrecognized configuration parameter "transaction_timeout"`. Das ist harmlos; andere Fehler sind es nicht.
 
-Am 05.11.2026 auf der DGX so gelaufen: Totalverlust mit `docker compose down -v`, Rücksicherung, Eckwerte gleich, ein signiertes Protokoll danach gegengezeichnet und versiegelt.
+Erprobt ist dieser Weg noch nicht. Am 05.11.2026 lief auf der DGX nur ein Totalverlust mit `docker compose down -v` und das Einspielen in eine leere Datenbank, auf dem Stand `54bdb8a`. Die Ausgaben dieses Laufs sind nicht aufgehoben. Den Weg oben, mit `down` ohne `-v` über die vorhandene Datenbank und mit den Schritten 3 und 4 in dieser Reihenfolge, vor dem Go-live auf der VM einmal durchspielen und das Ergebnis festhalten.
 
 `SICHERUNG_ZIEL` muss für den Nutzer der Anwendung (UID 1000) schreibbar sein. Vor dem Go-live einmal testen (N-06).
 

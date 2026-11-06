@@ -80,7 +80,7 @@ button{font:inherit;color:inherit}
 
 label{font-size:13px;font-weight:600}
 .field{display:flex;flex-direction:column;gap:6px;min-width:0}
-.field.full{grid-column:1/-1}
+.field.full,.form-grid>.full{grid-column:1/-1}
 .req::after{content:" *";color:var(--red)}
 input,select,textarea{font:14px/1.4 var(--font-ui);color:var(--fg);background:var(--surface);border:1px solid var(--control);border-radius:4px;padding:8px 10px;min-height:38px;width:100%}
 textarea{min-height:76px;resize:vertical}

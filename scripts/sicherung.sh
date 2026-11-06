@@ -3,8 +3,8 @@
 # Datenbank-Dump und Kopie der Dateiablage in ein Verzeichnis, das UrBackup erfasst.
 # Aufruf: scripts/sicherung.sh [Zielverzeichnis]
 #
-# Scheitert ein Teil, endet das Skript mit einem Fehler und der Ordner behält die Endung
-# .unvollstaendig. Eine Sicherung ohne Dump darf nicht als Erfolg durchgehen.
+# Scheitert ein Teil, endet das Skript mit einem Fehler und der Ordner behält bis zum nächsten
+# Versuch die Endung .unvollstaendig. Eine Sicherung ohne Dump darf nicht als Erfolg durchgehen.
 
 set -euo pipefail
 
@@ -14,6 +14,11 @@ STEMPEL=$(date +%Y%m%d-%H%M%S)
 ZIEL_VERZ="$ZIEL/$STEMPEL-$$.unvollstaendig"
 AUFHEBEN_TAGE="${SICHERUNG_TAGE:-30}"
 
+# Ein gescheiterter Versuch von früher wird durch diesen ersetzt, damit sich bei einem
+# dauerhaften Fehler keine Ordner ansammeln. Die Meldung dazu steht im Protokoll des Dienstes.
+mkdir -p "$ZIEL"
+# Nur Ordner älter als eine Stunde, eine Sicherung, die gerade daneben läuft, bleibt unberührt.
+find "$ZIEL" -mindepth 1 -maxdepth 1 -type d -name '20*.unvollstaendig' -mmin +60 -exec rm -rf {} +
 mkdir -p "$ZIEL_VERZ"
 trap 'echo "Sicherung gescheitert: $ZIEL_VERZ" >&2' ERR
 

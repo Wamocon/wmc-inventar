@@ -225,7 +225,7 @@ Bedienelemente, die Tests ansprechen, tragen ein Attribut `data-test`. Weitere A
 Übersicht im Einzelnen:
 
 - `kennzahl` hat `data-id`. Mit `gesamt` (IST/Gesamt, F-100): `in-benutzung`, `arbeitsplaetze-vollstaendig`, `verliehen`, `geprueft`. Nur mit `ist`: `ueberfaellig`, `anfragen-offen`, `garantie-30-tage`, `unterschriften-offen`. `delta` fehlt, solange es keinen Zählerstand vom Vortag gibt.
-- `arbeitsliste` hat `data-id`: `ueberfaellig`, `anfragen`, `arbeitsplaetze-unvollstaendig`, `garantie`, `unterschriften-offen`, `daten-unvollstaendig`, `offene-punkte` (Prüfpunkte „in Klärung“, F-133), `austritte` (Austritte mit offenen Geräten). Solange ein PDF nicht hinausging, steht zusätzlich `versand-offen` da (F-139). Eine leere Arbeitsliste steht mit ihrem Hinweistext da, ohne `zeile`.
+- `arbeitsliste` hat `data-id`: `ueberfaellig`, `anfragen`, `arbeitsplaetze-unvollstaendig`, `garantie`, `unterschriften-offen`, `daten-unvollstaendig`, `offene-punkte` (Prüfpunkte „in Klärung“, F-133), `austritte` (Austritte mit offenen Geräten). Solange ein PDF nicht hinausging, steht zusätzlich `versand-offen` da (F-139). Eine leere Arbeitsliste steht mit ihrem Hinweistext da, ohne `zeile`. Für den Leser enthält `anfragen` nur seine eigenen Anfragen, ebenso `/exporte/?liste=anfragen`.
 - `inventarwert` ist die Summe nach F-104, nur für Admin und Leser.
 - `/api/kennzahlen` liefert dieselben Werte als JSON: `{"stand": "2026-11-02T09:30", "kennzahlen": {"in-benutzung": {"ist": 125, "gesamt": 142, "delta": 2}, "ueberfaellig": {"ist": 1, "delta": null}, …}}`. Schlüssel sind die `data-id` der Kennzahlen; `gesamt` nur, wo die Übersicht es zeigt; `delta` ist eine Zahl oder `null`.
 
