@@ -105,6 +105,15 @@ class LeserAnfragenTests(Grundlage):
         self.assertNotIn("Anna", text)
         self.assertIn("L-0902", text)
 
+    def _kennzahl_anfragen(self, antwort) -> str:
+        seite = antwort.content.decode()
+        kachel = seite[seite.index('data-id="anfragen-offen"'):]
+        return kachel[kachel.index('data-test="ist">') + len('data-test="ist">'):].split("</span>")[0]
+
+    def test_kennzahl_zaehlt_wie_die_liste(self):
+        self.assertEqual(self._kennzahl_anfragen(self.c.get("/")), "1")
+        self.assertEqual(self._kennzahl_anfragen(self.client.get("/")), "2")
+
     def test_admin_sieht_alle(self):
         seite = self.client.get("/").content.decode()
         self.assertIn('data-id="L-0901"', seite)

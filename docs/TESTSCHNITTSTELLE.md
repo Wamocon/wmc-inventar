@@ -204,7 +204,7 @@ Bedienelemente, die Tests ansprechen, tragen ein Attribut `data-test`. Weitere A
 
 | Bereich | `data-test` | Zusatz |
 |---|---|---|
-| Rahmen | `hauptnavigation`, darin `nav-uebersicht`, `nav-geraete`, `nav-arbeitsplaetze`, `nav-verleih`, `nav-personen`, `nav-import`, `nav-etiketten`, `nav-einstellungen`, `nav-meine-geraete`; `suche`, `suchtreffer`, `abmelden` | Einträge, die eine Rolle nicht sehen darf, fehlen im HTML |
+| Rahmen | `hauptnavigation`, darin `nav-uebersicht`, `nav-geraete`, `nav-arbeitsplaetze`, `nav-verleih`, `nav-personen`, `nav-import`, `nav-etiketten`, `nav-einstellungen`, `nav-meine-geraete`, `nav-leihen` (Leihgerät anfragen, bei jedem Konto mit eigener Person); `suche`, `suchtreffer`, `abmelden` | Einträge, die eine Rolle nicht sehen darf, fehlen im HTML |
 | Rückmeldungen | `meldung` (Erfolg), `fehler` (Fehler im Formular oder Vorgang), `keine-berechtigung` | |
 | Listen | `liste`, je Zeile `zeile`; `anzahl`; `export-xlsx`, `export-csv`; `auswahl` (Kästchen je Zeile), `etiketten-drucken`, `sammel-ausgabe` | Zeile mit `data-id` = Inventarnummer, Kennung, Personen-ID, Leih- oder Protokollnummer; in der Leihliste zusätzlich `data-stand` (Abschnitt 5) |
 | Gerätedetail | `inventarnummer`, `status`, `zustand`, `verbleib`, `historie`, darin `vorgang`; `qr` | `status` mit `data-wert` (Abschnitt 5); `vorgang` mit `data-typ`, z. B. `Aufnahme`, `Ausgabe`, `Import`; `qr` mit `data-qr` = Inhalt des QR-Codes (F-70) |

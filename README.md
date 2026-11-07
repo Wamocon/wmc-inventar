@@ -153,7 +153,7 @@ rm -rf var/dateien && cp -a /srv/inventar/sicherung/<Stempel>/dateien var/dateie
 ```bash
 # 1. Alle Dienste anhalten und nur die Datenbank starten, damit beim Einspielen niemand schreibt
 docker compose down
-docker compose up -d db
+docker compose up -d --wait db
 
 # 2. Dump einspielen; er löscht vorhandene Tabellen und legt sie neu an
 gunzip -c /pfad/zum/<Stempel>/inventar.sql.gz | docker compose exec -T db psql -q -U inventar -d inventar

@@ -75,6 +75,12 @@ def uebersicht(request):
     ]
     arbeitslisten = _kz.arbeitslisten(heute)
     if not request.user.ist_admin:
+        # Die Kennzahl zählt wie die Liste daneben nur die eigenen Anfragen; das Delta
+        # gilt für alle Anfragen und entfällt (Prüfer, Erwin 06.11.2026).
+        eigene = len(_nur_eigene_anfragen(request.user, _kz.offene_anfragen(heute)))
+        for kz in kennzahlen:
+            if kz["data_id"] == "anfragen-offen":
+                kz.update(ist=eigene, delta=None, delta_abs=0, achtung="anfragen-offen" in ACHTUNG and bool(eigene))
         # Testschnittstelle 3: /verleih/ ist nur für den Admin.
         for liste in arbeitslisten:
             if liste["data_id"] == "anfragen":

@@ -1,6 +1,6 @@
 # Übergabe WMCNL-2755
 
-Ausgefüllt von: Werkbank (Claude Code) · Datum: 05.11.2026 · Zweig: `werkbank/inventar` in `~/werkbank/wmc-inventar.git` auf der DGX, nicht im Git-Bus · Letzter Code-Commit: `cee3790`
+Ausgefüllt von: Werkbank (Claude Code) · Datum: 05.11.2026, ergänzt am 07.11.2026 · Zweig: `werkbank/inventar` in `~/werkbank/wmc-inventar.git` auf der DGX, nicht im Git-Bus · Letzter Code-Commit: siehe „Nach der Abnahme (06./07.11.2026)“, Tabelle und Prüfstand darunter gelten für `cee3790`
 
 ## Stand 05.11.2026
 
@@ -15,7 +15,7 @@ Der Code stammt ab `ea64ce5` von der Werkbank, nicht von Gregor. Erwin hat das a
 
 - [x] Alle sieben Meilensteine sind umgesetzt.
 - [x] Jede ID aus Kapitel 5 und 7 steht hier mit Stand und Nachweis, auch das bisher fehlende F-91.
-- [x] `manage.py test` ist grün, mit SQLite und mit PostgreSQL 16: 841 Tests, einer übersprungen.
+- [x] `manage.py test` ist grün, mit SQLite und mit PostgreSQL 16: 841 Tests, einer übersprungen. Nach der Abnahme mit SQLite 852 Tests, einer übersprungen; die PostgreSQL-Suite lief nicht erneut.
 - [x] `migrate`, `beispieldaten`, `testsiegel`, `tageslauf --stichtag 2026-11-02` laufen in einer leeren Datenbank ohne Fehler.
 - [x] Der Import der Testdatei ergibt die Eckwerte: 18 neu, 11 ergänzt, 99 Geräte, 84 auf Lager, 15 in Benutzung.
 - [ ] Der Stand liegt nicht auf `gregor/inventar` und nicht im Git-Bus. Der Hook des Busses lässt nur `gregor/*` und `theo/*` zu. Für die Abnahme hat Erwin am 05.11. eine eigene Instanz gewählt, der Weg in den Bus ist offen.
@@ -75,6 +75,32 @@ M7 Teil 1 (A-0905): Einstellungen (F-122, F-90, F-96, F-130, N-02). `/einstellun
 M7 Teil 2 (A-0906): Mails und Tageslauf (F-91 bis F-96, F-140, F-53, F-101, F-93, F-32). `konten/management/commands/tageslauf.py`: Befehl `tageslauf --stichtag JJJJ-MM-TT` ohne Stichtag = heute. Erledigt: F-91 Leihe endet morgen → Mail an die Person (einmal je Stichtag, zweiter Lauf keine); F-92 Leihe überfällig → Mail an Person und IT (einmal je Stichtag); F-94 Garantie endet in 30 Tagen → Sammelmail an die IT (nur Montag); F-95 Unterschriften seit mehr als 3 Tagen offen → in derselben Sammelmail; F-140 Erinnerung an die Gegenzeichnung am dritten Tag nach dem Versand des Links (einmal, `Protokoll.gegenzeichnung_erinnerung_gesendet`); F-101 Zählerstand für das Delta (`stammdaten/models.py:Zaehlerstand`, `delta_zum_vortag`); F-53 Deaktivierung von Konten am Tag nach dem Austritt. `stammdaten/models.py:Mailversand` (Deduplizierung je Stichtag + Mailtyp, F-96); `stammdaten/models.py:Einstellungen` (6 neue Schalter: `mail_leihe_endet_morgen`, `mail_leihe_ueberfaellig`, `mail_leihe_neu`, `mail_garantie_sammelmail`, `mail_unterzeichen_sammelmail`, `mail_gegenzeichnung_erinnerung`). `geraete/models.py:Protokoll.gegenzeichnung_erinnerung_gesendet` (DateTimeField, null=True). `geraete/services.py:_mail_anfrage_an_it` (F-93, Leihanfrage → Mail an die IT), `geraete/services.py:_mail_entscheidung_an_person` (F-32, Genehmigung/Ablehnung → Mail an die Person), aufgerufen in `leihe_anfragen`, `leihe_genehmigen`, `leihe_ablehnen`. `stammdaten/migrations/0006_m7_t2_mailversand_zaehlerstand.py`, `geraete/migrations/0015_protokoll_gegenzeichnung_erinnerung_gesendet.py`. `konten/tests_m7_t2.py` (15 Tests: `TageslaufF91Tests` 2, `TageslaufF92Tests` 2, `TageslaufF94Tests` 2, `TageslaufF140Tests` 2, `KontoDeaktivierungTests` 2, `LeihanfrageMailTests` 3, `ZaehlerstandTests` 2). Alle M7-Teil-2-Tests grün.
 
 M7 Teil 3 (A-0907): Übersicht, Arbeitslisten, Export und Kennzahlen (F-100 bis F-105). Die Startseite `/` ist jetzt die Übersicht für Admin und Leser (TESTSCHNITTSTELLE Kapitel 3). Die acht Kennzahlen aus F-100 stehen als Tabelle `data-test="kennzahlen"` mit den data-id `in-benutzung`, `ueberfaellig`, `anfragen-offen`, `garantie-30-tage`, `unterschriften-offen`, `arbeitsplaetze-vollstaendig`, `verliehen`, `geprueft`; jede Zeile trägt `data-test="kennzahl" data-id`, `data-test="ist"` und `data-test="gesamt"`, das Delta als `data-test="delta"`. Das Delta (F-101) zeigt den Unterschied zum Zählerstand des Vortags aus Teil 2; fehlt der Vortag, steht ein Gedankenstrich. Negatives Delta zeigt U+2212 (−) statt eines ASCII-Bindestrichs. Die acht Arbeitslisten aus F-102 (F-36, F-88, F-133) stehen als Abschnitte `data-test="arbeitsliste"` mit den data-id `ueberfaellig`, `anfragen`, `arbeitsplaetze-unvollstaendig`, `garantie`, `unterschriften-offen`, `daten-unvollstaendig`, `offene-punkte`, `austritte`; jede Zeile trägt `data-test="zeile"` und einen Sprunglink `data-test="sprung"` auf das Detail. Der Inventarwert (F-104) steht unter `data-test="inventarwert"` mit `data-test="wert"`, als Betrag mit Tausenderpunkt und Euro-Zeichen (TESTSCHNITTSTELLE Kapitel 5). Jede Arbeitsliste und die Geräteliste lässt sich exportieren (F-103): `/geraete/?status=auf-lager&format=csv` liefert eine CSV-Datei mit den gefilterten Geräten, `format=xlsx` eine XLSX-Datei, die openpyxl öffnen kann; nur Admin und Leser dürfen exportieren (Mitarbeiter: 403). `/exporte/?liste=<data-id>&format=csv|xlsx` exportiert eine der acht Listen mit ihrem aktuellen Filter. `/api/kennzahlen` (F-105) liefert die Kennzahlen als JSON mit `stand` und `kennzahlen` (je data-id: `ist`, optional `gesamt`, `delta`); nur mit Header `Authorization: Bearer <KENNZAHLEN_TOKEN>`; ohne oder mit falschem Token 401, ohne gesetztes `KENNZAHLEN_TOKEN` 404. `geraete/kennzahlen.py` (kennzahlen, delta_zum_vortag, arbeitslisten, inventarwert, uebersicht), `geraete/uebersicht.py` (uebersicht, liste_export, api_kennzahlen), `geraete/export.py` (antwort_csv, antwort_xlsx), `geraete/templatetags/betraegeuro.py` (Filter betraegeuro), `geraete/views.py:_geraete_export` (Export der Geräteliste), `inventar/urls.py` (Routen `/`, `/exporte/`, `/api/kennzahlen`), `konten/urls.py` (alte Route `/` entfernt), `templates/uebersicht.html`, `geraete/tests_m7_t3.py` (17 Tests: `UebersichtRechteTests` 3, `UebersichtInhaltTests` 3, `UebersichtDeltaTests` 2, `ExportTests` 3, `ApiKennzahlenTests` 4, `DeltaFormatTests` 2). Alle 17 M7-Teil-3-Tests grün.
+
+## Nach der Abnahme (06./07.11.2026)
+
+Erwin hat Version 1 am 06.11. abgenommen („Für die erste Version ist das schon brauchbar“, Stand `ad682d8`, Code wie `cee3790`) und die zehn Entscheidungen der Werkbank unten bestätigt. Danach prüfte ein unabhängiger Prüfer die letzte Korrektur und den Docker-Lauf aus den Spuren, ein zweiter die Korrekturen daraus.
+
+- **Gefunden an `ad682d8`, behoben in `4be5194`:**
+  - „Nicht vorhanden“ in der Raumliste wurde beim Import doch ein Gerät, wenn Hersteller, Typ und Modell daneben standen (Entscheidung 7).
+  - Im PDF einer gemeinsamen Rücknahme von Altbestand und einem Gerät mit Ausgabeprotokoll behauptete Abschnitt 4 einen dokumentierten Zustand für den Altbestand.
+  - Die README nannte die Rücksicherung „so gelaufen“, obwohl es dafür keine Ausgabe gibt. Sie sagt jetzt, dass der Weg nicht erprobt ist, und nennt die Reihenfolge der Schritte richtig.
+- **Dazu entschieden (Erwin, 06.11.):**
+  - Der Leser sieht von den offenen Leihanfragen nur seine eigenen, auf der Übersicht (Liste und Kennzahl) und im Export `anfragen`.
+  - Docker veröffentlicht die Ports 80 und 443 ohne weitere Angabe nur auf `127.0.0.1`. Die Adresse kommt aus `OEFFENTLICHE_ADRESSE`; auf der VM trägt man die interne Adresse ein (N-01).
+- **Kleinigkeiten, ebenfalls behoben:** Spalten der Verleihliste wie im Prototyp (Person vor Gerät, „Status“); Eintrag „Leihgerät anfragen“ in der Seitenleiste des Lesers; `SICHERUNG_TAGE` kommt im Container an; der Dienst `sicherung` wartet auf die Migrationen und versucht es nach einem Fehler nach einer Stunde, ohne neue Ordner `.unvollstaendig` anzusammeln; ein leerer Zustand im Offboarding wird abgewiesen; Hinweis im Reparaturdialog über die ganze Breite; Klasse `EntscheidungTests` wiederhergestellt; Docstrings zum Leser richtiggestellt.
+- **Prüfung der Korrekturen an `079853c`:** 22 Zeilen, 20 erfüllt, 2 nur im Code gelesen (der Dienst `sicherung` im Container und die Reihenfolge der Rücksicherung), keine Abweichung, die vor dem Hochladen behoben werden müsste. Die Kennzahl „Offene Leihanfragen“ zählte für den Leser noch alle Anfragen, `--wait` fehlte bei `docker compose up -d db` und `nav-leihen` in der Markerliste der Testschnittstelle; das ist danach behoben.
+- **Stand der Tests:** 852 Tests mit SQLite, einer übersprungen, an `079853c` grün. Die Compose-Datei wurde mit `docker compose config` ausgewertet, nicht gestartet.
+- **Nicht gelaufen:** Die geänderte Compose-Datei und das geänderte `scripts/sicherung.sh` liefen nicht in Docker. Der Docker-Lauf vom 05.11. gilt für `54bdb8a`. Die Rücksicherung ist nie nachgewiesen und vor dem Go-live auf der VM einmal durchzuspielen.
+
+### Bekannte Kleinigkeiten, nicht behoben
+
+- Der Import prüft „Nicht vorhanden“ nur in der Spalte des Gerätenamens (`geraete/import_parser.py`). Die echte Testdatei ist nicht betroffen; steht die Kennung in einer Kommentarspalte, entsteht weiter ein Gerät.
+- Fehlt der Schlüssel `zustand-<Nr>` im Aufruf des Offboardings ganz, gilt der bisherige Zustand (`stammdaten/views.py`). Über das Formular nicht erreichbar.
+- Der Export von `/verleih/` hat die Spalten noch in der alten Reihenfolge (Gerät vor Person). Der Prototyp kennt keinen Export.
+- Der Einleitungssatz im PDF einer gemischten Rücknahme nennt nur die Ausgabeprotokolle; Abschnitt 1 nennt den Altbestand (`_bezug_rueckgabe` in `geraete/pdf.py`).
+- `scripts/sicherung.sh`: Die Schwelle `-mmin +60` und der Wiederholabstand von 3600 s liegen dicht beieinander, und `find` und `mkdir` laufen vor dem `trap`.
+- `/api/kennzahlen` gibt die Gesamtzahl der offenen Anfragen heraus. Die Schnittstelle ist durch das Token geschützt und nicht an ein Konto gebunden.
+- `13_m5_verleih.robot` aus dem Klon `wmc-inventar-tests` war an der Prüfinstanz 6 von 21 grün, ohne Vergleichslauf vor der Änderung. Auf Zellenpositionen verlässt sich keine Testdatei.
 
 ## Stand je Meilenstein
 
