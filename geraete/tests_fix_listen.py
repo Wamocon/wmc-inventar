@@ -976,7 +976,8 @@ class UebersichtTests(Grund):
         self.client.force_login(self.leser)
         antwort = self.client.get("/")
         self.assertNotContains(antwort, "/genehmigen/")
-        self.assertContains(antwort, "L-0002")
+        # Erwin 06.11.2026: Der Leser sieht von den offenen Anfragen nur die eigenen, nicht die von Anna.
+        self.assertNotContains(antwort, "L-0002")
 
     def test_lange_arbeitsliste_bleibt_im_rahmen(self):
         for _ in range(9):
