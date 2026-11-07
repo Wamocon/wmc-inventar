@@ -1,0 +1,20 @@
+# Ausnahmen für den Secret-Scan (gitleaks), jede einzeln geprüft.
+# Stand 07.11.2026, auf Erwins Entscheidung im Auswahlfenster. Gilt nur für diese Fundstellen;
+# jeder neue Treffer, auch in Testdateien, lässt den Scan weiter rot werden.
+#
+# Zehn Testpasswörter in konten/tests.py, Commits b554ace und 255006e. Sie gehören zu erfundenen
+# Konten der Unit-Tests und öffnen nichts.
+255006ee8ebedd4a4ca6b1586d8d3cdfe458be76:konten/tests.py:generic-api-key:107
+255006ee8ebedd4a4ca6b1586d8d3cdfe458be76:konten/tests.py:generic-api-key:119
+255006ee8ebedd4a4ca6b1586d8d3cdfe458be76:konten/tests.py:generic-api-key:128
+255006ee8ebedd4a4ca6b1586d8d3cdfe458be76:konten/tests.py:generic-api-key:141
+b554acea114d8b0357d0567bd1e0d245e0a14847:konten/tests.py:generic-api-key:154
+b554acea114d8b0357d0567bd1e0d245e0a14847:konten/tests.py:generic-api-key:165
+b554acea114d8b0357d0567bd1e0d245e0a14847:konten/tests.py:generic-api-key:174
+b554acea114d8b0357d0567bd1e0d245e0a14847:konten/tests.py:generic-api-key:189
+b554acea114d8b0357d0567bd1e0d245e0a14847:konten/tests.py:generic-api-key:198
+b554acea114d8b0357d0567bd1e0d245e0a14847:konten/tests.py:generic-api-key:211
+#
+# Fester Testwert für SECRET_KEY im Entwicklungsmodus, inventar/settings.py, erster Commit 711ddd5.
+# Im Betrieb (INVENTAR_DEBUG nicht 1) ist INVENTAR_SECRET_KEY Pflicht, ohne ihn bricht die Anwendung beim Start ab.
+711ddd5485d99940e63e0ecde5c2040d78a43a70:inventar/settings.py:generic-api-key:18
