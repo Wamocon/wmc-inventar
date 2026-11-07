@@ -1,0 +1,21 @@
+{% extends "basis.html" %}
+{% block titel %}Passwort vergessen · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="login-wrap">
+  <h1>Passwort vergessen</h1>
+  <p class="muted">Geben Sie Ihre E-Mail-Adresse ein. Wir senden Ihnen einen Link zum Zurücksetzen des Passworts (1 Stunde gültig, einmal nutzbar).</p>
+  <form method="post" action="/passwort-vergessen/" novalidate>
+    {% csrf_token %}
+    <div class="login-feld">
+      <label for="{{ form.email.id_for_label }}" class="req">E-Mail</label>
+      {{ form.email }}
+    </div>
+    <div class="login-akt">
+      <button type="submit" class="btn primary" data-test="passwort-vergessen-button">Link senden</button>
+    </div>
+    <div class="login-links">
+      <a class="btn link" href="/anmelden/">Zurück zur Anmeldung</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

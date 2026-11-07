@@ -1,0 +1,22 @@
+{% extends "basis.html" %}
+{% block titel %}Anfrage zurückziehen · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div>
+    <h1>Anfrage zurückziehen</h1>
+    <p class="muted lead">Leihe {{ leihe.nr }}: {{ leihe.kat.name }}, {{ leihe.beginn|date:"d.m.Y" }} bis {{ leihe.ende|date:"d.m.Y" }}, {{ leihe.zweck }}</p>
+  </div>
+</div>
+<div data-test="dialog" data-name="zurueckziehen">
+  <form method="post" novalidate data-test="zurueckziehen-formular">
+    {% csrf_token %}
+    <div class="meldungen">
+      {% if meldung %}<div class="meldung error" data-test="fehler">{{ meldung }}</div>{% endif %}
+    </div>
+    <div class="actions">
+      <button type="submit" class="btn primary" data-test="bestaetigen">Zurückziehen</button>
+      <a class="btn link" href="/meine-geraete/" data-test="abbrechen">Abbrechen</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

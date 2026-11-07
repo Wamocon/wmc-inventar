@@ -1,0 +1,32 @@
+{% extends "basis.html" %}
+{% block titel %}Erstinventur · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div><h1>Erstinventur</h1><p class="muted lead">Fortschritt je Ort: geprüft / alle Geräte.</p></div>
+  <div class="actions">
+    <a class="btn" href="/arbeitsplaetze/liste/" data-test="zurueck">Zurück</a>
+    <a class="btn" href="/arbeitsplaetze/" data-test="raumplan-link">Raumplan</a>
+  </div>
+</div>
+
+<div class="abschnitt">
+  <h2>Gesamt</h2>
+  <p data-test="gesamt-fortschritt">{{ total_geprueft }} von {{ total_alle }} geprüft</p>
+</div>
+
+<div class="liste" data-test="fortschritt-liste">
+  {% for z in zeilen %}
+  <div class="zeile">
+    <span data-test="ort-kennung">{{ z.ort.kennung }}</span>
+    <span data-test="fortschritt" data-ist="{{ z.geprueft }}" data-gesamt="{{ z.alle }}">{{ z.geprueft }} / {{ z.alle }} geprüft</span>
+    {% if z.vollstaendig %}
+    <span class="chip-status in-benutzung" data-test="vollstaendig">✓ vollständig</span>
+    {% endif %}
+    <a class="btn sm" href="/geraete/?ort={{ z.ort.kennung }}" data-test="liste-link">In der Liste</a>
+    {% if z.ort.typ == "arbeitsplatz" %}<a class="btn sm" href="/arbeitsplaetze/{{ z.ort.kennung }}/" data-test="detail-link">Ansehen</a>{% endif %}
+  </div>
+  {% empty %}
+  <div class="zeile muted">Keine Orte gefunden.</div>
+  {% endfor %}
+</div>
+{% endblock %}

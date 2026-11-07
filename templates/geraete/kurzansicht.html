@@ -1,0 +1,31 @@
+{% extends "basis.html" %}
+
+{% block titel %}{{ gerat.inventarnummer }} · WMC Inventar{% endblock %}
+
+{% block inhalt %}
+<div class="page-head">
+    <div>
+        <h1>{{ gerat.inventarnummer }}</h1>
+        <p class="lead muted">Kurzansicht</p>
+    </div>
+</div>
+
+<section class="abschnitt" data-test="kurzansicht">
+    <dl class="detail-grid">
+        <dt>Kategorie</dt>
+        <dd data-test="kategorie">{{ gerat.kategorie.name }}</dd>
+        <dt>Modell</dt>
+        <dd data-test="modell">{{ gerat.hersteller }} {{ gerat.modell }}</dd>
+        <dt>Inventarnummer</dt>
+        <dd class="inv num" data-test="inventarnummer">{{ gerat.inventarnummer }}</dd>
+        <dt>Zuordnung</dt>
+        <dd data-test="zuordnung">
+            {% if Ihnen_zugeordnet %}
+            Ihnen zugeordnet
+            {% else %}
+            nicht Ihnen zugeordnet
+            {% endif %}
+        </dd>
+    </dl>
+</section>
+{% endblock %}

@@ -1,0 +1,8 @@
+<form method="post" action="/import/zurueck/" class="form-inline">
+  {% csrf_token %}
+  <button type="submit" class="btn" data-test="zurueck">Zurück</button>
+</form>
+<form method="post" action="/import/abbrechen/" class="form-inline">
+  {% csrf_token %}
+  <button type="submit" class="btn" data-test="abbrechen">Abbrechen</button>
+</form>

@@ -1,0 +1,37 @@
+{% extends "basis.html" %}
+{% block titel %}Fehlendes vom Lager ausgeben · {{ ort.kennung }} · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div>
+    <h1>Fehlendes vom Lager ausgeben</h1>
+    <p class="muted lead">{{ ort.kennung }}{% if ort.raum %} · {{ ort.raum }}{% endif %}{% if ort.feste_person %} · {{ ort.feste_person.voller_name }}{% endif %}</p>
+  </div>
+</div>
+<div data-test="dialog" data-name="ausgabe">
+  {% if zeilen %}
+  <form method="post" novalidate data-test="ausgabe-formular">
+    {% csrf_token %}
+    {% for z in zeilen %}
+    <fieldset class="card" data-test="fehlend-kategorie" data-id="{{ z.kategorie.name }}">
+      <legend class="card-head"><h2>fehlt: {{ z.fehlt }} × {{ z.kategorie.name }}</h2></legend>
+      {% for e in z.geraete %}
+      <label class="check" for="gerat-{{ e.gerat.pk }}">
+        <input type="checkbox" id="gerat-{{ e.gerat.pk }}" name="gerat" value="{{ e.gerat.pk }}" {% if e.vorbelegt %}checked{% endif %} data-test="auswahl">
+        <span>{{ e.gerat.inventarnummer }} · {{ e.gerat.hersteller }} {{ e.gerat.modell }}{% if e.gerat.seriennummer %} · SN {{ e.gerat.seriennummer }}{% endif %}</span>
+      </label>
+      {% empty %}
+      <p class="muted" data-test="kein-bestand">Kein freies Gerät auf Lager.</p>
+      {% endfor %}
+    </fieldset>
+    {% endfor %}
+    <div class="actions">
+      <button type="submit" class="btn primary" data-test="speichern">Ausgeben</button>
+      <a class="btn" href="/arbeitsplaetze/{{ ort.kennung }}/" data-test="abbrechen">Abbrechen</a>
+    </div>
+  </form>
+  {% else %}
+  <p class="muted">An diesem Platz fehlt nichts.</p>
+  <a class="btn" href="/arbeitsplaetze/{{ ort.kennung }}/" data-test="abbrechen">Zum Arbeitsplatz</a>
+  {% endif %}
+</div>
+{% endblock %}

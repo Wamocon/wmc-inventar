@@ -1,0 +1,38 @@
+{% extends "basis.html" %}
+{% block titel %}Checklisten · WMC Inventar{% endblock %}
+{% block inhalt %}
+<a class="back" href="/einstellungen/"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>Einstellungen</a>
+<div class="page-head">
+  <div>
+    <h1>Checklisten</h1>
+    <p class="muted lead">Gilt für neue Protokolle. Bestehende Protokolle, auch offene Entwürfe, behalten ihre Liste.</p>
+  </div>
+</div>
+{% for gruppe in gruppen %}
+<section class="card" data-test="checkliste-pflege" data-liste="{{ gruppe.liste }}">
+  <div class="card-head"><h2>{{ gruppe.titel }}</h2><span class="count">{{ gruppe.punkte|length }}</span></div>
+  <form method="post" data-test="checkliste-formular" novalidate>
+    {% csrf_token %}
+    <input type="hidden" name="liste" value="{{ gruppe.liste }}">
+    <div class="tbl-wrap">
+      <table data-test="liste">
+        <thead><tr><th>Reihenfolge</th><th>Text</th><th>aktiv</th></tr></thead>
+        <tbody>
+          {% for p in gruppe.punkte %}
+          <tr data-test="zeile" data-id="{{ p.schluessel }}">
+            <td><input type="number" min="0" name="reihenfolge-{{ p.pk }}" value="{{ p.reihenfolge }}" aria-label="Reihenfolge"></td>
+            <td><input type="text" name="text-{{ p.pk }}" value="{{ p.text }}" maxlength="200" aria-label="Text"></td>
+            <td>{% if p.fest %}<span class="muted small">setzt das Tool</span><input type="hidden" name="aktiv-{{ p.pk }}" value="on">{% else %}<input type="checkbox" name="aktiv-{{ p.pk }}" aria-label="aktiv"{% if p.aktiv %} checked{% endif %}>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="form-grid">
+      <div class="field full"><label for="neu-{{ gruppe.liste }}">Neuer Punkt</label><input type="text" id="neu-{{ gruppe.liste }}" name="neu" maxlength="200" data-test="neuer-punkt"></div>
+    </div>
+    <p class="actions"><button type="submit" class="btn primary" data-test="speichern">Speichern</button></p>
+  </form>
+</section>
+{% endfor %}
+{% endblock %}

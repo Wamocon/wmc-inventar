@@ -1,0 +1,99 @@
+{% extends "basis.html" %}
+{% block titel %}Raumplan pflegen · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div>
+    <h1 data-test="titel">Raumplan pflegen</h1>
+    <p class="muted lead">
+      {{ plan.standort }} · Etage {{ plan.etage }}{% if plan.name %} · {{ plan.name }}{% endif %}.
+      Ein Grundriss je Etage: PNG, JPG, SVG oder ein PDF, die erste Seite
+      wird zum Bild. Plätze und Räume lassen sich auf den Plan ziehen; die
+      Position bleibt pro Ort in Prozent vom Mittelpunkt gespeichert.
+      Mit der Tastatur: Marke fokussieren, Pfeiltasten verschieben, Enter speichert.
+    </p>
+  </div>
+  <div class="actions">
+    <a class="btn" href="/arbeitsplaetze/?plan={{ plan.pk }}" data-test="raemplan-link">Raumplan ansehen</a>
+    <a class="btn" href="{% url 'plan-anlegen' %}" data-test="plan-anlegen">Neuer Plan</a>
+  </div>
+</div>
+
+<form method="get" class="filter-bar" data-test="plan-wechsel">
+  <div class="field">
+    <label for="plan_id">Raumplan</label>
+    <select id="plan_id" name="plan_id">
+      {% for p in plane %}
+      <option value="{{ p.pk }}" {% if p.pk == plan.pk %}selected{% endif %}>{{ p.standort }} – {{ p.etage }}</option>
+      {% endfor %}
+    </select>
+  </div>
+</form>
+
+<div class="plan-wrap pflegen" data-test="raumplan-pflegen" data-id="{{ plan.pk }}">
+  <div class="plan-scroll" tabindex="0" role="group" aria-label="Grundriss mit den Plätzen und Räumen">
+  <figure class="plan-fig" data-test="plan-flaeche">
+    {% if hat_grundriss %}
+      <img class="plan-bild" draggable="false"
+           src="{% url 'plan-grundriss' plan.pk %}"
+           alt="Grundriss {{ plan.standort }}, {{ plan.etage }}"
+           data-test="grundriss-bild">
+    {% else %}
+      <div class="plan-leer" data-test="grundriss-fehlt">Kein Grundriss hinterlegt.</div>
+    {% endif %}
+
+    <div class="plan-orte" data-test="plan-orte">
+      {% for o in auf_dem_plan %}
+        <button type="button"
+                class="orte {% if o.typ == 'raum' %}raum{% else %}platz{% endif %}"
+                data-test="{% if o.typ == 'raum' %}raumort{% else %}platz{% endif %}"
+                data-id="{{ o.kennung }}"
+                data-ort-id="{{ o.pk }}"
+                data-x="{{ o.position_x|stringformat:'g' }}"
+                data-y="{{ o.position_y|stringformat:'g' }}"
+                aria-label="{{ o.kennung }}, Position x {{ o.position_x|stringformat:'g' }} Prozent, y {{ o.position_y|stringformat:'g' }} Prozent">
+          <span class="orts-name" aria-hidden="true">{{ o.kennung }}</span>
+        </button>
+      {% endfor %}
+    </div>
+  </figure>
+  </div>
+
+  <div class="abschnitt" data-test="ohne-position">
+    <h2>Ohne Position</h2>
+    <div class="liste" data-test="ohne-position-liste">
+      {% for o in ohne_position %}
+        <div class="zeile" draggable="true"
+             data-test="ohne-position-eintrag"
+             data-ort-id="{{ o.pk }}"
+             data-kennung="{{ o.kennung }}">
+          <span data-test="ort-kennung">{{ o.kennung }}</span>
+          <span class="muted">{% if o.typ == "arbeitsplatz" %}Platz{% else %}Raum{% endif %} · noch keine Position</span>
+          <button type="button" class="btn sm" data-test="ohne-position-setzen">Auf den Plan setzen</button>
+        </div>
+      {% empty %}
+        <p class="muted" data-test="ohne-position-leer">Alle Plätze haben eine Position.</p>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<div class="abschnitt">
+  <h2>Grundriss hochladen</h2>
+  <form method="post" enctype="multipart/form-data" data-test="grundriss-formular">
+    {% csrf_token %}
+    <div class="zeile">
+      <label class="feld" for="grundriss">
+        Grundriss (PNG, JPG, SVG oder PDF, bis 10 MB)
+        <input type="file" name="grundriss" id="grundriss"
+               accept=".png,.jpg,.jpeg,.svg,.pdf"
+               data-test="grundriss-auswahl">
+      </label>
+    </div>
+    <button type="submit" class="btn" data-test="speichern">Speichern</button>
+  </form>
+</div>
+{% endblock %}
+
+{% block skripte %}
+<script src="/static/plan_bearbeiten.js"></script>
+{% endblock %}

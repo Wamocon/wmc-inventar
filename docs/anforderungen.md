@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| Version | 0.5 (Stand für die Umsetzung; Raumplan nach dem Fluchtplan, IDs N-01 bis N-11 für Kapitel 7) |
-| Datum | 22.10.2026 |
+| Version | 0.6 (Stand der Abnahme; Raumplan nach dem Fluchtplan, IDs N-01 bis N-11 für Kapitel 7; Entscheidungen von Erwin vom 30.10., 05.11. und 06.11. eingearbeitet) |
+| Datum | 05.11.2026 |
 | Verantwortlich | Erwin Moretz, IT |
 | Mockup | Claude Design: [WMC Inventar Mockup](https://claude.ai/artifact/JsCkL37DMg5Vi3tsDXY8cq); klickbarer Prototyp: `mockup/wmc-inventar-prototyp.html`, online [WMC Inventar Prototyp](https://claude.ai/artifact/VNqKqetybNXhGuMwrCm3kv) |
 | Protokollvorlagen | WMC-IT-FRM-001 Ausgabeprotokoll v1.1, WMC-IT-FRM-002 Rücknahmeprotokoll v1.1. Aufbau und Wortlaut ohne Personendaten in `docs/vorlagen/FRM-001.md` und `FRM-002.md`; die Beispiel-PDFs enthalten Personendaten und gehören nicht ins Repository. |
@@ -66,14 +66,14 @@ Nicht in Version 1:
 |---|---|---|
 | Admin | IT | Pflegt alles: Geräte, Personen, Arbeitsplätze, Vorgänge, Konten, Einstellungen, Import. |
 | Mitarbeiter | alle Beschäftigten | Sieht nur eigene Geräte, Protokolle und Leihen. Fragt Leihgeräte an. |
-| Leser | Geschäftsführung | Sieht Dashboard, alle Listen und Historien, darf exportieren. Ändert nichts. |
+| Leser | Geschäftsführung | Sieht Dashboard, alle Listen außer dem Verleih und alle Historien, darf exportieren. Von den offenen Leihanfragen sieht er nur die eigenen. Fragt mit eigener Person Leihgeräte an. Ändert sonst nichts. |
 
 | Funktion | Admin | Mitarbeiter | Leser |
 |---|---|---|---|
 | Dashboard | ja | nein | ja |
 | Geräteliste, Gerätedetail, Historie | ja | nein; eigene Geräte unter „Meine Geräte“ und in der Kurzansicht (F-110, F-113) | ja (lesen) |
 | Gerät erfassen, ändern, Vorgänge ausführen | ja | nein | nein |
-| Leihgerät anfragen, Verlängerung anfragen | ja | ja | nein |
+| Leihgerät anfragen, Verlängerung anfragen | ja | ja | ja, wenn das Konto eine Person hat |
 | Leihanfragen entscheiden | ja | nein | nein |
 | Personen, Arbeitsplätze, Profile | ja | nein | ja (lesen) |
 | Kaufpreise und Inventarwert | ja | nein | ja |
@@ -133,10 +133,10 @@ erDiagram
 | Person | Anrede, Vorname, Nachname, E-Mail (eindeutig), Abteilung, Eintritt, Austritt, Anschrift für den Briefkopf (optional), aktiv | Personen gibt es auch ohne Konto; die Anschrift erscheint nur im Protokoll (O-16) |
 | Konto | E-Mail als Login, Passwort-Hash, Rolle, aktiv, letzter Login, Person | Rolle Mitarbeiter braucht eine Person |
 | Ort | Typ (Arbeitsplatz, Raum oder Lager), Kennung (eindeutig, z. B. `WMC-WP-01`), Standort, Raum, Raumplan und Position darauf (x und y in Prozent des Bildes), Notiz | nur Arbeitsplätze haben Profil und feste Person; Typ „Raum“ für Geräte ohne festen Platz, etwa Studiotechnik oder Serverraum |
-| Raumplan | Standort, Etage, Name, Grundriss (Bild), Räume mit Bezeichnung und Umriss | ein Plan je Etage; beim Austausch des Grundrisses bleiben die Positionen erhalten (F-67) |
+| Raumplan | Standort, Etage, Name, Grundriss (Bild) mit den Umrissen der Räume; Räume als Orte vom Typ „Raum“ mit Bezeichnung und Position | ein Plan je Etage; beim Austausch des Grundrisses bleiben die Positionen erhalten (F-67) |
 | Ausstattungsprofil | Name, Positionen (Kategorie und Anzahl) | Beispiel „Standard“: 2 Monitore, 1 Dockingstation, 1 Tastatur, 1 Maus, 1 Headset |
 | Vorgang | Typ, Zeitpunkt, Konto, Gerät, Status vorher/nachher, Person und Ort vorher/nachher, geänderte Felder, Kommentar, Protokoll | wird nur angelegt, nie geändert oder gelöscht |
-| Leihe | Person, Kategorie, Gerät, von, bis, Zweck, Status, Begründung bei Ablehnung | Status: angefragt, genehmigt, abgelehnt, ausgegeben, zurückgegeben, zurückgezogen; „überfällig“ wird berechnet |
+| Leihe | Person, Kategorie, Gerät, von, bis, Zweck, Status, Begründung bei Ablehnung | Status: angefragt, genehmigt, abgelehnt, ausgegeben, zurückgegeben, zurückgezogen, verloren (das ausgegebene Gerät wurde als verloren oder gestohlen gemeldet); „überfällig“ wird berechnet |
 | Protokoll | Nummer (`UP-2026-0001`), Vorlage und Version (WMC-IT-FRM-001 oder -002, v1.1), Datum, Person, Bearbeiter, Bezug (bei Rücknahme das Ausgabeprotokoll), Geräte mit Zustand bei Ausgabe und Rückgabe, Zubehör komplett, Bemerkung, Checkliste, Mängel und offene Punkte, Fotos, Signaturen, Status, Hashwert, PDF | Status: Entwurf, wartet auf Signatur Bearbeiter, wartet auf Gegenzeichnung, Papierweg mit Scan offen, abgeschlossen (elektronisch versiegelt oder Papier mit Scan). Nach der ersten Signatur ist der Inhalt gesperrt. |
 | Signatur | Protokoll, Partei (Bearbeiter oder Mitarbeiter), Name, E-Mail, Zeitpunkt, Nachweisnummer, Identifizierungsmerkmal (Anmeldung oder Einmalcode an E-Mail), IP-Adresse, Hashwert des signierten Stands | bildet das Prüfprotokoll; wird nie geändert |
 | Checklistenpunkt | Liste (Zugänge oder IT-Offboarding), Text, Reihenfolge, aktiv | Vorbelegung aus den Vorlagen, siehe F-132 und F-133 |
@@ -235,7 +235,7 @@ Version 1 umfasst 93 Anforderungen in 15 Bereichen. Priorität: M = Muss, S = So
 |---|---|---|---|
 | F-40 | M | Stammdaten ändern | Inventarnummer und Status sind nicht direkt änderbar. Jede Änderung steht mit altem und neuem Wert in der Historie. |
 | F-41 | M | Umzug | Geräte in Benutzung wechseln den Arbeitsplatz oder Raum ohne Personenwechsel. |
-| F-42 | M | Reparatur | Start mit Dienstleister, Vorgangsnummer und Notiz. Abschluss mit neuem Zustand und Ziel „bisherige Zuordnung“ oder „Lager“. |
+| F-42 | M | Reparatur | Start mit Dienstleister, Vorgangsnummer und Notiz. Abschluss mit neuem Zustand und Ziel „bisherige Zuordnung“ oder „Lager“. Hatte das Gerät eine Person, entsteht bei „Lager“ ein Rücknahmeprotokoll wie in F-50. |
 | F-43 | M | Historie je Gerät | Chronologisch, mit Konto und Zeitstempel, nicht änderbar. |
 | F-44 | M | Globale Suche | Treffer nach Inventarnummer, Seriennummer, Modell, Hostname und Person. |
 
@@ -386,13 +386,13 @@ Das Mockup in Claude Design ([WMC Inventar Mockup](https://claude.ai/artifact/Js
 | Dialog Ausmusterung | Admin | Grund, Verbleib, Löschnachweis | F-55 bis F-57 |
 | Arbeitsplätze | Admin, Leser | Raumplan je Etage mit Pop-up je Platz und Raum, Liste mit Soll-Ist-Ergebnis, Bedarfsliste, Detail mit Soll und Ist | F-60 bis F-66, F-68 |
 | Raumplan bearbeiten | Admin | Grundriss hochladen, Arbeitsplätze und Räume per Ziehen setzen | F-67 |
-| Verleih | Admin, Leser | Offene Anfragen, aktive und überfällige Leihen | F-30 bis F-37 |
+| Verleih | Admin | Offene Anfragen, aktive und überfällige Leihen | F-30 bis F-37 |
 | Personen | Admin, Leser | Liste, Detail mit Geräten, Offboarding | F-52, F-53, F-121 |
 | Import | Admin | Upload mit Blattauswahl, Spalten- und Wertezuordnung, Vorschau mit neu, ergänzt, Konflikt, übersprungen | F-80 bis F-87 |
 | Erstinventur | Admin | mobile Gerätedetailseite nach dem Scan mit den Lücken des Geräts und „Geprüft“; Fortschritt je Ort | F-74, F-88, F-89 |
 | Etiketten | Admin | Druckvorschau Etikettenbogen | F-70 bis F-73 |
 | Einstellungen | Admin | Kategorien, Profile, Konten, E-Mail, Protokollvorlagen, Checklisten | F-02, F-61, F-90, F-120, F-122, F-130 |
-| Meine Geräte / Leihgerät anfragen | Mitarbeiter | eigene Geräte, Protokolle, Anfrageformular, eigene Leihen | F-110 bis F-113 |
+| Meine Geräte / Leihgerät anfragen | Mitarbeiter, jede andere Rolle mit eigener Person | eigene Geräte, Protokolle, Anfrageformular, eigene Leihen | F-110 bis F-113 |
 | Protokoll signieren | Mitarbeiter über Mail-Link | PDF-Vorschau, Einmalcode, Signieren | F-136, F-137 |
 | Protokollvorschau | Admin | erzeugtes PDF nach Vorlage vor der Signatur | F-130, F-135 |
 
@@ -408,7 +408,7 @@ Das Mockup in Claude Design ([WMC Inventar Mockup](https://claude.ai/artifact/Js
 | N-06 | Datensicherung | Täglicher Datenbank-Dump und Kopie der Dateiablage (Protokolle, Anhänge) in ein Verzeichnis, das die bestehende Sicherung (UrBackup) erfasst. Rücksicherung vor dem Go-live einmal testen. |
 | N-07 | Mengengerüst | Annahme: bis 1.000 Geräte, 100 Konten, 10 gleichzeitige Nutzer. Listen laden in unter 1 Sekunde. |
 | N-08 | Bedienung | Deutsch, Datum TT.MM.JJJJ, Beträge in EUR. Responsiv ab 360 px Breite (QR-Scan, Gegenzeichnung am Handy oder am Tablet der IT). Barrierefreiheit nach WCAG 2.1 AA: Kontraste, Tastaturbedienung, sichtbarer Fokus. |
-| N-09 | Gestaltung | WAMOCON-CI: weiße Fläche, Text `#140B0B`, Signalrot `#F40E0E` nur für Flächen und große Titel, Rot als Text `#B90808`, Rahmen `#D2C7C7`/`#956D6D`, Hinweisfläche `#FEEBEB`. Statusfarben Erfolg `#0A6E37`, Warnung `#96600A`, Info `#0B5FBF`, Fehler `#7B0606`, immer mit Symbol oder Text. Schrift Archivo: schmale Breite für Überschriften, Inventarnummern und Zahlen (angelehnt an das intern genutzte Arial Narrow), normale Breite für Text; die CI nennt Inter nur vorläufig. Abschnitte mit Kopflinie statt Karten. Wiedererkennbares Element ist das Inventaretikett mit roter Oberkante. Radien 4 px (Felder), 6–8 px (Etikett, Dialoge). Der Prototyp setzt das um. Protokoll-PDFs folgen dem Satzbild der Vorlagen in Arial Narrow. |
+| N-09 | Gestaltung | WAMOCON-CI: weiße Fläche, Text `#140B0B`, Signalrot `#F40E0E` nur für Flächen und große Titel, Rot als Text `#B90808`, Rahmen `#D2C7C7`/`#956D6D`, Hinweisfläche `#FEEBEB`. Statusfarben Erfolg `#0A6E37`, Warnung `#96600A`, Info `#0B5FBF`, Fehler `#7B0606`, immer mit Symbol oder Text. Schrift Archivo: schmale Breite für Überschriften, Inventarnummern und Zahlen (angelehnt an das intern genutzte Arial Narrow), normale Breite für Text; die CI nennt Inter nur vorläufig. Abschnitte mit Kopflinie statt Karten. Wiedererkennbares Element ist das Inventaretikett mit roter Oberkante. Radien 4 px (Felder), 6–8 px (Etikett, Dialoge). Der Prototyp setzt das um. Protokoll-PDFs folgen dem Satzbild der Vorlagen in Archivo Condensed. |
 | N-10 | Qualität | Automatisierte Tests für alle Statusübergänge, die Rechteprüfung, die Importprüfung, die Erinnerungslogik und den Signaturablauf (Sperre nach Signatur, Ablauf des Links, ungültiger Code, Siegelprüfung). Abnahme gegen die Kriterien aus Kapitel 5. |
 | N-11 | Wartbarkeit | README mit Einrichtung und Betrieb, Datenbankmigrationen, Startdaten (Kategorien, Checklisten, ein Admin-Konto) und optionale Demodaten. |
 

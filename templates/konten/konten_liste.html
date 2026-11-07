@@ -1,0 +1,26 @@
+{% extends "basis.html" %}
+{% block titel %}Konten · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div>
+    <h1>Konten</h1>
+    <p class="muted lead">Konten verwalten: anlegen, Rollen zuweisen, deaktivieren.</p>
+  </div>
+  <div class="actions">
+    <a class="btn primary" href="/konten/neu/" data-test="konto-anlegen">Neues Konto</a>
+    <a class="btn" href="/konten/?format=xlsx" data-test="export-xlsx">Export .xlsx</a>
+    <a class="btn" href="/konten/?format=csv" data-test="export-csv">Export .csv</a>
+  </div>
+</div>
+<div class="liste" data-test="liste">
+  {% for k in konten %}
+  <div class="zeile" data-test="zeile" data-id="{{ k.pk }}">
+    <a href="/konten/{{ k.pk }}/">{{ k.email }}</a>
+    <span class="muted">{{ k.get_rolle_display }}{% if not k.aktiv %} · inaktiv{% endif %}{% if k.person %} · {{ k.person.nachname }} {{ k.person.vorname }}{% endif %}</span>
+    <a class="btn sm" href="/konten/{{ k.pk }}/">Ändern</a>
+  </div>
+  {% empty %}
+  <div class="zeile muted">Keine Konten vorhanden.</div>
+  {% endfor %}
+</div>
+{% endblock %}

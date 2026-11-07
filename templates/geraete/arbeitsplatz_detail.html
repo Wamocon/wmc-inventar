@@ -1,0 +1,103 @@
+{% extends "basis.html" %}
+{% block titel %}{{ ort.kennung }} · Arbeitsplätze · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div>
+    <h1 data-test="ort-kennung">{{ ort.kennung }}</h1>
+    <p class="muted lead">{{ ort.raum|default:"Arbeitsplatz" }}{% if ort.standort %} · {{ ort.standort }}{% endif %}{% if ort.notiz %} · {{ ort.notiz }}{% endif %}</p>
+  </div>
+  <div class="actions">
+    <a class="btn" href="/arbeitsplaetze/liste/" data-test="zurueck">Zur Liste</a>
+    {% if koennen_aendern and abgleich.fehlend %}<a class="btn primary" href="/arbeitsplaetze/{{ ort.kennung }}/ausgeben/" data-test="fehlendes-ausgeben">Fehlendes vom Lager ausgeben</a>{% endif %}
+    {% if koennen_aendern %}<a class="btn" href="/etiketten/?ort={{ ort.kennung|urlencode }}&amp;startposition=1" data-test="etiketten-platz">Etiketten für den Platz</a>{% endif %}
+    {% if ort.plan_id and ort.hat_position %}<a class="btn" href="/arbeitsplaetze/?hervorheben={{ ort.kennung|urlencode }}" data-test="im-raumplan">Im Raumplan zeigen</a>{% endif %}
+    {% if user.ist_admin or user.ist_mitarbeiter %}
+    <form method="post" action="/arbeitsplaetze/{{ ort.kennung }}/pruefen/" data-test="pruefen-formular">
+      {% csrf_token %}
+      <button type="submit" class="btn" data-test="pruefen">Ort als geprüft markieren</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="abschnitt">
+  <h2>Abgleich</h2>
+  <p data-test="abgleich-ergebnis">
+    {% if abgleich.ergebnis == "vollstaendig" %}
+      <span class="chip-status in-benutzung">✓ vollständig</span>
+    {% elif abgleich.ergebnis == "unvollstaendig" %}
+      <span class="chip-status ausgemustert">− unvollständig</span>
+    {% else %}
+      <span class="chip-status in-reparatur">+ mehr als Soll</span>
+    {% endif %}
+    {% if ort.profil %} · Profil: {{ ort.profil.name }}{% endif %}
+    {% if ort.feste_person %} · Feste Person: <a href="/personen/{{ ort.feste_person.pk }}/" data-test="feste-person">{{ ort.feste_person.voller_name }}</a>{% endif %}
+  </p>
+</div>
+
+{% if abgleich.fehlend %}
+<div class="abschnitt">
+  <h2>Fehlt</h2>
+  <div class="liste" data-test="fehlliste">
+    {% for kategorie, anzahl in abgleich.fehlend %}
+    <div class="zeile" data-test="fehlend-zeile" data-id="{{ kategorie.name }}">
+      <span data-test="fehlend-anzahl">fehlt: {{ anzahl }} × {{ kategorie.name }}</span>
+      <a class="btn sm" href="/geraete/?kategorie={{ kategorie.name|urlencode }}&amp;status=auf-lager" data-test="lager-link">Auf Lager suchen</a>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if abgleich.zuviel %}
+<div class="abschnitt">
+  <h2>Mehr als Soll</h2>
+  <div class="liste" data-test="mehrliste">
+    {% for kategorie, anzahl in abgleich.zuviel %}
+    <div class="zeile">
+      <span data-test="zuviel-anzahl">mehr: {{ anzahl }} × {{ kategorie.name }}</span>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<div class="abschnitt">
+  <h2>Geräte am Ort</h2>
+  <div class="liste" data-test="liste">
+    {% for g in gerate %}
+    <div class="zeile">
+      <span class="inv num">{{ g.inventarnummer }}</span>
+      <span data-test="zeile-name">{{ g.geraetename|default:g.modell }} · {{ g.kategorie.name }}</span>
+      <span class="chip-status {{ g.status }}">{{ g.status_anzeige }}</span>
+      <a class="btn sm" href="/geraete/{{ g.inventarnummer }}/" data-test="detail-link">Ansehen</a>
+    </div>
+    {% empty %}
+    <div class="zeile muted">Keine Geräte an diesem Ort.</div>
+    {% endfor %}
+  </div>
+</div>
+
+{% if personen_gerate %}
+<div class="abschnitt">
+  <h2>Geräte der festen Person</h2>
+  <div class="liste" data-test="personen-geraete">
+    {% for g in personen_gerate %}
+    <div class="zeile">
+      <span class="inv num">{{ g.inventarnummer }}</span>
+      <span data-test="zeile-name">{{ g.geraetename|default:g.modell }} · {{ g.kategorie.name }}</span>
+      <span class="chip-status {{ g.status }}">{{ g.status_anzeige }}</span>
+      <a class="btn sm" href="/geraete/{{ g.inventarnummer }}/" data-test="detail-link">Ansehen</a>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if ort.aktualisiert_am %}
+<div class="abschnitt">
+  <h2>Zuletzt geprüft</h2>
+  <p data-test="zuletzt-geprueft">{{ ort.aktualisiert_am|date:"d.m.Y H:i" }}</p>
+</div>
+{% endif %}
+{% endblock %}

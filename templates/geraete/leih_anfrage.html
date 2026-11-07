@@ -1,0 +1,73 @@
+{% extends "basis.html" %}
+
+{% block titel %}Leihe anfragen · WMC Inventar{% endblock %}
+
+{% block inhalt %}
+<div class="page-head">
+    <div><h1>Leihe anfragen</h1>
+        <p class="lead">Ein Gerät aus dem Leihpool für einen begrenzten Zeitraum anfragen.</p>
+    </div>
+</div>
+
+<div class="card">
+    <form method="post" action="" data-test="leih-anfrage">
+        {% csrf_token %}
+        <div class="form-grid">
+            <label class="field">
+                <span>Kategorie <span class="erforderlich">*</span></span>
+                <select name="kat" required data-test="kat">
+                    {% for choice in form.kat.field.choices %}
+                        <option value="{{ choice.0 }}" {% if choice.0 == form.kat.value %}selected{% endif %}>
+                            {{ choice.1 }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label class="field">
+                <span>Leihbeginn <span class="erforderlich">*</span></span>
+                <input type="date" name="beginn" required data-test="beginn"
+                       value="{{ form.beginn.value|date:'Y-m-d' }}">
+            </label>
+            <label class="field">
+                <span>Leihende <span class="erforderlich">*</span></span>
+                <input type="date" name="ende" required data-test="ende"
+                       value="{{ form.ende.value|date:'Y-m-d' }}">
+            </label>
+            <label class="field">
+                <span>Zweck <span class="erforderlich">*</span></span>
+                <input type="text" name="zweck" required data-test="zweck"
+                       value="{{ form.zweck.value }}" placeholder="Wofür wird das Gerät gebraucht?">
+            </label>
+            <label class="field">
+                <span>Konkretes Gerät (optional)</span>
+                <select name="gerat" data-test="gerat">
+                    <option value="">— beliebtes Gerät dieser Kategorie —</option>
+                    {% for choice in form.gerat.field.choices %}
+                        <option value="{{ choice.0 }}" {% if choice.0 == form.gerat.value %}selected{% endif %}>
+                            {{ choice.1 }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </label>
+        </div>
+
+        {% if freie %}
+        <div class="freie-info" data-test="freie-geraete">
+            <h3>Freie Geräte im Leihpool</h3>
+            <ul>
+                {% for kat_name, anzahl in freie %}
+                <li>
+                    <strong>{{ kat_name }}:</strong>
+                    <span class="pill ok">{{ anzahl }}</span> frei
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        <div class="form-actions">
+            <button type="submit" class="btn primary" data-test="anfragen">Anfragen</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

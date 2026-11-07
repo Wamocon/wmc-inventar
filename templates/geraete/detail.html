@@ -1,0 +1,318 @@
+{% extends "basis.html" %}{% load betraegeuro %}
+{% block titel %}{{ gerat.inventarnummer }} · WMC Inventar{% endblock %}
+{% block stile %}<link rel="stylesheet" href="/static/listen.css">{% endblock %}
+{% block inhalt %}
+<a class="back" href="/geraete/"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>Geräte</a>
+
+<div class="detail-head">
+  <div class="tag">
+    <span class="qr" data-test="qr" data-qr="{{ qr_inhalt }}">{{ qr_svg }}</span>
+    <div class="tag-text">
+      <h1 class="tag-nr" data-test="inventarnummer">{{ gerat.inventarnummer }}</h1>
+      <span class="tag-model">{{ gerat.kategorie.name }}, {{ gerat.hersteller }} {{ gerat.modell }}</span>
+      <span class="tag-own">Eigentum der WAMOCON GmbH</span>
+    </div>
+  </div>
+  <div class="detail-meta">
+    <div class="pills"><span class="chip-status {{ gerat.status }}" data-test="status" data-wert="{{ gerat.status_wert }}">{{ gerat.status_anzeige }}</span>{% if gerat.altbestand_ohne_protokoll %}<span class="chip-status warn">Altbestand ohne Protokoll</span>{% endif %}{% if gerat.leihpool %}<span class="chip-status verliehen">Leihpool</span>{% endif %}{% if gerat.reserviert_aktiv %}<span class="chip-status warn" data-test="zusatz-reserviert">reserviert</span>{% endif %}</div>
+    <p class="small">QR-Code öffnet <span data-test="qr-inhalt">{{ qr_inhalt }}</span></p>
+  </div>
+</div>
+
+{% if ist_admin and offener_entwurf %}
+<p class="muted" data-test="hinweis-entwurf">Für dieses Gerät steht das offene Protokoll <a href="/protokolle/{{ offener_entwurf.nr }}/">{{ offener_entwurf.nr }}</a>. Erst signieren oder verwerfen, dann gehen weitere Vorgänge.</p>
+{% endif %}
+<div class="actions" data-test="aktionen">
+{% if ist_admin %}
+  {% if offener_entwurf %}
+  {% elif gerat.status == "auf-lager" %}
+  <div class="actions" data-test="lebenszyklus">
+    {% if not gerat.reserviert_aktiv %}<a href="/geraete/{{ gerat.inventarnummer }}/ausgeben/" class="btn primary schnell" data-test="aktion-ausgabe">Ausgeben</a>{% endif %}
+    <a href="/geraete/{{ gerat.inventarnummer }}/verleih/" class="btn" data-test="aktion-verleih">Verleihen</a>
+    <a href="/geraete/{{ gerat.inventarnummer }}/reparatur/start/" class="btn schnell" data-test="aktion-reparatur">Reparatur starten</a>
+    <a href="/geraete/{{ gerat.inventarnummer }}/ausmustern/" class="btn" data-test="aktion-ausmustern">Ausmustern</a>
+  </div>
+  {% elif gerat.status == "in-benutzung" %}
+  <div class="actions" data-test="lebenszyklus">
+    <a href="/geraete/{{ gerat.inventarnummer }}/rueckgeben/" class="btn primary schnell" data-test="aktion-rueckgabe">Rückgabe</a>
+    <a href="/geraete/{{ gerat.inventarnummer }}/reparatur/start/" class="btn schnell" data-test="aktion-reparatur">Reparatur starten</a>
+    <a href="/geraete/{{ gerat.inventarnummer }}/umziehen/" class="btn" data-test="aktion-umzug">Umziehen</a>
+    <a href="/geraete/{{ gerat.inventarnummer }}/ausmustern/?grund=verloren" class="btn" data-test="aktion-ausmustern">Verloren oder gestohlen</a>
+  </div>
+  {% elif gerat.status == "verliehen" %}
+  <div class="actions" data-test="lebenszyklus">
+    <a href="/geraete/{{ gerat.inventarnummer }}/rueckgeben/" class="btn primary schnell" data-test="aktion-rueckgabe">Rückgabe</a>
+    <a href="/geraete/{{ gerat.inventarnummer }}/ausmustern/?grund=verloren" class="btn" data-test="aktion-ausmustern">Verloren oder gestohlen</a>
+  </div>
+  {% elif gerat.status == "in-reparatur" %}
+  <div class="actions" data-test="lebenszyklus">
+    <a href="/geraete/{{ gerat.inventarnummer }}/reparatur/fertig/" class="btn primary" data-test="aktion-reparatur-abschliessen">Reparatur abschließen</a>
+    <a href="/geraete/{{ gerat.inventarnummer }}/reparatur/start/" class="btn" data-test="aktion-reparatur-angaben">Angaben nachtragen</a>
+    <a href="/geraete/{{ gerat.inventarnummer }}/ausmustern/" class="btn" data-test="aktion-ausmustern">Ausmustern</a>
+  </div>
+  {% endif %}
+{% endif %}
+  {% if ist_admin and gerat.status != "ausgemustert" %}
+    <a class="btn" href="/geraete/{{ gerat.inventarnummer }}/aendern/" data-test="aktion-bearbeiten">Ändern</a>
+    <a class="btn" href="/geraete/neu/?vorlage={{ gerat.inventarnummer }}" data-test="aktion-vorlage">Als Vorlage kopieren</a>
+    <a class="btn schnell" href="/geraete/{{ gerat.inventarnummer }}/notiz/" data-test="aktion-notiz">Notiz</a>
+  {% endif %}
+  {% if ist_admin and gerat.status != "ausgemustert" %}<a class="btn" href="/geraete/{{ gerat.inventarnummer }}/anhang/" data-test="aktion-anhang">Anhang</a>{% endif %}
+  {% if kann_etikett_sehen %}<a class="btn" href="/geraete/{{ gerat.inventarnummer }}/etikett/" data-test="aktion-etikett">Etikett</a>{% endif %}
+  {% if platz_im_plan %}<a class="btn" href="/arbeitsplaetze/?hervorheben={{ platz_im_plan.kennung|urlencode }}" data-test="aktion-im-raumplan">Im Raumplan zeigen</a>{% endif %}
+  {% if kann_loeschen %}<a class="btn" href="/geraete/{{ gerat.inventarnummer }}/loeschen/" data-test="aktion-loeschen">Löschen</a>{% endif %}
+</div>
+
+{% if offene_konflikte %}
+<div class="meldung warning" data-test="konflikt-warndung">
+  <strong>{{ offene_konflikte|length }} offener Importkonflikt{{ offene_konflikte|length|pluralize }}.</strong>
+  Bitte entscheiden je Konflikt, ob der alte oder der neue Wert gilt.
+</div>
+{% endif %}
+
+{% if doppelte_namen %}
+<div class="meldung info" data-test="hinweis" data-art="geraetename-doppelt">
+  Gerätename auch bei
+  {% for g in doppelte_namen %}<a href="/geraete/{{ g.inventarnummer }}/" data-test="doppelter-name">{{ g.inventarnummer }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}
+</div>
+{% endif %}
+
+{% if doppelte_serien %}
+<div class="meldung info" data-test="hinweis" data-art="seriennummer-doppelt">
+  Seriennummer {{ gerat.seriennummer|default:gerat.seriennummer_vermerk }} auch bei
+  {% for g in doppelte_serien %}<a href="/geraete/{{ g.inventarnummer }}/" data-test="doppelte-serien">{{ g.inventarnummer }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}
+</div>
+{% endif %}
+
+{% if gerat.altbestand_ohne_protokoll %}
+<div class="meldung info" data-test="hinweis" data-art="altbestand">
+  Altbestand ohne Protokoll: aus dem Import, noch nicht bewegt.
+</div>
+{% endif %}
+
+{% if gerat.zustand_ungeprueft %}
+<div class="meldung info" data-test="hinweis" data-art="ungeprueft">
+  Zustand ungeprüft: aus dem Import, noch nicht vor Ort gesehen.
+</div>
+{% endif %}
+
+{% if inventur %}
+<section class="card inventur" data-test="erstinventur">
+  <div class="card-head">
+    <h2>Erstinventur{% if gerat.ort %} {{ gerat.ort.kennung }}{% endif %}</h2>
+    {% if inventur.fortschritt %}<span class="muted" data-test="inventur-stand">{{ inventur.fortschritt.geprueft }} von {{ inventur.fortschritt.alle }} geprüft</span>{% endif %}
+  </div>
+  {% if inventur.fortschritt %}<progress class="inventur-balken" value="{{ inventur.fortschritt.geprueft }}" max="{{ inventur.fortschritt.alle }}" aria-label="Fortschritt an diesem Ort"></progress>{% endif %}
+  <div class="card-text">
+    {% if gerat.geraetename %}<p class="small muted">bisher {{ gerat.geraetename }}</p>{% endif %}
+    {% if datenluecken %}<p class="meldung warning" data-test="inventur-luecken">Es fehlt: {{ datenluecken|join:", " }}. Was Sie hier nicht klären, bleibt in der Arbeitsliste „Daten unvollständig“.</p>{% endif %}
+    <form method="post" action="/geraete/{{ gerat.inventarnummer }}/pruefen/" data-test="pruefen-formular">
+      {% csrf_token %}
+      {% if inventur.seriennummer_fehlt %}
+      <div class="field">
+        <label for="inventur-seriennummer">Seriennummer{% if gerat.kategorie.seriennummer_pflicht %} <span class="fehlt">fehlt</span>{% endif %}</label>
+        <input id="inventur-seriennummer" type="text" name="seriennummer" placeholder="vom Typenschild" autocomplete="off">
+      </div>
+      {% endif %}
+      <fieldset>
+        <legend>Zustand{% if gerat.zustand_ungeprueft %} <span class="fehlt">ungeprüft, aus dem Import</span>{% endif %}</legend>
+        <div class="zustand-wahl">
+        {% for wert, text in inventur.zustaende %}
+          <label class="check"><input type="radio" name="zustand" value="{{ wert }}"{% if wert == gerat.zustand %} checked{% endif %}> {{ text }}</label>
+        {% endfor %}
+        </div>
+      </fieldset>
+      {% if inventur.kaufdatum_fehlt %}
+      <div class="field">
+        <label for="inventur-kaufdatum">Kaufdatum <span class="fehlt">fehlt</span></label>
+        <input id="inventur-kaufdatum" type="text" name="kaufdatum" placeholder="TT.MM.JJJJ" autocomplete="off" inputmode="numeric">
+        <label class="check"><input type="checkbox" name="kaufdatum_nicht_ermittelbar" value="1" data-test="kaufdatum-nicht-ermittelbar"> nicht ermittelbar, zählt dafür nicht mehr als unvollständig</label>
+      </div>
+      {% endif %}
+      {% if inventur.garantie_fehlt %}
+      <div class="field">
+        <label for="inventur-garantie">Garantie bis <span class="fehlt">fehlt</span></label>
+        <input id="inventur-garantie" type="text" name="garantie_bis" placeholder="TT.MM.JJJJ" autocomplete="off" inputmode="numeric">
+        <label class="check"><input type="checkbox" name="garantie_nicht_ermittelbar" value="1" data-test="garantie-nicht-ermittelbar"> nicht ermittelbar, zählt dafür nicht mehr als unvollständig</label>
+      </div>
+      {% endif %}
+      <div class="field">
+        <label for="inventur-ort">Verbleib</label>
+        <select id="inventur-ort" name="ziel_ort" data-test="inventur-verbleib">
+          <option value="">{% if gerat.ort %}steht an {{ gerat.ort.kennung }}{% elif gerat.person %}bei {{ gerat.person.voller_name }}{% else %}Ort wählen{% endif %}</option>
+          {% for o in inventur.orte %}{% if o.pk != gerat.ort_id %}<option value="{{ o.pk }}">steht woanders: {{ o.kennung }}</option>{% endif %}{% endfor %}
+        </select>
+      </div>
+      <div class="actions">
+        <button type="submit" class="btn primary" data-test="geprueft">Geprüft</button>
+        {% if inventur.naechstes %}<a class="btn" href="/geraete/{{ inventur.naechstes.inventarnummer }}/" data-test="naechstes-geraet">Nächstes ungeprüftes Gerät: {{ inventur.naechstes.inventarnummer }}</a>{% endif %}
+      </div>
+    </form>
+  </div>
+</section>
+{% endif %}
+
+<div class="detail-spalten">
+<div class="stack">
+
+<section class="card">
+  <div class="card-head"><h2>Verbleib</h2></div>
+  <dl class="kv">
+    <dt>Verbleib</dt><dd data-test="verbleib">{% if gerat.person %}Bei {{ gerat.person.voller_name }}{% elif gerat.ort.typ == "lager" %}Lager {{ gerat.ort.kennung }}{% elif gerat.ort %}An {{ gerat.ort.kennung }}{% elif gerat.status == "ausgemustert" %}Ausgemustert{% elif gerat.status == "in-reparatur" %}In Reparatur{% else %}Lager{% endif %}</dd>
+    {% if gerat.person %}<dt>Person</dt><dd>{{ gerat.person.voller_name }}</dd>{% endif %}
+    {% if gerat.ort %}<dt>Ort</dt><dd>{{ gerat.ort.kennung }}</dd>{% endif %}
+  </dl>
+</section>
+
+{% if reparatur_offen %}
+<section class="card" data-test="reparatur-angaben">
+  <div class="card-head"><h2>Reparatur</h2></div>
+  <div class="card-text">
+    <p>{{ reparatur_offen.reperatur_anleitung }}</p>
+    <p class="muted small">Gestartet am {{ reparatur_offen.zeitpunkt|date:"d.m.Y H:i" }}. Bisherige Zuordnung: {% if gerat.person %}{{ gerat.person.voller_name }}{% if gerat.ort %}, {{ gerat.ort.kennung }}{% endif %}{% elif gerat.ort %}{{ gerat.ort.kennung }}{% else %}Lager{% endif %}</p>
+  </div>
+</section>
+{% endif %}
+
+{% if ausmusterung %}
+<section class="card" data-test="ausmusterung-angaben">
+  <div class="card-head"><h2>Ausmusterung</h2></div>
+  <dl class="kv">
+    <dt>Grund</dt><dd data-test="ausmusterung-grund">{{ ausmusterung.ausmusterung_grund }}</dd>
+    <dt>Datum</dt><dd>{{ ausmusterung.ausmusterung_datum|date:"d.m.Y" }}</dd>
+    <dt>Verbleib</dt><dd data-test="ausmusterung-verbleib">{{ ausmusterung.ausmusterung_disposition }}</dd>
+    {% if ausmusterung.notiz %}<dt>Nachweis</dt><dd data-test="ausmusterung-nachweis">{{ ausmusterung.notiz }}</dd>{% endif %}
+    {% if ausmusterung.nachweis_datei %}<dt>Anhang</dt><dd><a href="/geraete/{{ gerat.inventarnummer }}/nachweis/{{ ausmusterung.pk }}/" data-test="ausmusterung-anhang">Nachweis öffnen</a></dd>{% endif %}
+  </dl>
+</section>
+{% endif %}
+
+<section class="card">
+  <div class="card-head"><h2>Stammdaten</h2></div>
+  <dl class="kv">
+    <dt>Kategorie</dt><dd data-test="kategorie">{{ gerat.kategorie.name }}</dd>
+    <dt>Hersteller</dt><dd data-test="hersteller">{{ gerat.hersteller }}</dd>
+    <dt>Modell</dt><dd data-test="modell">{{ gerat.modell }}</dd>
+    <dt>Seriennummer</dt><dd data-test="seriennummer">{{ gerat.seriennummer|default:"–" }}</dd>
+    <dt>Zustand</dt><dd data-test="zustand">{{ gerat.get_zustand_display }}</dd>
+    <dt>Gerätename</dt><dd data-test="geraetename">{{ gerat.geraetename|default:"–" }}</dd>
+    <dt>Standardzubehör</dt><dd data-test="zubehoer">{{ gerat.standardzuehoer|default:"–" }}</dd>
+    <dt>Technische Daten</dt><dd data-test="technische-daten">{{ gerat.technische_daten|default:"–" }}</dd>
+    <dt>Kaufdatum</dt><dd data-test="kaufdatum">{% if gerat.kaufdatum %}{{ gerat.kaufdatum|date:"d.m.Y" }}{% elif gerat.kaufdatum_nicht_ermittelbar %}nicht ermittelbar{% else %}–{% endif %}</dd>
+    <dt>Kaufpreis netto</dt><dd data-test="kaufpreis">{% if gerat.kaufpreis_netto is not None %}{{ gerat.kaufpreis_netto|betraegeuro }}{% else %}–{% endif %}</dd>
+    <dt>Lieferant</dt><dd data-test="lieferant">{{ gerat.lieferant|default:"–" }}</dd>
+    <dt>Rechnungsnummer</dt><dd data-test="rechnung">{{ gerat.rechnungsnummer|default:"–" }}</dd>
+    <dt>Garantie bis</dt><dd data-test="garantie">{% if gerat.garantie_bis %}{{ gerat.garantie_bis|date:"d.m.Y" }}{% elif gerat.garantie_nicht_ermittelbar %}nicht ermittelbar{% else %}–{% endif %}</dd>
+    <dt>Notiz</dt><dd data-test="notiz">{{ gerat.notiz|default:"–" }}</dd>
+  </dl>
+</section>
+
+<section class="card">
+  <div class="card-head"><h2>Prüfung</h2></div>
+  <div class="card-text">
+  {% if gerat.zuletzt_geprueft_am %}
+    <p>Zuletzt geprüft: {{ gerat.zuletzt_geprueft_am|date:"d.m.Y H:i" }}{% if gerat.zuletzt_geprueft_von %} · von {{ gerat.zuletzt_geprueft_von.bezeichnung }}{% endif %}</p>
+  {% else %}
+    <p class="muted">Noch nicht geprüft.</p>
+  {% endif %}
+  </div>
+</section>
+
+{% if datenluecken %}
+<section class="card">
+  <div class="card-head"><h2>Datenlücken</h2></div>
+  <div class="card-text">
+  <p data-test="datenluecken">
+    {% for l in datenluecken %}<span class="chip-status ausgemustert">{{ l }}</span>{% if not forloop.last %} {% endif %}{% endfor %}
+  </p>
+  </div>
+</section>
+{% endif %}
+
+{% if offene_konflikte %}
+<section class="card">
+  <div class="card-head"><h2>Offene Konflikte</h2></div>
+  <div class="card-text">
+  <div class="liste" data-test="konflikt-liste">
+    {% for k in offene_konflikte %}
+    <div class="zeile">
+      <span data-test="konflikt-feld">{{ k.feld_anzeige }}</span>
+      <span data-test="konflikt-werte">alt: {{ k.alter_wert|default:"–" }} · neu: {{ k.neuer_wert|default:"–" }}{% if k.herkunft %} · {{ k.herkunft }}{% endif %}</span>
+      {% if koennen_aendern %}
+      <form method="post" action="/geraete/{{ gerat.inventarnummer }}/konflikt/{{ k.pk }}/loesen/" class="actions">
+        {% csrf_token %}
+        <button type="submit" name="nehmen" value="alt" class="btn sm" data-test="konflikt-alt">Alt behalten</button>
+        <button type="submit" name="nehmen" value="neu" class="btn sm" data-test="konflikt-neu">Neu übernehmen</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  </div>
+</section>
+{% endif %}
+
+{% if gerat.erstellt_am %}
+<section class="card">
+  <div class="card-head"><h2>Erstellt</h2></div>
+  <div class="card-text">
+  <p>{{ gerat.erstellt_am|date:"d.m.Y H:i" }}{% if gerat.erstellt_von %} · von {{ gerat.erstellt_von.bezeichnung }}{% endif %}</p>
+  </div>
+</section>
+{% endif %}
+
+<section class="card" data-test="anhaenge">
+  <div class="card-head"><h2>Anhänge</h2><span class="count">{{ anhaenge|length }}</span></div>
+  {% if anhaenge %}
+  <ul class="worklist">
+    {% for a in anhaenge %}
+    <li data-test="anhang" data-id="{{ a.pk }}"><span class="what"><a href="/geraete/{{ gerat.inventarnummer }}/anhang/{{ a.pk }}/" data-test="anhang-link">{{ a.name }}</a></span><span class="muted small">{{ a.hochgeladen_am|date:"d.m.Y H:i" }}{% if a.hochgeladen_von %} · {{ a.hochgeladen_von.bezeichnung }}{% endif %}</span></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="leer-text">Keine Anhänge.</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <div class="card-head"><h2>Protokolle</h2></div>
+  {% if protokolle %}
+  <ul class="worklist" data-test="protokolle">
+    {% for p in protokolle %}
+    <li data-test="protokoll" data-id="{{ p.nr }}" data-stand="{{ p.stand }}">
+      <span class="what"><a href="/protokolle/{{ p.nr }}/" data-test="protokoll-link">{{ p.nr }}</a></span>
+      <span class="chip-status {{ p.stand_class }}">{{ p.stand_anzeige }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="leer-text">Noch keine Protokolle.</p>
+  {% endif %}
+</section>
+
+</div>
+
+<section class="card">
+  <div class="card-head"><h2>Historie</h2><span class="count">{{ gerat.vorgaenge.count }}</span></div>
+  {% if gerat.vorgaenge.exists %}
+  <ul class="timeline" data-test="historie">
+    {% for v in gerat.vorgaenge.all %}
+    <li>
+      <span class="t" data-test="vorgang" data-typ="{{ v.get_typ_display }}"{% if v.get_typ_display == "Änderung" %} data-feld="{{ v.aenderung_feld }}" data-alt="{{ v.aenderung_alter_wert }}" data-neu="{{ v.aenderung_neuer_wert }}"{% endif %}>{{ v.get_typ_display }}</span>
+      <span class="d" data-test="zeitpunkt">{{ v.zeitpunkt|date:"d.m.Y H:i" }}</span>{% if v.erzeugt_von %}<span class="d" data-test="erzeugt-von">{{ v.erzeugt_von.bezeichnung }}</span>{% endif %}
+      {% if v.aenderung_feld %}<p data-test="aenderung-detail">{{ v.aenderung_anzeige }}</p>{% endif %}
+      {% if v.reparatur_kosten is not None or v.reparatur_beleg %}<p data-test="reparatur-abschluss">{% if v.reparatur_kosten is not None %}Kosten: {{ v.reparatur_kosten|betraegeuro }}{% endif %}{% if v.reparatur_kosten is not None and v.reparatur_beleg %}, {% endif %}{% if v.reparatur_beleg %}Beleg: {{ v.reparatur_beleg }}{% endif %}</p>{% endif %}
+      {% for zeile in v.wechsel_anzeige %}<p data-test="wechsel">{{ zeile }}</p>{% endfor %}
+      {% if v.reperatur_anleitung %}<p data-test="reparatur-detail">{{ v.reperatur_anleitung }}</p>{% endif %}
+      {% if v.ausmusterung_grund %}<p data-test="ausmusterung-detail">Grund: {{ v.ausmusterung_grund }}, Verbleib: {{ v.ausmusterung_disposition|default:"–" }}</p>{% endif %}
+      {% if v.notiz %}<p data-test="notiz-vorgang">{{ v.notiz }}</p>{% endif %}
+      {% if v.protokoll %}<p><a href="/protokolle/{{ v.protokoll.nr }}/" data-test="vorgang-protokoll">{{ v.protokoll.nr }}</a></p>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="leer-text">Noch keine Vorgänge.</p>
+  {% endif %}
+</section>
+</div>
+{% endblock %}

@@ -1,0 +1,29 @@
+{% extends "basis.html" %}
+{% block titel %}{% if reservierung %}Reservierung aufheben{% else %}Leihanfrage ablehnen{% endif %} · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div>
+    <h1>{% if reservierung %}Reservierung aufheben{% else %}Leihanfrage ablehnen{% endif %}</h1>
+    <p class="muted lead">Leihe {{ leihe.nr }}: {{ leihe.person.vorname }} {{ leihe.person.nachname }}, {{ leihe.kat.name }}, {{ leihe.beginn|date:"d.m.Y" }} bis {{ leihe.ende|date:"d.m.Y" }}</p>
+  </div>
+</div>
+<div data-test="dialog" data-name="ablehnen">
+  <form method="post" novalidate data-test="ablehnen-formular">
+    {% csrf_token %}
+    <div class="meldungen">
+      {% include "fragmente/fehler.html" %}
+      {% if fehler %}<div class="meldung error" data-test="fehler">{{ fehler }}</div>{% endif %}
+    </div>
+    <div class="form-grid">
+      <div class="field full">
+        <label for="id_begruendung" class="req">Begründung</label>
+        {{ form.begruendung }}
+      </div>
+    </div>
+    <div class="actions">
+      <button type="submit" class="btn primary" data-test="speichern">{% if reservierung %}Aufheben{% else %}Ablehnen{% endif %}</button>
+      <a class="btn link" href="/verleih/" data-test="abbrechen">Abbrechen</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,233 @@
+{% extends "basis.html" %}
+{% block titel %}Protokoll {{ protokoll.nr }} · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div>
+    <h1>Protokoll {{ protokoll.nr }}</h1>
+    <p class="lead muted">{{ titel }} · {{ protokoll.datum|date:"d.m.Y" }}</p>
+  </div>
+  <div class="actions">
+    <span class="chip-status {{ protokoll.stand_class }}" data-test="protokoll-stand" data-id="{{ protokoll.nr }}" data-stand="{{ protokoll.stand }}">{{ protokoll.stand_anzeige }}</span>
+    {% if pdf_moeglich %}<a class="btn" data-test="protokoll-pdf" href="/protokolle/{{ protokoll.nr }}/pdf/">{% if protokoll.scan_datei %}Scan{% else %}PDF{% endif %}</a>{% endif %}
+  </div>
+</div>
+
+<section class="card" data-test="protokoll-kopf">
+  <div class="card-head"><h2>Angaben</h2></div>
+  <dl class="kv">
+    <dt>Person</dt><dd>{{ person.vorname }} {{ person.nachname }}</dd>
+    <dt>Bearbeiter</dt><dd>{{ protokoll.bearbeiter|default:"–" }}</dd>
+    <dt>Formular</dt><dd>WMC-IT-{{ protokoll.formularnummer }}, Version {{ protokoll.fassung }}{% if protokoll.texte.version %}, Textversion {{ protokoll.texte.version }}{% endif %}</dd>
+    {% if protokoll.korrigiert_zu_protokoll %}<dt>Korrektur von</dt><dd><a href="/protokolle/{{ protokoll.korrigiert_zu_protokoll.nr }}/">{{ protokoll.korrigiert_zu_protokoll.nr }}</a></dd>{% endif %}
+    {% if ersetzt_durch %}<dt>Ersetzt durch</dt><dd><a href="/protokolle/{{ ersetzt_durch.nr }}/" data-test="ersetzt-durch">{{ ersetzt_durch.nr }}</a></dd>{% endif %}
+    {% if protokoll.leihe %}<dt>Leihnummer</dt><dd data-test="protokoll-leihnummer">{{ protokoll.leihe.nr }}</dd><dt>Rückgabe bis</dt><dd>{{ protokoll.leihe.rueckgabe_bis|date:"d.m.Y"|default:"–" }}</dd><dt>Zweck</dt><dd>{{ protokoll.leihe.zweck|default:"–" }}</dd>{% endif %}
+    {% if protokoll.rueckgabe_zu_protokoll %}<dt>Bezug</dt><dd><a href="/protokolle/{{ protokoll.rueckgabe_zu_protokoll.nr }}/">Ausgabeprotokoll {{ protokoll.rueckgabe_zu_protokoll.nr }}</a></dd>{% endif %}
+  </dl>
+</section>
+
+<section class="card" data-test="protokoll-geraete">
+  <div class="card-head"><h2>Geräte</h2></div>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Gerät</th><th>Seriennummer</th>
+        {% if protokoll.art == "ruecknahme" %}<th>Zustand bei Ausgabe</th><th>Zustand bei Rückgabe</th>{% else %}<th>Zustand</th>{% endif %}
+        <th>Zubehör komplett</th><th>Bemerkung</th></tr></thead>
+      <tbody>
+        {% for p in positionen %}
+        <tr>
+          <td>{% if user.ist_admin or user.ist_leser %}<a class="inv" href="/geraete/{{ p.inventarnummer }}/">{{ p.inventarnummer }}</a> {% endif %}{{ p.bezeichnung }}{% if p.geraetename %} / {{ p.geraetename }}{% endif %}</td>
+          <td class="mono">{{ p.seriennummer|default:"ohne" }}</td>
+          <td>{{ p.zustand_ausgabe|default:"–" }}</td>
+          {% if protokoll.art == "ruecknahme" %}<td>{{ p.zustand_rueckgabe|default:"–" }}</td>{% endif %}
+          <td>{{ p.zubehoer_text }}</td>
+          <td>{{ p.bemerkung|default:"–" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% if protokoll.art == "ruecknahme" %}
+<section class="card" data-test="protokoll-offboarding">
+  <div class="card-head"><h2>Prüfpunkte IT-Offboarding</h2></div>
+  <form method="post" action="/protokolle/{{ protokoll.nr }}/offboarding/" data-test="offboarding-formular">
+    {% csrf_token %}
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Prüfpunkt</th><th>erledigt</th><th>in Klärung</th><th>nicht zutreffend</th><th>Datum</th><th>Kürzel</th><th>Bemerkung</th></tr></thead>
+        <tbody>
+          {% for punkt in offboarding %}
+          <tr data-test="checkpunkt" data-liste="offboarding" data-nr="{{ forloop.counter }}" data-id="{{ punkt.schluessel }}">
+            <td data-test="offboarding-punkt" data-id="{{ punkt.schluessel }}">{{ punkt.text }}</td>
+            <td><input type="radio" name="offboarding.{{ punkt.schluessel }}" value="erledigt" aria-label="erledigt" {% if punkt.wert == "erledigt" %}checked{% endif %} {% if not editierbar %}disabled{% endif %}></td>
+            <td><input type="radio" name="offboarding.{{ punkt.schluessel }}" value="in-klaerung" aria-label="in Klärung" {% if punkt.wert == "in_klaerung" %}checked{% endif %} {% if not editierbar %}disabled{% endif %}></td>
+            <td><input type="radio" name="offboarding.{{ punkt.schluessel }}" value="nicht-zutreffend" aria-label="nicht zutreffend" {% if punkt.wert == "nicht_zutreffend" %}checked{% endif %} {% if not editierbar %}disabled{% endif %}></td>
+            <td><input type="text" name="offboarding.{{ punkt.schluessel }}.datum" value="{{ punkt.datum|default:'' }}" aria-label="Datum" data-test="offboarding-datum" data-id="{{ punkt.schluessel }}" {% if not editierbar %}disabled{% endif %}></td>
+            <td><input type="text" name="offboarding.{{ punkt.schluessel }}.kuerzel" value="{{ punkt.kuerzel|default:'' }}" aria-label="Kürzel" data-test="offboarding-kuerzel" data-id="{{ punkt.schluessel }}" {% if not editierbar %}disabled{% endif %}></td>
+            <td><input type="text" name="offboarding.{{ punkt.schluessel }}.bemerkung" value="{{ punkt.bemerkung|default:'' }}" aria-label="Bemerkung" data-test="offboarding-bemerkung" data-id="{{ punkt.schluessel }}" {% if not editierbar %}disabled{% endif %}></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if editierbar %}<p class="actions"><button class="btn" type="submit" data-test="offboarding-speichern">Prüfpunkte speichern</button></p>{% endif %}
+  </form>
+</section>
+{% elif protokoll.leihe_id %}
+<section class="card" data-test="protokoll-checkliste">
+  <div class="card-head"><h2>Zugänge und Zugangsmittel</h2></div>
+  <p>Bei einer Leihe werden keine Zugänge ausgegeben.</p>
+</section>
+{% else %}
+<section class="card" data-test="protokoll-checkliste">
+  <div class="card-head"><h2>Zugänge und Zugangsmittel</h2></div>
+  <form method="post" action="/protokolle/{{ protokoll.nr }}/checkliste/" data-test="checkliste-formular">
+    {% csrf_token %}
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Zugang / Zugangsmittel</th><th>ausgegeben</th><th>nicht zutreffend</th><th>Bemerkung, Kennung</th></tr></thead>
+        <tbody>
+          {% for punkt in checkliste %}
+          <tr data-test="checkpunkt" data-liste="zugaenge" data-nr="{{ forloop.counter }}" data-id="{{ punkt.schluessel }}">
+            <td>{{ punkt.text }}</td>
+            <td><input type="radio" name="checkliste.{{ punkt.schluessel }}" value="ausgegeben" aria-label="ausgegeben" {% if punkt.wert == 1 %}checked{% endif %} {% if not editierbar %}disabled{% endif %}></td>
+            <td><input type="radio" name="checkliste.{{ punkt.schluessel }}" value="nicht-zutreffend" aria-label="nicht zutreffend" {% if punkt.wert == 0 %}checked{% endif %} {% if not editierbar %}disabled{% endif %}></td>
+            <td><input type="text" name="checkliste.{{ punkt.schluessel }}.bemerkung" value="{{ punkt.bemerkung }}" aria-label="Bemerkung" {% if not editierbar %}disabled{% endif %}></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if editierbar %}
+    {% if protokoll.checkliste_unbeantwortet %}<p class="muted">{{ protokoll.checkliste_unbeantwortet|length }} Punkte sind noch offen; das PDF entsteht erst danach.</p>{% endif %}
+    <p class="actions"><button class="btn" type="submit" data-test="checkliste-speichern">Checkliste speichern</button></p>
+    {% endif %}
+  </form>
+</section>
+{% endif %}
+
+<section class="card" data-test="protokoll-anhaenge">
+  <div class="card-head"><h2>Fotos</h2><span class="count">{{ anhaenge|length }}</span></div>
+  {% if anhaenge %}
+  <ul class="worklist">
+    {% for anhang in anhaenge %}
+    <li data-test="anhang" data-id="{{ forloop.counter }}"><span class="what">{{ anhang.name }}</span></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="leer-text">Keine Fotos.</p>
+  {% endif %}
+  {% if editierbar %}
+  <form method="post" action="/protokolle/{{ protokoll.nr }}/foto/" enctype="multipart/form-data" data-test="foto-formular" class="toolbar">
+    {% csrf_token %}
+    {% if positionen|length > 1 %}<select name="inventarnummer" aria-label="Gerät zum Foto" data-test="foto-geraet">{% for p in positionen %}<option value="{{ p.inventarnummer }}">{{ p.inventarnummer }}</option>{% endfor %}</select>{% elif positionen %}<input type="hidden" name="inventarnummer" value="{{ positionen.0.inventarnummer }}">{% endif %}
+    <input type="file" name="foto" accept="image/jpeg,image/png,image/heic" aria-label="Foto" data-test="foto-datei">
+    <button class="btn" type="submit" data-test="foto-speichern">Foto hinzufügen</button>
+    <span class="muted small">JPG, PNG oder HEIC bis 10 MB</span>
+  </form>
+  {% endif %}
+</section>
+
+{% if protokoll.stand == "scan-offen" and user.ist_admin %}
+<section class="card" data-test="protokoll-scan">
+  <div class="card-head"><h2>Papierweg</h2></div>
+  <p>Protokoll drucken, von beiden Seiten unterschreiben lassen und den Scan hochladen. Der Scan schließt das Protokoll ab.</p>
+  <form method="post" action="/protokolle/{{ protokoll.nr }}/scan/" enctype="multipart/form-data" data-test="dialog" data-name="scan-hochladen" class="toolbar">
+    {% csrf_token %}
+    <input type="file" name="scan" accept="application/pdf,image/jpeg,image/png,image/heic" aria-label="Scan" data-test="scan-datei">
+    <button class="btn primary" type="submit" data-test="speichern">Scan hochladen und abschließen</button>
+  </form>
+</section>
+{% endif %}
+
+{% if protokoll.stand == "bearbeiter-offen" and user.ist_admin %}
+<section class="card" data-test="protokoll-signatur">
+  <div class="card-head"><h2>Signatur des Bearbeiters</h2></div>
+  <p>Prüfen Sie das PDF und signieren Sie mit Ihrem Passwort. Danach ist der Inhalt gesperrt.</p>
+  <form method="post" action="/protokolle/{{ protokoll.nr }}/signieren/" data-test="signieren-formular" class="toolbar">
+    {% csrf_token %}
+    <label for="passwort">Passwort</label>
+    <input type="password" name="passwort" id="passwort" required autocomplete="current-password" data-test="signieren-passwort">
+    <button class="btn primary" type="submit" data-test="signieren-absenden">Signieren</button>
+  </form>
+  {% if protokoll.art == "ausgabe" and not protokoll.ist_korrektur %}
+  <form method="post" action="/protokolle/{{ protokoll.nr }}/abbrechen/" data-test="abbrechen-formular">
+    {% csrf_token %}
+    <p class="actions"><button class="btn" type="submit" data-test="abbrechen">Entwurf verwerfen</button> <span class="muted small">Das Gerät bleibt unverändert.</span></p>
+  </form>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if protokoll.stand == "gegenzeichnung-offen" %}
+<section class="card" data-test="protokoll-gegenzeichnung">
+  <div class="card-head"><h2>Gegenzeichnung</h2></div>
+  <p>Der Link ging an: {{ protokoll.gegenzeichnung_empfaenger|default:"keine Adresse hinterlegt" }}{% if protokoll.gegenzeichnung_abgelaufen %} · <strong>Der Link ist abgelaufen.</strong>{% endif %}</p>
+  {% if user.ist_admin %}
+  <p>Vor Ort am Tablet: <a href="{{ link_gegenzeichnung }}" data-test="gegenzeichnung-link">{{ link_gegenzeichnung }}</a></p>
+  <form method="post" action="/protokolle/{{ protokoll.nr }}/link-neu-senden/" data-test="link-neu-formular" class="toolbar">
+    {% csrf_token %}
+    <label for="empfaenger">Adresse für den Link</label>
+    <input type="email" name="empfaenger" id="empfaenger" value="{{ protokoll.gegenzeichnung_empfaenger }}" data-test="code-senden-empfaenger">
+    <button class="btn" type="submit" data-test="link-neu-senden">Link neu senden</button>
+  </form>
+  <form method="post" action="/protokolle/{{ protokoll.nr }}/code-senden/" data-test="code-senden-formular">
+    {% csrf_token %}
+    <p class="actions"><button class="btn" type="submit" data-test="code-senden-absenden">Einmalcode senden</button></p>
+  </form>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if protokoll.scan_datei and protokoll.stand == "abgeschlossen" %}
+<section class="card" data-test="protokoll-scan">
+  <div class="card-head"><h2>Papierweg</h2></div>
+  <p>Abgeschlossen am {{ protokoll.scan_am|date:"d.m.Y H:i" }}{% if protokoll.scan_von %} von {{ protokoll.scan_von.bezeichnung }}{% endif %}. <a href="/protokolle/{{ protokoll.nr }}/pdf/" data-test="scan-link">Scan öffnen</a></p>
+</section>
+{% endif %}
+
+{% if protokoll.pdf_versand_offen %}
+<section class="card" data-test="versand-offen">
+  <div class="card-head"><h2>Versand offen</h2></div>
+  <p>Das fertige Protokoll ließ sich nicht per Mail versenden. Es liegt hier bereit.</p>
+  {% if user.ist_admin %}
+  <form method="post" action="/protokolle/{{ protokoll.nr }}/pdf-senden/">
+    {% csrf_token %}
+    <p class="actions"><button class="btn primary" type="submit" data-test="pdf-senden">Erneut senden</button></p>
+  </form>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if protokoll.ist_gesperrt and user.ist_admin and not ersetzt_durch %}
+<section class="card" data-test="protokoll-korrigieren">
+  <div class="card-head"><h2>Korrektur</h2></div>
+  <p>Das Protokoll ist signiert. Eine Korrektur erzeugt eine neue Fassung mit neuer Nummer und macht den alten Link ungültig.</p>
+  <form method="post" action="/protokolle/{{ protokoll.nr }}/korrigieren/" data-test="korrigieren-formular">
+    {% csrf_token %}
+    <p class="actions"><button class="btn" type="submit" data-test="aktion-korrigieren">Neue Fassung erzeugen</button></p>
+  </form>
+</section>
+{% endif %}
+
+{% if protokoll.ist_gesperrt %}
+<section class="card" data-test="protokoll-pruefprotokoll">
+  <div class="card-head"><h2>Prüfprotokoll</h2></div>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Art</th><th>Name</th><th>E-Mail</th><th>Zeitpunkt</th><th>Nachweis</th><th>Merkmal</th><th>IP</th></tr></thead>
+      <tbody>
+        {% for aufz in protokoll.aufzeichnungen_liste %}
+        <tr data-test="pruefprotokoll-eintrag">
+          <td>{{ aufz.art_anzeige }}</td><td>{{ aufz.name }}</td><td>{{ aufz.email }}</td>
+          <td class="nowrap">{{ aufz.zeitpunkt|date:"d.m.Y H:i" }}</td><td class="mono">{{ aufz.nachweisnummer }}</td>
+          <td>{{ aufz.identifikationsmerkmal }}</td><td class="mono">{{ aufz.ip_adresse }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

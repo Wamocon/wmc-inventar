@@ -1,0 +1,13 @@
+{# F-63: Summe „fehlende Ausstattung“ je Kategorie mit dem Lagerbestand daneben. #}
+<div class="liste" data-test="bedarfsliste">
+  {% for z in uebersicht.zeilen %}
+  <div class="zeile spalten-bedarf" data-test="zeile" data-id="{{ z.kategorie.name }}">
+    <span data-test="kategorie">{{ z.kategorie.name }}</span>
+    <span>fehlt: <b data-test="fehlt">{{ z.fehlt }}</b></span>
+    <span>auf Lager: <b data-test="lager">{{ z.lager }}</b></span>
+    <a class="btn sm" href="/geraete/?kategorie={{ z.kategorie.name|urlencode }}&amp;status=auf-lager" data-test="lager-link">Lagerbestand ansehen</a>
+  </div>
+  {% empty %}
+  <p class="muted">Kein Bedarf: alle Arbeitsplätze sind vollständig.</p>
+  {% endfor %}
+</div>

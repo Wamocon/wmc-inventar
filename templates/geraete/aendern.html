@@ -1,0 +1,34 @@
+{% extends "basis.html" %}
+{% block titel %}Stammdaten bearbeiten · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div>
+    <h1>Stammdaten bearbeiten</h1>
+    <p class="muted lead">{{ gerat.inventarnummer }} · {{ gerat.geraetename|default:gerat.modell }}</p>
+  </div>
+</div>
+<div data-test="dialog" data-name="bearbeiten">
+  <form method="post" novalidate data-test="aendern-formular">
+    {% csrf_token %}
+    <div class="meldungen">
+      {% include "fragmente/fehler.html" %}
+    </div>
+    <div class="form-grid">
+      {% for field in form %}
+        {% if field.name != "status" %}
+        <div class="field {% if field.field.widget.input_type == "textarea" %}full{% endif %}">
+          <label for="id_{{ field.html_name }}">{{ field.label }}</label>
+          {{ field }}
+          {% if field.errors %}<div class="meldung error">{% for e in field.errors %}{{ e }}{% endfor %}</div>{% endif %}
+        </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+    <p class="muted small">Inventarnummer und Status ändern sich nur über Vorgänge.</p>
+    <div class="actions">
+      <button type="submit" class="btn primary" data-test="speichern">Speichern</button>
+      <a class="btn link" href="/geraete/{{ gerat.inventarnummer }}/" data-test="abbrechen">Abbrechen</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

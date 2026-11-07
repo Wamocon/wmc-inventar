@@ -2,22 +2,196 @@
 
 Internes Web-Tool der WAMOCON-IT für die Verwaltung von Bürohardware: Bestand, Ausgabe, Verleih, Rückgabe, Ausmusterung, Soll-Ausstattung je Arbeitsplatz mit Raumplan und digital signierte Übergabeprotokolle nach WMC-IT-FRM-001 und -002.
 
-**Stand:** Auftrag vergeben. Gregor (KI-Mitarbeiter Entwicklung) baut Version 1 auf `gregor/inventar`, Theo (KI-Mitarbeiter Test) schreibt parallel die Robot-Framework-Tests auf `theo/inventar`. Jira: Epic WMCNL-2755.
+## Pfade
 
 | Pfad | Inhalt |
 |---|---|
 | `AGENTS.md` | Regeln für alle, die im Repo arbeiten |
 | `docs/anforderungen.md` | Anforderungen mit IDs, maßgeblich |
 | `docs/AUFTRAG.md` | Auftrag an Gregor |
-| `docs/TESTAUFTRAG.md` | Auftrag an Theo |
-| `docs/TESTSCHNITTSTELLE.md` | Start, Beispieldaten, Adressen und Markierungen, auf die sich Anwendung und Tests verlassen |
-| `docs/UEBERGABE.md`, `docs/TESTBERICHT.md` | Vorlagen für Übergabe und Testbericht |
-| `docs/design/` | Bilder aus dem Mockup |
-| `docs/vorlagen/` | Text der Protokollvorlagen, anonymisierte Bestandsliste für Importtests, Grundriss Eschborn |
-| `mockup/wmc-inventar-prototyp.html` | klickbarer Prototyp, im Browser öffnen |
+| `docs/TESTSCHNITTSTELLE.md` | Start, Beispieldaten, Adressen und Markierungen |
+| `docs/UEBERGABE.md` | Übergabe mit Stand je Anforderung und Meilenstein |
+| `Dockerfile` | Docker-Image für die Anwendung |
+| `docker-compose.yml` | Betrieb: `proxy` (HTTPS), `web` (gunicorn), `db` (PostgreSQL 16), `cron` (Tageslauf), `sicherung` |
+| `deploy/nginx.conf` | Reverse Proxy mit internem Zertifikat |
+| `scripts/sicherung.sh` | Tägliche Sicherung: Datenbank-Dump + Dateiablage |
+| `requirements.txt` | Python-Pakete für die Anwendung |
 | `static/` | htmx und Schrift Archivo, lokal |
-| `requirements.txt`, `requirements-test.txt` | Python-Pakete für Anwendung und Tests |
 
-Die echte Bestandsliste, Protokolle mit Personendaten, das Firmenzertifikat für das Siegel und alle Zugangsdaten liegen nie in diesem Repo.
+## Einrichtung
 
-Lizenzen der mitgelieferten Dateien: htmx unter Zero-Clause BSD (`static/vendor/LICENSE-htmx.txt`), Archivo unter SIL Open Font License 1.1 (`static/fonts/OFL.txt`).
+### Betrieb mit Docker
+
+Voraussetzung: internes TLS-Zertifikat, Firmenzertifikat für das Siegel (PKCS#12), SMTP-Zugang, ein Verzeichnis, das UrBackup erfasst.
+
+```bash
+# 1. Werte eintragen, auf der VM auch OEFFENTLICHE_ADRESSE (siehe unten)
+cp .env.example .env
+
+# 2. Starten; web migriert beim Start
+docker compose up -d --build
+
+# 3. Einmalig: Kategorien, erster Lagerort und Admin-Konto
+docker compose exec -e ADMIN_EMAIL=it@firma.example -e ADMIN_PASSWORT='...' -e ADMIN_VORNAME=Vorname -e ADMIN_NACHNAME=Nachname web python manage.py startdaten
+```
+
+Danach unter `BASIS_URL` anmelden und in den Einstellungen Firmendaten, Logo und die verbindlichen Texte der Protokolle eintragen. Beispieldaten laufen nur im Entwicklungsmodus (`INVENTAR_DEBUG=1`).
+
+### Ohne Docker (lokale Entwicklung)
+
+```bash
+# 1. Virtuelle Umgebung
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+# 2. Migrations
+INVENTAR_DEBUG=1 .venv/bin/python manage.py migrate
+
+# 3. Beispieldaten
+INVENTAR_DEBUG=1 .venv/bin/python manage.py beispieldaten --neu
+
+# 4. Server starten
+INVENTAR_DEBUG=1 .venv/bin/python manage.py runserver 0.0.0.0:8000
+```
+
+### Ohne Internet
+
+Der Bau braucht Internet. Hat das Zielsystem keins: das Image auf einem Rechner mit Internet bauen und mit `docker save` und `docker load` übertragen. Das ist bisher nicht erprobt.
+
+## Betrieb
+
+### Umgebungsvariablen
+
+Die vollständige Liste mit Pflichtwerten steht in `.env.example`.
+
+| Variable | Zweck | Standard |
+|---|---|---|
+| `INVENTAR_DEBUG` | `1` für Entwicklung, sonst aus | aus |
+| `INVENTAR_SECRET_KEY` | Django-Schlüssel, ohne Entwicklungsmodus Pflicht | – |
+| `BASIS_URL` | Adresse für Mails und QR-Codes, ihr Host ist erlaubt | `http://127.0.0.1:8000` |
+| `INVENTAR_HOSTS` | weitere erlaubte Hostnamen, kommagetrennt | – |
+| `INVENTAR_PROXY` | `1` hinter dem eigenen Proxy: IP-Adresse aus `X-Forwarded-For` | aus |
+| `DATABASE_URL` | PostgreSQL-Verbindung, ohne Angabe SQLite | – |
+| `MAIL_ABSENDER`, `SMTP_*` | Mailversand | – |
+| `MAIL_ABLAGE` | nur für Tests: Mails als Datei statt Versand | – |
+| `DATEIABLAGE` | Pfad der Dateiablage | `var/dateien` |
+| `SIEGEL_P12`, `SIEGEL_PASSWORT` | Siegel-Zertifikat (F-138). Ohne Siegel schließt kein Protokoll ab | im Entwicklungsmodus das Testsiegel |
+| `KENNZAHLEN_TOKEN` | Bearer-Token für `/api/kennzahlen` (F-105) | – |
+| `OEFFENTLICHE_ADRESSE` | Adresse, an der Docker die Ports 443 und 80 veröffentlicht | `127.0.0.1` |
+| `SICHERUNG_TAGE` | wie viele Tage Sicherungen aufgehoben werden | `30` |
+
+**Erreichbarkeit (N-01):** Docker öffnet veröffentlichte Ports an der Firewall des Servers vorbei, eine Regel in `ufw` schützt sie nicht. Deshalb lauscht der Proxy ohne weitere Angabe nur auf `127.0.0.1`. Auf der VM im Büronetz trägt man in `.env` die interne Adresse der VM als `OEFFENTLICHE_ADRESSE` ein, nicht `0.0.0.0`. Von außerhalb des Büronetzes geht es dann nur über das VPN.
+
+### Dienste (docker-compose)
+
+| Dienst | Aufgabe | Port |
+|---|---|---|
+| `proxy` | nginx, HTTPS mit internem Zertifikat, setzt `X-Forwarded-For` | 443, 80 leitet um, nur an `OEFFENTLICHE_ADRESSE` |
+| `web` | gunicorn, Django, WhiteNoise | intern 8000 |
+| `db` | PostgreSQL 16 | intern 5432 |
+| `cron` | stündlicher `tageslauf` | – |
+| `sicherung` | täglicher Dump und Kopie der Dateiablage nach `SICHERUNG_ZIEL` | – |
+
+### Tageslauf
+
+Der `cron`-Dienst ruft `manage.py tageslauf` stündlich auf. Er erledigt:
+
+- **F-91:** Leihe endet morgen → Mail an die Person
+- **F-92:** Leihe überfällig → Mail an Person und IT
+- **F-94:** Garantie endet in 30 Tagen → Sammelmail an die IT (nur Montag)
+- **F-95:** Unterschriften seit mehr als 3 Tagen offen → Sammelmail
+- **F-140:** Erinnerung an die Gegenzeichnung am dritten Tag
+- **F-53:** Deaktivierung von Konten am Tag nach dem Austritt
+- **F-101:** Zählerstand für das Delta
+
+### Kennzahlen-API (F-105)
+
+```bash
+curl -H "Authorization: Bearer <KENNZAHLEN_TOKEN>" http://127.0.0.1:8000/api/kennzahlen
+```
+
+## Sicherung (N-06)
+
+### Tägliche Sicherung
+
+Der Dienst `sicherung` wartet nach dem Start, bis die Migrationen durch sind, und ruft dann `scripts/sicherung.sh /sicherung` einmal am Tag auf. `SICHERUNG_ZIEL` ist das Verzeichnis, das UrBackup erfasst. Stände älter als `SICHERUNG_TAGE` Tage (Vorgabe 30) räumt das Skript weg. Scheitert eine Sicherung, steht die Meldung im Protokoll des Dienstes (`docker compose logs sicherung`), und der nächste Versuch folgt nach einer Stunde.
+
+Das Skript erzeugt unter `<Ziel>/<Stempel>/`:
+
+| Datei/Ordner | Inhalt |
+|---|---|
+| `inventar.sql.gz` | PostgreSQL-Dump, komprimiert (ohne `DATABASE_URL`: `inventar.sqlite3`) |
+| `dateien/` | Kopie der Dateiablage |
+
+Scheitert ein Teil, endet es mit einem Fehler, und der Ordner behält die Endung `.unvollstaendig`. Der nächste Versuch ersetzt ihn, so sammeln sich bei einem dauerhaften Fehler keine Ordner an.
+
+### Rücksicherung
+
+#### PostgreSQL
+
+```bash
+# 1. Datenbank anlegen
+createdb inventar
+
+# 2. Dump einspielen
+gunzip -c /srv/inventar/sicherung/<Stempel>/inventar.sql.gz | psql -d inventar
+
+# 3. Migrations nachziehen (falls nötig)
+python manage.py migrate
+```
+
+#### SQLite (Entwicklung)
+
+```bash
+cp /srv/inventar/sicherung/<Stempel>/inventar.sqlite3 var/inventar.sqlite3
+rm -rf var/dateien && cp -a /srv/inventar/sicherung/<Stempel>/dateien var/dateien
+```
+
+#### Docker
+
+```bash
+# 1. Alle Dienste anhalten und nur die Datenbank starten, damit beim Einspielen niemand schreibt
+docker compose down
+docker compose up -d --wait db
+
+# 2. Dump einspielen; er löscht vorhandene Tabellen und legt sie neu an
+gunzip -c /pfad/zum/<Stempel>/inventar.sql.gz | docker compose exec -T db psql -q -U inventar -d inventar
+
+# 3. Nur die Anwendung starten und die Dateien zurückkopieren, noch ohne Sicherung und Tageslauf
+docker compose up -d web
+docker compose cp -a /pfad/zum/<Stempel>/dateien/. web:/srv/inventar/var/dateien
+
+# 4. Alle übrigen Dienste starten; die erste Sicherung danach enthält Datenbank und Dateien
+docker compose up -d
+```
+
+Das Image bringt `pg_dump` 17 mit, die Datenbank ist PostgreSQL 16. Deshalb meldet Schritt 2 einmal `unrecognized configuration parameter "transaction_timeout"`. Das ist harmlos; andere Fehler sind es nicht.
+
+Erprobt ist dieser Weg noch nicht. Am 05.11.2026 lief auf der DGX nur ein Totalverlust mit `docker compose down -v` und das Einspielen in eine leere Datenbank, auf dem Stand `54bdb8a`. Die Ausgaben dieses Laufs sind nicht aufgehoben. Den Weg oben, mit `down` ohne `-v` über die vorhandene Datenbank und mit den Schritten 3 und 4 in dieser Reihenfolge, vor dem Go-live auf der VM einmal durchspielen und das Ergebnis festhalten.
+
+`SICHERUNG_ZIEL` muss für den Nutzer der Anwendung (UID 1000) schreibbar sein. Vor dem Go-live einmal testen (N-06).
+
+## Tests
+
+```bash
+# Alle Tests (legt das Testsiegel selbst an, wenn es fehlt)
+INVENTAR_DEBUG=1 .venv/bin/python manage.py test
+
+# System-Check
+INVENTAR_DEBUG=1 .venv/bin/python manage.py check
+
+# Beispieldaten anlegen
+INVENTAR_DEBUG=1 .venv/bin/python manage.py beispieldaten --neu
+
+# Siegel-Tests
+INVENTAR_DEBUG=1 .venv/bin/python manage.py testsiegel
+
+# Tageslauf mit festem Stichtag
+INVENTAR_DEBUG=1 .venv/bin/python manage.py tageslauf --stichtag 2026-11-02
+```
+
+## Lizenzen
+
+- htmx unter Zero-Clause BSD (`static/vendor/LICENSE-htmx.txt`)
+- Archivo unter SIL Open Font License 1.1 (`static/fonts/OFL.txt`)

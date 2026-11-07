@@ -1,0 +1,55 @@
+{% extends "basis.html" %}
+{% block titel %}Arbeitsplätze · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div><h1>Arbeitsplätze</h1><p class="muted lead">Soll-Ist-Abgleich je Arbeitsplatz.</p></div>
+  <div class="actions">
+    <a class="btn" href="?format=xlsx" data-test="export-xlsx">Export .xlsx</a>
+    <a class="btn" href="?format=csv" data-test="export-csv">Export .csv</a>
+    <a class="btn" href="/arbeitsplaetze/" data-test="raumplan-link">Raumplan</a>
+    <a class="btn" href="/arbeitsplaetze/bedarf/" data-test="bedarf-link">Bedarf</a>
+    <a class="btn" href="/arbeitsplaetze/pruefen/" data-test="erstinventur-link">Erstinventur</a>
+  </div>
+</div>
+
+<p class="anzahl" data-test="anzahl">{{ zeilen|length }} Arbeitsplätze</p>
+
+<div class="liste" data-test="liste" data-liste="arbeitsplaetze-liste">
+  <div data-test="arbeitsplaetze-liste"></div>
+  {% for z in zeilen %}
+  <div class="zeile spalten-platz" data-test="zeile" data-id="{{ z.ort.kennung }}">
+    <span data-test="ort-kennung">{{ z.ort.kennung }}</span>
+    <span class="muted" data-test="ort-raum">{{ z.ort.raum }}</span>
+    <span data-test="feste-person">{% if z.ort.feste_person %}<a href="/personen/{{ z.ort.feste_person.pk }}/">{{ z.ort.feste_person.voller_name }}</a>{% else %}<span class="muted">{{ z.ort.notiz|default:"–" }}</span>{% endif %}</span>
+    <span class="muted" data-test="profil">{% if z.ort.profil %}{{ z.ort.profil.name }}{% else %}–{% endif %}</span>
+    <span data-test="abgleich-ergebnis">
+      {% if z.abgleich.ergebnis == "vollstaendig" %}
+        <span class="chip-status in-benutzung">✓ vollständig</span>
+      {% elif z.abgleich.ergebnis == "unvollstaendig" %}
+        <span class="chip-status ausgemustert">− unvollständig</span>
+      {% else %}
+        <span class="chip-status in-reparatur">+ mehr als Soll</span>
+      {% endif %}
+    </span>
+    <span data-test="fehlliste">
+      {% for kategorie, anzahl in z.abgleich.fehlend %}
+        <span class="chip-status ausgemustert">fehlt: {{ anzahl }} × {{ kategorie.name }}</span>
+      {% endfor %}
+    </span>
+    <span data-test="mehrliste">
+      {% for kategorie, anzahl in z.abgleich.zuviel %}
+        <span class="chip-status in-reparatur">mehr: {{ anzahl }} × {{ kategorie.name }}</span>
+      {% endfor %}
+    </span>
+    <a class="btn sm" href="/arbeitsplaetze/{{ z.ort.kennung }}/" data-test="detail-link">Ansehen</a>
+  </div>
+  {% empty %}
+  <div class="zeile muted">Keine Arbeitsplätze gefunden.</div>
+  {% endfor %}
+</div>
+
+<div class="abschnitt">
+  <h2>Fehlende Ausstattung</h2>
+  {% include "geraete/_bedarfsliste.html" %}
+</div>
+{% endblock %}

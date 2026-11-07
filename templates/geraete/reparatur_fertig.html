@@ -1,0 +1,42 @@
+{% extends "basis.html" %}
+{% block titel %}Reparatur abschließen · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div>
+    <h1>Reparatur abschließen</h1>
+    <p class="muted lead">{{ gerat.inventarnummer }} · {{ gerat.geraetename|default:gerat.modell }}</p>
+  </div>
+</div>
+<div data-test="dialog" data-name="reparatur-abschliessen">
+  <form method="post" novalidate data-test="reparatur-fertig-formular">
+    {% csrf_token %}
+    <div class="meldungen">
+      {% include "fragmente/fehler.html" %}
+    </div>
+    <p data-test="bisherige-zuordnung">Bisherige Zuordnung: <strong>{% if gerat.person %}{{ gerat.person.voller_name }}{% if gerat.ort %}, {{ gerat.ort.kennung }}{% endif %}{% elif gerat.ort %}{{ gerat.ort.kennung }}{% else %}keine{% endif %}</strong></p>
+    <div class="form-grid">
+      <div class="field"><label for="id_zustand">Zustand jetzt</label>{{ form.zustand }}{% if form.zustand.errors %}<div class="meldung error">{% for e in form.zustand.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+      <div class="field full"><label>Ziel</label>
+        {% for radio in form.ziel %}
+          <label class="check">{{ radio.tag }} {{ radio.choice_label }}</label>
+        {% endfor %}
+        {% if form.ziel.errors %}<div class="meldung error">{% for e in form.ziel.errors %}{{ e }}{% endfor %}</div>{% endif %}
+      </div>
+      {% if gerat.person %}
+      <p class="muted full" data-test="hinweis-ruecknahme">Ins Lager heißt: {{ gerat.person.voller_name }} gibt das Gerät zurück. Es entsteht ein Rücknahmeprotokoll, dafür gelten die folgenden Angaben.</p>
+      <div class="field"><label for="id_zubehoer_komplett">Zubehör komplett</label>{{ form.zubehoer_komplett }}</div>
+      <div class="field full"><label for="id_maengel">Bemerkung, Mängel</label>{{ form.maengel }}</div>
+      <div class="field full" data-test="unterschrift"><label>Unterschrift</label>{% for radio in form.unterschrift %}<label class="radio">{{ radio }}</label>{% endfor %}</div>
+      <div class="field full"><label for="id_empfaenger">Adresse für den Link, bei Rückgabe per Post</label>{{ form.empfaenger }}{% if form.empfaenger.errors %}<div class="meldung error">{% for e in form.empfaenger.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+      {% endif %}
+      <div class="field"><label for="id_lager_ort">Lagerort, falls ins Lager</label>{{ form.lager_ort }}</div>
+      <div class="field"><label for="id_kosten">Kosten (EUR, optional)</label>{{ form.kosten }}{% if form.kosten.errors %}<div class="meldung error">{% for e in form.kosten.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+      <div class="field"><label for="id_beleg">Beleg (optional)</label>{{ form.beleg }}{% if form.beleg.errors %}<div class="meldung error">{% for e in form.beleg.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+    </div>
+    <div class="actions">
+      <button type="submit" class="btn primary" data-test="speichern">Abschließen</button>
+      <a class="btn link" href="/geraete/{{ gerat.inventarnummer }}/" data-test="abbrechen">Abbrechen</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

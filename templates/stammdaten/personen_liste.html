@@ -1,0 +1,25 @@
+{% extends "basis.html" %}
+{% block titel %}Personen · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div><h1>Personen</h1><p class="muted lead">Personen pflegen.</p></div>
+  {% if user.ist_admin %}<div class="actions"><a class="btn primary" href="/personen/neu/" data-test="person-anlegen">Neue Person</a></div>{% endif %}
+  <div class="actions">
+    <a class="btn" href="/personen/?format=xlsx" data-test="export-xlsx">Export .xlsx</a>
+    <a class="btn" href="/personen/?format=csv" data-test="export-csv">Export .csv</a>
+  </div>
+</div>
+<div class="liste" data-test="liste">
+  {% for p in personen %}
+  <div class="zeile spalten-person" data-test="zeile" data-id="{{ p.pk }}">
+    <a href="/personen/{{ p.pk }}/">{{ p.nachname }} {{ p.vorname }}</a>
+    <span class="muted">{{ p.email }}{% if p.abteilung %} · {{ p.abteilung }}{% endif %}</span>
+    <span class="muted" data-test="arbeitsplatz">{% for o in p.feste_plaetze.all %}<a href="/arbeitsplaetze/{{ o.kennung }}/">{{ o.kennung }}</a>{% if not forloop.last %}, {% endif %}{% empty %}–{% endfor %}</span>
+    <span class="muted" data-test="person-status">{% if p.austritt %}Austritt {{ p.austritt|date:"d.m.Y" }}{% elif p.aktiv %}aktiv{% else %}inaktiv{% endif %}</span>
+    {% if user.ist_admin %}<a class="btn sm" href="/personen/{{ p.pk }}/aendern/">Ändern</a>{% endif %}
+  </div>
+  {% empty %}
+  <div class="zeile muted">Keine Personen vorhanden.</div>
+  {% endfor %}
+</div>
+{% endblock %}

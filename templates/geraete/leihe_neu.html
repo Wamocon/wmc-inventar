@@ -1,0 +1,48 @@
+{% extends "basis.html" %}
+{% block titel %}Leihgerät anfragen · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div>
+    <h1>Leihgerät anfragen</h1>
+    <p class="muted lead">Die IT prüft die Anfrage und meldet sich per E-Mail.</p>
+  </div>
+</div>
+<form method="post" novalidate data-test="leih-anfrage" data-frei-url="/meine-geraete/leihe/frei/">
+  {% csrf_token %}
+  <div class="meldungen">
+    {% include "fragmente/fehler.html" %}
+    {% if fehler %}<div class="meldung error" data-test="fehler">{{ fehler }}</div>{% endif %}
+  </div>
+  <div class="form-grid">
+    <div class="field">
+      <label for="id_kat" class="req">Gerät</label>
+      {{ form.kat }}
+      <span class="help">Kategorie des Leihgeräts</span>
+    </div>
+    <div class="field">
+      <label for="id_gerat">{{ form.gerat.label }}</label>
+      <select name="gerat" id="id_gerat" data-test="gerat">
+        <option value="">Beliebiges Gerät dieser Kategorie</option>
+        {% for g in auswahl.geraete %}
+        <option value="{{ g.id }}"{% if g.id|stringformat:"s" == gewaehlt %} selected{% endif %}>{{ g.text }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field"><label for="id_beginn" class="req">Von</label>{{ form.beginn }}</div>
+    <div class="field"><label for="id_ende" class="req">Bis</label>{{ form.ende }}</div>
+    <div class="field full"><label for="id_zweck" class="req">Zweck</label>{{ form.zweck }}</div>
+  </div>
+  {% if auswahl.text %}
+  <div class="meldung {{ auswahl.art }}" data-test="freie-geraete" aria-live="polite">{{ auswahl.text }}</div>
+  {% else %}
+  <div class="meldung info" data-test="freie-geraete" aria-live="polite">Zeitraum wählen, um die freien Geräte zu sehen.</div>
+  {% endif %}
+  {% if darf_anfragen %}
+  <div class="actions">
+    <button type="submit" class="btn primary" data-test="anfragen">Anfrage senden</button>
+    <a class="btn link" href="/meine-geraete/" data-test="abbrechen">Abbrechen</a>
+  </div>
+  {% endif %}
+</form>
+<script src="/static/leihe_anfrage.js"></script>
+{% endblock %}

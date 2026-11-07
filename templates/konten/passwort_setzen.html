@@ -1,0 +1,25 @@
+{% extends "basis.html" %}
+{% block titel %}Passwort setzen · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="login-wrap">
+  <h1>Passwort setzen</h1>
+  <p class="muted">Wählen Sie ein neues Passwort (mindestens 12 Zeichen).</p>
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <div class="login-feld">
+      <label for="{{ form.passwort.id_for_label }}" class="req">Neues Passwort</label>
+      {{ form.passwort }}
+    </div>
+    <div class="login-feld">
+      <label for="{{ form.passwort_wiederholung.id_for_label }}" class="req">Passwort wiederholen</label>
+      {{ form.passwort_wiederholung }}
+    </div>
+    {% if form.errors %}
+      <div class="fehler-kasten" data-test="fehler">{{ form.errors.passwort.0|default:"Bitte korrigieren Sie die Fehler oben." }}</div>
+    {% endif %}
+    <div class="login-akt">
+      <button type="submit" class="btn primary" data-test="passwort-setzen-button">Passwort setzen</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -131,7 +131,7 @@ Orte vom Typ „Raum“ (F-68), Kennung, Name, Raum und Position x / y in %:
 
 Lagerort: Kennung `LAGER-EG`, Name „IT-Lager“.
 
-Räume im Plan: Großraumbüro (1.01), Büro Geschäftsführung (1.02), Studio (1.03) sowie Küche, Serverraum, Pausenraum, Academy-Raum und Lernraum ohne Arbeitsplätze.
+Räume im Plan: Großraumbüro (1.01), Büro Geschäftsführung (1.02), Studio (1.03) sowie Küche, Serverraum, Pausenraum, Academy-Raum und Lernraum ohne Arbeitsplätze. Sie stehen im Grundriss; Orte vom Typ „Raum“ gibt es nur für Räume mit Geräten, vier in den Beispieldaten.
 
 ## 3 Adressen
 
@@ -172,6 +172,8 @@ Wer was aufrufen darf (Kapitel 2), mit der erwarteten Antwort; 403 kommt mit der
 | `/g/<Nr>` | Weiterleitung auf das Gerätedetail | Weiterleitung auf das Gerätedetail | 200, Kurzansicht |
 | `/arbeitsplaetze/…`, `/personen/…` | 200 | 200, ohne Aktionen | 403 |
 | `/verleih/` | 200 | 403 | 403 |
+| `/konten/`, `/einstellungen/checklisten/`, `/geraete/sammelausgabe/` | 200 | 403 | 403 |
+| `/exporte/?liste=…&format=…` | 200 | 200 | 403 |
 | `/meine-geraete/`, `/meine-geraete/leihe/neu/` | 200, wenn das Konto eine Person hat | 200, wenn das Konto eine Person hat | 200 |
 | `/protokolle/<Nr>/`, `/protokolle/<Nr>/pdf/` | 200 | 200 | 200 für eigene Protokolle, sonst 403 |
 
@@ -187,6 +189,7 @@ Filter der Geräteliste, kombinierbar:
 | `ort` | Kennung, z. B. `WMC-WP-01`, `LAGER-EG`, `STUDIO-TECHNIK` |
 | `person` | ID der Person |
 | `unvollstaendig` | `1`: Arbeitsliste „Daten unvollständig“ (F-88) |
+| `leihpool` | `1`: nur Geräte im Leihpool (F-30) |
 | `q` | Suchtext wie in der globalen Suche (F-44) |
 
 Nummern:
@@ -201,12 +204,14 @@ Bedienelemente, die Tests ansprechen, tragen ein Attribut `data-test`. Weitere A
 
 | Bereich | `data-test` | Zusatz |
 |---|---|---|
-| Rahmen | `hauptnavigation`, darin `nav-uebersicht`, `nav-geraete`, `nav-arbeitsplaetze`, `nav-verleih`, `nav-personen`, `nav-import`, `nav-etiketten`, `nav-einstellungen`, `nav-meine-geraete`; `suche`, `suchtreffer`, `abmelden` | Einträge, die eine Rolle nicht sehen darf, fehlen im HTML |
+| Rahmen | `hauptnavigation`, darin `nav-uebersicht`, `nav-geraete`, `nav-arbeitsplaetze`, `nav-verleih`, `nav-personen`, `nav-import`, `nav-etiketten`, `nav-einstellungen`, `nav-meine-geraete`, `nav-leihen` (Leihgerät anfragen, bei jedem Konto mit eigener Person); `suche`, `suchtreffer`, `abmelden` | Einträge, die eine Rolle nicht sehen darf, fehlen im HTML |
 | Rückmeldungen | `meldung` (Erfolg), `fehler` (Fehler im Formular oder Vorgang), `keine-berechtigung` | |
-| Listen | `liste`, je Zeile `zeile`; `anzahl`; `export-xlsx`, `export-csv`; `auswahl` (Kästchen je Zeile), `etiketten-drucken` | Zeile mit `data-id` = Inventarnummer, Kennung, Personen-ID, Leih- oder Protokollnummer; in der Leihliste zusätzlich `data-stand` (Abschnitt 5) |
+| Listen | `liste`, je Zeile `zeile`; `anzahl`; `export-xlsx`, `export-csv`; `auswahl` (Kästchen je Zeile), `etiketten-drucken`, `sammel-ausgabe` | Zeile mit `data-id` = Inventarnummer, Kennung, Personen-ID, Leih- oder Protokollnummer; in der Leihliste zusätzlich `data-stand` (Abschnitt 5) |
 | Gerätedetail | `inventarnummer`, `status`, `zustand`, `verbleib`, `historie`, darin `vorgang`; `qr` | `status` mit `data-wert` (Abschnitt 5); `vorgang` mit `data-typ`, z. B. `Aufnahme`, `Ausgabe`, `Import`; `qr` mit `data-qr` = Inhalt des QR-Codes (F-70) |
 | Kurzansicht | `kurzansicht`, darin `kategorie`, `modell`, `inventarnummer`, `zuordnung` | `zuordnung` mit Text „Ihnen zugeordnet“ oder „nicht Ihnen zugeordnet“ (F-113) |
-| Aktionen | `aktion-korrigieren` (neue Fassung eines gesperrten Protokolls, F-135), `aktion-bearbeiten`, `aktion-ausgabe`, `aktion-rueckgabe`, `aktion-verleih`, `aktion-umzug`, `aktion-reparatur`, `aktion-reparatur-abschliessen`, `aktion-ausmustern`, `aktion-etikett`, `aktion-loeschen`, `aktion-vorlage`, `aktion-im-raumplan`, `aktion-notiz` | Aktionen ohne Recht fehlen im HTML |
+| Hinweise an Dialogen | `hinweis-entwurf` (offenes Protokoll am Gerät, F-21), `hinweis-reserviert` (Dialog Verleih, F-20), `hinweis-ruecknahme` (Reparaturabschluss mit Person, F-42) | |
+| Erfassen | `seriennummern` (Mehrfacherfassung, je Zeile eine Seriennummer und ein Gerät, F-11) | |
+| Aktionen | `aktion-korrigieren` (neue Fassung eines gesperrten Protokolls, F-135), `aktion-bearbeiten`, `aktion-ausgabe`, `aktion-rueckgabe`, `aktion-verleih`, `aktion-umzug`, `aktion-reparatur`, `aktion-reparatur-abschliessen`, `aktion-ausmustern`, `aktion-etikett`, `aktion-loeschen`, `aktion-anhang`, `aktion-reparatur-angaben`, `aktion-vorlage`, `aktion-im-raumplan`, `aktion-notiz` | Aktionen ohne Recht fehlen im HTML |
 | Dialoge | `dialog` | `data-name`: `ausgabe`, `verleih`, `rueckgabe`, `umzug`, `reparatur`, `reparatur-abschliessen`, `ausmustern`, `bearbeiten`, `anhang`, `notiz`, `scan-hochladen`, `genehmigen`, `ablehnen`, `verlaengern`, `austritt`, `gegenzeichnen`; Schaltflächen darin `speichern`, `bestaetigen`, `abbrechen`, `signieren`, `code-senden` |
 | Übersicht | `kennzahl`, darin `ist`, `gesamt`, `delta`; `arbeitsliste`, darin `zeile`; `inventarwert` | siehe unten |
 | Arbeitsplätze | `raumplan`, `platz`, `raumort`, `platz-popup`, `ohne-position`; `bedarfsliste`, darin `zeile` | `platz` mit `data-id` = Kennung, `data-soll-ist` = `vollstaendig`, `unvollstaendig` oder `mehr` und `data-x`, `data-y` = Position in % mit Punkt als Dezimalzeichen (`50.1`); `raumort` mit `data-id` = Kennung; `ohne-position` listet Plätze ohne Position (F-67); Zeile der Bedarfsliste mit `data-id` = Kategorie, darin `fehlt` und `lager` (F-63) |
@@ -220,7 +225,7 @@ Bedienelemente, die Tests ansprechen, tragen ein Attribut `data-test`. Weitere A
 Übersicht im Einzelnen:
 
 - `kennzahl` hat `data-id`. Mit `gesamt` (IST/Gesamt, F-100): `in-benutzung`, `arbeitsplaetze-vollstaendig`, `verliehen`, `geprueft`. Nur mit `ist`: `ueberfaellig`, `anfragen-offen`, `garantie-30-tage`, `unterschriften-offen`. `delta` fehlt, solange es keinen Zählerstand vom Vortag gibt.
-- `arbeitsliste` hat `data-id`: `ueberfaellig`, `anfragen`, `arbeitsplaetze-unvollstaendig`, `garantie`, `unterschriften-offen`, `daten-unvollstaendig`, `offene-punkte` (Prüfpunkte „in Klärung“, F-133), `austritte` (Austritte mit offenen Geräten). Eine leere Arbeitsliste steht mit ihrem Hinweistext da, ohne `zeile`.
+- `arbeitsliste` hat `data-id`: `ueberfaellig`, `anfragen`, `arbeitsplaetze-unvollstaendig`, `garantie`, `unterschriften-offen`, `daten-unvollstaendig`, `offene-punkte` (Prüfpunkte „in Klärung“, F-133), `austritte` (Austritte mit offenen Geräten). Solange ein PDF nicht hinausging, steht zusätzlich `versand-offen` da (F-139). Eine leere Arbeitsliste steht mit ihrem Hinweistext da, ohne `zeile`. Für den Leser enthält `anfragen` nur seine eigenen Anfragen, ebenso `/exporte/?liste=anfragen`.
 - `inventarwert` ist die Summe nach F-104, nur für Admin und Leser.
 - `/api/kennzahlen` liefert dieselben Werte als JSON: `{"stand": "2026-11-02T09:30", "kennzahlen": {"in-benutzung": {"ist": 125, "gesamt": 142, "delta": 2}, "ueberfaellig": {"ist": 1, "delta": null}, …}}`. Schlüssel sind die `data-id` der Kennzahlen; `gesamt` nur, wo die Übersicht es zeigt; `delta` ist eine Zahl oder `null`.
 
@@ -250,6 +255,7 @@ Leihe (Kapitel 3.2), Anzeigetext und `data-stand`:
 | ausgegeben | „ausgegeben“, nach Ablauf der Frist „überfällig“ | `ausgegeben` bzw. `ueberfaellig` |
 | zurückgegeben | „zurückgegeben“ | `zurueckgegeben` |
 | zurückgezogen | „zurückgezogen“ | `zurueckgezogen` |
+| verloren | „verloren“ | `verloren` |
 
 Protokoll (Kapitel 3.2), Anzeigetext und `data-stand`. Die drei offenen Stände zeigen „Unterschrift offen“ und dahinter, was fehlt (F-22, F-141):
 

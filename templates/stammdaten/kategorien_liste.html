@@ -1,0 +1,26 @@
+{% extends "basis.html" %}
+{% block titel %}Kategorien · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div><h1>Kategorien</h1><p class="muted lead">Kategorien pflegen.</p></div>
+  {% if ist_admin %}<div class="actions"><a class="btn primary" href="/kategorien/neu/" data-test="kategorie-anlegen">Neue Kategorie</a></div>{% endif %}
+  <div class="actions">
+    <a class="btn" href="/kategorien/?format=xlsx" data-test="export-xlsx">Export .xlsx</a>
+    <a class="btn" href="/kategorien/?format=csv" data-test="export-csv">Export .csv</a>
+  </div>
+</div>
+<div class="liste" data-test="liste">
+  {% for k in kategorien %}
+  <div class="zeile spalten-vier" data-test="zeile" data-id="{{ k.pk }}">
+    {% if ist_admin %}<a href="/kategorien/{{ k.pk }}/aendern/">{{ k.name }}</a>{% else %}<span>{{ k.name }}</span>{% endif %}
+    <span class="muted">{% if k.hat_datentraeger %}hat Datenträger{% else %}kein Datenträger{% endif %}{% if k.seriennummer_pflicht %} · Seriennummer Pflicht{% endif %} · {{ k.geraete_anzahl }} Gerät(e){% if k.geraete_anzahl or k.profile_anzahl %} · nicht löschbar{% endif %}</span>
+    {% if ist_admin %}
+    <a class="btn sm" href="/kategorien/{{ k.pk }}/aendern/">Ändern</a>
+    {% if not k.geraete_anzahl and not k.profile_anzahl %}<a class="btn sm" href="/kategorien/{{ k.pk }}/loeschen/" data-test="aktion-loeschen">Löschen</a>{% endif %}
+    {% endif %}
+  </div>
+  {% empty %}
+  <div class="zeile muted">Keine Kategorien vorhanden.</div>
+  {% endfor %}
+</div>
+{% endblock %}

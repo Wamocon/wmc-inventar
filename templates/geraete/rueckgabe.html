@@ -1,0 +1,33 @@
+{% extends "basis.html" %}
+{% block titel %}Gerät zurücknehmen · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div>
+    <h1>Gerät zurücknehmen</h1>
+    <p class="muted lead">{{ gerat.inventarnummer }} · {{ gerat.geraetename|default:gerat.modell }}</p>
+  </div>
+</div>
+<div data-test="dialog" data-name="rueckgabe">
+  <form method="post" novalidate enctype="multipart/form-data" data-test="rueckgabe-formular">
+    {% csrf_token %}
+    <div class="meldungen">
+      {% include "fragmente/fehler.html" %}
+    </div>
+    <p data-test="zustand-ausgabe">Zustand bei Ausgabe: <strong>{{ form.zustand_bei_ausgabe|default:"nicht erfasst" }}</strong>{% if gerat.person %} · Rückgabe von {{ gerat.person.voller_name }}{% endif %}</p>
+    <div class="form-grid">
+      <div class="field"><label for="id_zustand_rueckgabe">Zustand bei Rückgabe</label>{{ form.zustand_rueckgabe }}{% if form.zustand_rueckgabe.errors %}<div class="meldung error">{% for e in form.zustand_rueckgabe.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+      <div class="field"><label for="id_zubehoer_komplett">Zubehör komplett</label>{{ form.zubehoer_komplett }}{% if form.zubehoer_komplett.errors %}<div class="meldung error">{% for e in form.zubehoer_komplett.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+      <div class="field full"><label for="id_maengel">Bemerkung, Mängel</label>{{ form.maengel }}{% if form.maengel.errors %}<div class="meldung error">{% for e in form.maengel.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+      <div class="field"><label for="id_ziel">Danach</label>{{ form.ziel }}{% if form.ziel.errors %}<div class="meldung error">{% for e in form.ziel.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+      <div class="field"><label for="id_lager_ort">Lagerort</label>{{ form.lager_ort }}</div>
+      <div class="field full"><label for="id_fotos">Fotos (JPG, PNG oder HEIC bis 10 MB)</label><input type="file" name="fotos" id="id_fotos" multiple accept="image/jpeg,image/png,image/heic" data-test="foto-datei"></div>
+      <div class="field full" data-test="unterschrift"><label>Unterschrift</label>{% for radio in form.unterschrift %}<label class="radio">{{ radio }}</label>{% endfor %}</div>
+      <div class="field full"><label for="id_empfaenger">Adresse für den Link, bei Rückgabe per Post</label>{{ form.empfaenger }}{% if form.empfaenger.errors %}<div class="meldung error">{% for e in form.empfaenger.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+    </div>
+    <div class="actions">
+      <button type="submit" class="btn primary" data-test="speichern">Rückgabe abschließen</button>
+      <a class="btn link" href="/geraete/{{ gerat.inventarnummer }}/" data-test="abbrechen">Abbrechen</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

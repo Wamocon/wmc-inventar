@@ -1,0 +1,53 @@
+{% extends "basis.html" %}
+{% block titel %}Geräte ausgeben · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div>
+    <h1>Geräte ausgeben</h1>
+    <p class="muted lead">{{ geraete|length }} Geräte, ein Protokoll</p>
+  </div>
+</div>
+{% if gesperrt %}
+<div class="meldung warning" data-test="nicht-waehlbar">
+  {% for g, grund in gesperrt %}<div>{{ g.inventarnummer }}: {{ grund }}</div>{% endfor %}
+</div>
+{% endif %}
+{% if geraete %}
+<div data-test="dialog" data-name="ausgabe">
+  <form method="post" novalidate data-test="ausgabe-formular">
+    {% csrf_token %}
+    <div class="meldungen">{% include "fragmente/fehler.html" %}</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Gerät</th><th>Seriennummer</th><th>Zustand</th><th>Zubehör komplett</th><th>Bemerkung</th></tr></thead>
+        <tbody>
+          {% for g in geraete %}
+          <tr data-test="zeile" data-id="{{ g.inventarnummer }}">
+            <td><input type="hidden" name="auswahl" value="{{ g.inventarnummer }}"><span class="inv">{{ g.inventarnummer }}</span> {{ g.hersteller }} {{ g.modell }}</td>
+            <td class="mono">{{ g.seriennummer|default:"ohne" }}</td>
+            <td><select name="zustand-{{ g.inventarnummer }}" aria-label="Zustand">{% for wert, text in zustaende %}<option value="{{ wert }}"{% if wert == g.eingabe_zustand %} selected{% endif %}>{{ text }}</option>{% endfor %}</select></td>
+            <td><select name="zubehoer-{{ g.inventarnummer }}" aria-label="Zubehör komplett"><option value="ja">Ja</option><option value="nein"{% if g.eingabe_zubehoer == "nein" %} selected{% endif %}>Nein</option></select></td>
+            <td><input type="text" name="anmerkung-{{ g.inventarnummer }}" value="{{ g.eingabe_anmerkung }}" aria-label="Bemerkung"></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="form-grid">
+      <div class="field"><label for="id_ziel_person">Person</label>{{ form.ziel_person }}</div>
+      <div class="field"><label for="id_ziel_ort">Arbeitsplatz oder Raum</label>{{ form.ziel_ort }}</div>
+      <div class="field full" data-test="unterschrift">
+        <label>Unterschrift</label>
+        {% for radio in form.unterschrift %}<label class="radio">{{ radio }}</label>{% endfor %}
+      </div>
+    </div>
+    <div class="actions">
+      <button type="submit" class="btn primary" data-test="speichern">Ausgabe abschließen</button>
+      <a class="btn link" href="/geraete/" data-test="abbrechen">Abbrechen</a>
+    </div>
+  </form>
+</div>
+{% else %}
+<p class="leer-text">Keine ausgebbaren Geräte gewählt. <a href="/geraete/?status=auf-lager">Zur Liste</a></p>
+{% endif %}
+{% endblock %}

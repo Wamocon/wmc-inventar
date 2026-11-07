@@ -1,0 +1,48 @@
+{% extends "basis.html" %}
+
+{% block titel %}Leihe genehmigen · WMC Inventar{% endblock %}
+
+{% block inhalt %}
+<div class="page-head">
+    <div><h1>Leihe genehmigen</h1>
+        <p class="lead">Ein Gerät aus dem Leihpool der Kategorie zuweisen.</p>
+    </div>
+</div>
+
+<div class="card" data-test="dialog" data-name="genehmigen">
+    <div class="card-head">
+        <h2>Leihe {{ leihe.nr or leihe.id }} genehmigen</h2>
+    </div>
+    <div class="card-body">
+        <p class="muted">
+            Anfrage von {{ leihe.person.vorname }} {{ leihe.person.nachname }} ·
+            Kategorie: {{ leihe.kat.name }} ·
+            {{ leihe.beginn|date:"d.m.Y" }} – {{ leihe.ende|date:"d.m.Y" }} ·
+            Zweck: {{ leihe.zweck }}
+        </p>
+
+        {% if fehler %}
+        <div data-test="fehler" class="error-box">{{ fehler }}</div>
+        {% endif %}
+
+        <form method="post" novalidate>
+            {% csrf_token %}
+            <label class="field">
+                <span>Gerät aus dem Leihpool <span class="erforderlich">*</span></span>
+                <select name="gerat" required data-test="gerat">
+                    <option value="">— Gerät wählen —</option>
+                    {% for choice in form.gerat.field.choices %}
+                        <option value="{{ choice.0 }}" {% if choice.0|stringformat:"s" == form.gerat.value|stringformat:"s" %}selected{% endif %}>
+                            {{ choice.1 }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </label>
+            <div class="form-actions">
+                <a href="{% url 'geraete:verleih-liste' %}" class="btn">Abbrechen</a>
+                <button type="submit" class="btn primary" data-test="genehmigen">Genehmigen</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

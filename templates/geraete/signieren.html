@@ -1,0 +1,64 @@
+{% extends "basis.html" %}
+
+{% block titel %}Gegenzeichnung · Protokoll {{ protokoll.nr }} · WMC Inventar{% endblock %}
+
+{% block inhalt %}
+<div class="page-head">
+    <div>
+        <h1>Gegenzeichnung</h1>
+        <p class="lead muted">
+            Protokoll {{ protokoll.nr }}
+            · {{ protokoll.person.vorname }} {{ protokoll.person.nachname }}
+        </p>
+    </div>
+</div>
+
+{% if meldung %}
+<div class="meldung success" data-test="signieren-meldung">
+    {{ meldung }}
+</div>
+{% endif %}
+
+{% if fehler %}
+<div class="meldung error" data-test="signieren-fehler" role="alert">
+    {{ fehler }}
+</div>
+{% endif %}
+
+<section class="abschnitt" data-test="protokoll-ansicht">
+    <h2>Protokoll</h2>
+    <p class="muted">
+        <a class="btn" data-test="protokoll-pdf" href="/signieren/{{ token }}/pdf/">PDF ansehen</a>
+    </p>
+    <p class="muted">
+        Bitte sehen Sie das Protokoll an und geben Sie unten den Einmalcode ein,
+        den Sie hier per Mail anfordern.
+    </p>
+</section>
+
+<section class="abschnitt" data-test="signieren-formular" data-name="gegenzeichnen">
+    <h2>Gegenzeichnung</h2>
+    <p class="muted">
+        Sie haben keine E-Mail erhalten?
+    </p>
+    <form method="post" action="/signieren/{{ token }}/code-senden/" data-test="code-senden-formular">
+        {% csrf_token %}
+        <button class="btn" type="submit" data-test="code-senden">Code senden</button>
+    </form>
+    <hr>
+    <form method="post" action="/signieren/{{ token }}/" data-test="code-formular">
+        {% csrf_token %}
+        <p>
+            <label for="code">Einmalcode (6 Stellen)</label><br>
+            <input type="text" name="code" id="code" maxlength="6"
+                   pattern="[0-9]{6}" required
+                   data-test="code-eingabe"
+                   placeholder="000000">
+        </p>
+        <p class="muted">
+            Der Code ist 10 Minuten gültig, Sie haben höchstens 5 Versuche.
+        </p>
+        <button class="btn primary" type="submit" data-test="signieren">Signieren</button>
+    </form>
+</section>
+{% endblock %}

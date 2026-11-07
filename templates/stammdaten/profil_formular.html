@@ -1,0 +1,48 @@
+{% extends "basis.html" %}
+{% block titel %}{{ titel }} · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div><h1>{{ titel }}</h1><p class="muted lead">Positionen aus Kategorie und Anzahl.</p></div>
+</div>
+<form method="post" novalidate data-test="profil-formular">
+  {% csrf_token %}
+  <div class="meldungen">
+    {% include "fragmente/fehler.html" %}
+    {% for fehler in positionen.non_form_errors %}<div class="meldung error" data-test="fehler">{{ fehler }}</div>{% endfor %}
+  </div>
+  <div class="form-grid">
+    <div class="field">
+      <label for="{{ form.name.id_for_label }}" class="req">Name</label>
+      {{ form.name }}
+      {% for e in form.name.errors %}<small class="help error">{{ e }}</small>{% endfor %}
+    </div>
+  </div>
+  {{ positionen.management_form }}
+  <div class="liste" data-test="profil-positionen">
+    {% for pf in positionen %}
+    <div class="zeile profil-position" data-test="profil-position">
+      {% for verborgen in pf.hidden_fields %}{{ verborgen }}{% endfor %}
+      <div class="field">
+        <label for="{{ pf.kategorie.id_for_label }}">Kategorie</label>
+        {{ pf.kategorie }}
+        {% for e in pf.kategorie.errors %}<small class="help error" data-test="fehler">{{ e }}</small>{% endfor %}
+      </div>
+      <div class="field">
+        <label for="{{ pf.anzahl.id_for_label }}">Anzahl</label>
+        {{ pf.anzahl }}
+        {% for e in pf.anzahl.errors %}<small class="help error" data-test="fehler">{{ e }}</small>{% endfor %}
+      </div>
+      {% if pf.instance.pk %}
+      <label class="check" for="{{ pf.DELETE.id_for_label }}">{{ pf.DELETE }} Entfernen</label>
+      {% endif %}
+      {% for e in pf.non_field_errors %}<small class="help error" data-test="fehler">{{ e }}</small>{% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+  <p class="help">Weitere Positionen: speichern, dann stehen wieder leere Zeilen bereit.</p>
+  <div class="actions">
+    <button type="submit" class="btn primary" data-test="speichern">Speichern</button>
+    <a class="btn" href="/profile/" data-test="abbrechen">Abbrechen</a>
+  </div>
+</form>
+{% endblock %}

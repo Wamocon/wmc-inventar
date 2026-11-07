@@ -1,0 +1,28 @@
+{% extends "basis.html" %}
+{% block titel %}{% if nachtragen %}Angaben nachtragen{% else %}Reparatur starten{% endif %} · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div>
+    <h1>{% if nachtragen %}Angaben nachtragen{% else %}Reparatur starten{% endif %}</h1>
+    <p class="muted lead">{{ gerat.inventarnummer }} · {{ gerat.geraetename|default:gerat.modell }}</p>
+  </div>
+</div>
+<div data-test="dialog" data-name="reparatur">
+  <form method="post" novalidate data-test="reparatur-start-formular">
+    {% csrf_token %}
+    <div class="meldungen">
+      {% include "fragmente/fehler.html" %}
+    </div>
+    <div class="form-grid">
+      <div class="field"><label for="id_dienstleister">Dienstleister</label>{{ form.dienstleister }}{% if form.dienstleister.errors %}<div class="meldung error">{% for e in form.dienstleister.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+      <div class="field"><label for="id_vorgangsnummer">Vorgangsnummer</label>{{ form.vorgangsnummer }}{% if form.vorgangsnummer.errors %}<div class="meldung error">{% for e in form.vorgangsnummer.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+      <div class="field full"><label for="id_notiz">Fehlerbeschreibung</label>{{ form.notiz }}{% if form.notiz.errors %}<div class="meldung error">{% for e in form.notiz.errors %}{{ e }}{% endfor %}</div>{% endif %}</div>
+    </div>
+    <p class="muted small">Die bisherige Zuordnung wird gemerkt. Nach der Reparatur geht das Gerät dorthin zurück oder ins Lager.</p>
+    <div class="actions">
+      <button type="submit" class="btn primary" data-test="speichern">{% if nachtragen %}Speichern{% else %}Reparatur starten{% endif %}</button>
+      <a class="btn link" href="/geraete/{{ gerat.inventarnummer }}/" data-test="abbrechen">Abbrechen</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

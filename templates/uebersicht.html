@@ -1,0 +1,100 @@
+{% extends "basis.html" %}{% load betraegeuro %}
+{% block titel %}Übersicht · WMC Inventar{% endblock %}
+{% block stile %}<link rel="stylesheet" href="/static/listen.css">{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div>
+    <h1>Übersicht</h1>
+    <p class="lead muted">Stand <span data-test="stand">{{ stand }}</span></p>
+  </div>
+</div>
+
+{# Bestand nach Status (Prototyp: stock) #}
+<section class="stock" aria-label="Bestand nach Status" data-test="status_balken">
+  <div class="stock-bar" role="img" aria-label="{% for s in status_zahlen %}{{ s.label }} {{ s.zahl }}{% if not forloop.last %}, {% endif %}{% endfor %}">
+    {% for s in status_zahlen %}{% if s.zahl %}<span class="stock-segment {{ s.code }}" data-anteil="{{ s.zahl }}"></span>{% endif %}{% endfor %}
+  </div>
+  <ul class="stock-legend">
+    {% for s in status_zahlen %}
+    <li><i class="stock-dot {{ s.code }}"></i>{{ s.label }} <b data-test="status-zahl" data-status="{{ s.code }}">{{ s.zahl }}</b></li>
+    {% endfor %}
+  </ul>
+  <p class="stock-meta">
+    <span><b>{{ aktive_zahl }}</b> aktive Geräte</span>
+    <span>Inventarwert <b data-test="inventarwert-wert">{{ inventarwert|betraegeuro }}</b> netto</span>
+    <span><b>{{ archiv_zahl }}</b> im Archiv</span>
+  </p>
+</section>
+
+<div class="dash">
+
+  {# Kennzahlen (F-100, F-101) #}
+  <section class="card" data-test="kennzahlen">
+    <div class="card-head"><h2>Kennzahlen</h2></div>
+    <ul class="ledger" data-test="liste">
+      {% for kz in kennzahlen %}
+      <li data-test="kennzahl" data-id="{{ kz.data_id }}"{% if kz.achtung %} class="attn"{% endif %}>
+        <span class="k-name">{{ kz.titel }}{% if kz.data_id == "ueberfaellig" and kz.ist %} <span class="chip-status warn" data-test="markierung-ueberfaellig"><span aria-hidden="true">⚠</span> überfällig</span>{% endif %}{% if kz.unterzeile %}<small>{{ kz.unterzeile }}</small>{% endif %}</span>
+        <span class="k-val"><span data-test="ist">{% if kz.ist is not None %}{{ kz.ist }}{% else %}–{% endif %}</span>{% if kz.gesamt is not None %}<small> / <span data-test="gesamt">{{ kz.gesamt }}</span></small>{% endif %}</span>
+        {% if kz.delta is None %}<span class="delta flat"></span>{% else %}<span class="delta{% if not kz.delta %} flat{% endif %}" data-test="delta">{% if kz.delta == 0 %}±0{% elif kz.delta > 0 %}+{{ kz.delta }}{% else %}−{{ kz.delta_abs }}{% endif %}</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    <p class="ledger-note">Rechte Spalte: Veränderung zum Vortag, nach dem nächtlichen Zählerstand.</p>
+    <p class="ledger-note" data-test="inventarwert"><b data-test="wert">{{ inventarwert|betraegeuro }}</b> Summe der Kaufpreise aller aktiven Geräte.</p>
+  </section>
+
+  {# Arbeitslisten (F-102, F-36, F-88, F-133) #}
+  <div class="todo" data-test="arbeitslisten">
+    {% for liste in arbeitslisten %}
+    <section class="card" data-test="arbeitsliste" data-id="{{ liste.data_id }}">
+      <div class="card-head">
+        <h2>{{ liste.titel }}</h2>
+        <span class="card-kopf-rechts">
+          <a class="btn link" href="{% url 'uebersicht-export' %}?liste={{ liste.data_id }}&amp;format=csv" data-test="export-csv">CSV</a>
+          <a class="btn link" href="{% url 'uebersicht-export' %}?liste={{ liste.data_id }}&amp;format=xlsx" data-test="export-xlsx">XLSX</a>
+          <span class="count" data-test="anzahl">{{ liste.zeilen|length }}</span>
+        </span>
+      </div>
+      {% if liste.zeilen %}
+      <ul class="worklist{% if liste.zeilen|length > 8 %} lang{% endif %}"{% if liste.zeilen|length > 8 %} tabindex="0"{% endif %}>
+        {% for z in liste.zeilen %}
+        <li data-test="zeile" data-id="{% if z.nr %}{{ z.nr }}{% elif z.kennung %}{{ z.kennung }}{% else %}{{ z.person|default:z.name }}{% endif %}">
+          <span class="what">
+            {% if z.link %}<a href="{{ z.link }}" data-test="sprung">{% if z.nr %}{{ z.nr }}{% elif z.kennung %}{{ z.kennung }}{% else %}{{ z.person|default:z.name }}{% endif %}</a>{% else %}<b>{{ z.nr }}</b>{% endif %}
+            <small>
+              {% if liste.data_id == "ueberfaellig" %}<span class="chip-status warn" data-test="markierung-ueberfaellig"><span aria-hidden="true">⚠</span> überfällig</span> {% endif %}
+              {% if liste.data_id == "ueberfaellig" or liste.data_id == "anfragen" %}
+                {{ z.gerat }} · {{ z.person }}{% if z.frist %} · Rückgabe {{ z.frist|date:"d.m.Y" }}{% endif %}{% if z.zweck %} · {{ z.zweck }}{% endif %}
+              {% elif liste.data_id == "arbeitsplaetze-unvollstaendig" %}
+                {{ z.standort }} · {{ z.mangel }}
+              {% elif liste.data_id == "garantie" %}
+                {{ z.modell }} · Garantie bis {{ z.garantie_bis|date:"d.m.Y" }}
+              {% elif liste.data_id == "unterschriften-offen" or liste.data_id == "versand-offen" %}
+                {{ z.stand }} · {{ z.person }}
+              {% elif liste.data_id == "daten-unvollstaendig" %}
+                {{ z.modell }} · fehlt: {{ z.luecken|join:", " }}
+              {% elif liste.data_id == "offene-punkte" %}
+                In Klärung: {{ z.punkte|join:", " }}
+              {% elif liste.data_id == "austritte" %}
+                Austritt {{ z.austritt|date:"d.m.Y" }} · {{ z.geraete }} Gerät(e)
+              {% endif %}
+            </small>
+          </span>
+          {% if liste.data_id == "garantie" %}<span class="chip-status warn">{{ z.garantie_bis|date:"d.m.Y" }}</span>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% if liste.data_id == "daten-unvollstaendig" %}<p class="alle-link"><a href="/geraete/?unvollstaendig=1" data-test="alle-anzeigen">Alle in der Geräteliste</a></p>{% endif %}
+      {% else %}
+      <p class="leer-text" data-test="leer">{{ liste.leer_text }}</p>
+      {% endif %}
+    </section>
+    {% endfor %}
+  </div>
+
+</div>
+{% endblock %}
+{% block skripte %}
+<script src="/static/uebersicht.js"></script>
+{% endblock %}

@@ -1,0 +1,42 @@
+{% extends "basis.html" %}
+{% block titel %}Leihanfrage genehmigen · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div>
+    <h1>Leihanfrage genehmigen</h1>
+    <p class="muted lead">Leihe {{ leihe.nr }}: ein Gerät aus dem Leihpool der Kategorie zuweisen.</p>
+  </div>
+</div>
+<div data-test="dialog" data-name="genehmigen">
+  <dl class="kv">
+    <dt>Person</dt><dd>{{ leihe.person.vorname }} {{ leihe.person.nachname }}</dd>
+    <dt>Kategorie</dt><dd>{{ leihe.kat.name }}</dd>
+    <dt>Zeitraum</dt><dd>{{ leihe.beginn|date:"d.m.Y" }} bis {{ leihe.ende|date:"d.m.Y" }}</dd>
+    <dt>Zweck</dt><dd>{{ leihe.zweck }}</dd>
+    <dt>Verfügbar</dt><dd data-test="freie-geraete">{% if frei_anzahl %}{{ frei_anzahl }} Gerät{% if frei_anzahl != 1 %}e{% endif %} frei{% else %}keins frei{% endif %}</dd>
+  </dl>
+  <form method="post" novalidate data-test="genehmigen-formular">
+    {% csrf_token %}
+    <div class="meldungen">
+      {% include "fragmente/fehler.html" %}
+      {% if fehler %}<div class="meldung error" data-test="fehler">{{ fehler }}</div>{% endif %}
+    </div>
+    <div class="form-grid">
+      <div class="field full">
+        <label for="id_gerat" class="req">Gerät zuweisen</label>
+        <select name="gerat" id="id_gerat" data-test="gerat">
+          <option value="">Gerät wählen</option>
+          {% for g in auswahl %}
+          <option value="{{ g.id }}"{% if g.id|stringformat:"s" == gewaehlt %} selected{% endif %}>{{ g.text }}</option>
+          {% endfor %}
+        </select>
+        <span class="help">{{ leihe.person.vorname }} {{ leihe.person.nachname }} erhält eine E-Mail mit der Entscheidung.</span>
+      </div>
+    </div>
+    <div class="actions">
+      <button type="submit" class="btn primary" data-test="speichern">Genehmigen</button>
+      <a class="btn link" href="/verleih/" data-test="abbrechen">Abbrechen</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,25 @@
+{% extends "basis.html" %}
+{% block titel %}Neues Konto · WMC Inventar{% endblock %}
+{% block inhalt %}
+<div class="page-head">
+  <div><h1>Neues Konto</h1><p class="muted lead">Konto anlegen. Das neue Konto erhält eine Einladungsmail mit Link zum Setzen des Passworts (72 Stunden gültig).</p></div>
+</div>
+<form method="post" novalidate>
+  {% csrf_token %}
+  <div class="meldungen">{% include "fragmente/fehler.html" %}</div>
+  <div class="form-grid">
+    {% for f in form %}
+      <div class="field">
+        <label for="{{ f.id_for_label }}"{% if f.field.required %} class="req"{% endif %}>{{ f.label }}</label>
+        {{ f }}
+        {% if f.field.help_text %}<small class="help">{{ f.field.help_text }}</small>{% endif %}
+        {% for e in f.errors %}<small class="help error">{{ e }}</small>{% endfor %}
+      </div>
+    {% endfor %}
+  </div>
+  <div class="actions">
+    <button type="submit" class="btn primary" data-test="konto-speichern">Anlegen</button>
+    <a class="btn" href="/konten/">Abbrechen</a>
+  </div>
+</form>
+{% endblock %}

@@ -1,0 +1,62 @@
+/* WMC Inventar · Import, Etiketten, Erstinventur, Schnellaktionen.
+   Eigene Datei, geladen nur auf diesen Seiten; Grundlage bleibt basis.css. */
+
+/* Import: Schritte (Prototyp: steps) */
+.schritte{display:flex;flex-wrap:wrap;gap:6px 28px;list-style:none;margin:0;padding:0 0 10px;border-bottom:2px solid var(--fg)}
+.schritt{display:flex;align-items:center;gap:8px;font-weight:500;color:var(--fg-2)}
+.schritt b{font-family:var(--font-cond);font-stretch:var(--narrow);font-size:20px;font-weight:800;color:var(--fg-3);font-variant-numeric:tabular-nums}
+.schritt[aria-current="step"]{color:var(--fg);font-weight:700}
+.schritt[aria-current="step"] b{color:var(--red)}
+.schritt.fertig b{color:var(--ok)}
+.import-felder{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,360px));gap:14px 20px;margin-top:12px}
+.import-feld{max-width:420px;margin:14px 0 24px}
+.import-knoepfe{margin-top:14px;align-items:center}
+.import-danach{margin-top:14px}
+.import-zahlen{font-size:15px;font-weight:600;color:var(--fg);margin-top:12px}
+.import-hinweis{display:block}
+.abschnitt h3{margin:18px 0 6px}
+.abschnitt form.form-inline{display:inline-block;margin:0}
+.chip-status.erg-neu{color:var(--info);background:var(--info-bg)}
+.chip-status.erg-ergaenzt{color:var(--ok);background:var(--ok-bg)}
+.chip-status.erg-konflikt{color:var(--warn);background:var(--warn-bg)}
+.chip-status.erg-uebersprungen{color:var(--neutral);background:var(--neutral-bg)}
+
+/* Etiketten: Druckauftrag und Vorschau des Bogens (Prototyp: label-layout, sheet, lbl) */
+.etikett-auftrag{display:grid;grid-template-columns:320px minmax(0,1fr);gap:28px 48px;align-items:start}
+.etikett-auftrag form{display:flex;flex-direction:column;gap:14px}
+.etikett-auftrag input[type=number]{max-width:120px}
+.bogen-wrap{display:flex;flex-direction:column;align-items:center;gap:20px;padding:24px;background:var(--surface-2);border-radius:4px}
+.bogen{container-type:inline-size;width:100%;max-width:560px;background:var(--paper);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.2),0 8px 24px rgba(0,0,0,.08);display:grid}
+.bogen.a4{aspect-ratio:210/297;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(8,1fr)}
+.bogen.a5{aspect-ratio:148/210;max-width:420px;grid-template-columns:repeat(2,1fr);grid-template-rows:repeat(5,1fr)}
+.lbl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:2.2cqw;align-items:center;padding:2cqw 2.4cqw;border:1px dashed var(--paper-line);margin:-.5px;overflow:hidden;position:relative}
+.lbl:not(.leer)::before{content:"";position:absolute;inset:0 0 auto;height:.7cqw;background:var(--signal)}
+.lbl.leer{border-style:dotted}
+.lbl .q{display:block;width:8.5cqw;height:8.5cqw}
+.lbl .q svg{width:100%;height:100%;display:block}
+.lbl .t{display:flex;flex-direction:column;min-width:0;line-height:1.1}
+.lbl .nr{font-family:var(--font-cond);font-stretch:var(--narrow);font-weight:800;font-size:3.1cqw;font-variant-numeric:tabular-nums}
+.lbl .m{font-size:1.7cqw;margin-top:.4cqw;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.lbl .own{font-size:1.2cqw;color:var(--paper-muted);margin-top:.5cqw;white-space:nowrap}
+
+/* Gerätedetail: Erstinventur (Prototyp 17-erstinventur-mobil) */
+.inventur-balken{display:block;width:100%;height:8px;margin-top:8px;accent-color:var(--signal)}
+.inventur form{display:flex;flex-direction:column;gap:14px;margin-top:10px;max-width:640px}
+.inventur fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.inventur legend{font-size:13px;font-weight:600;padding:0;margin-bottom:4px}
+.inventur .fehlt{color:var(--warn);font-weight:500}
+.zustand-wahl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+
+/* Übersicht: lange Arbeitslisten bleiben im Rahmen (F-102) */
+.worklist.lang{max-height:22rem;overflow-y:auto}
+.alle-link{padding-top:8px;font-size:13px}
+
+/* Schnellaktionen am Handy: Ausgabe, Rückgabe, Reparatur, Notiz vorn und groß (F-74) */
+@media (max-width:640px){
+  [data-test="aktionen"]{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  [data-test="aktionen"] .btn{width:100%;min-height:30px;padding:0 8px;font-size:13px}
+  [data-test="aktionen"] .btn.schnell{order:-1;min-height:48px;font-size:15px;font-weight:600}
+  .etikett-auftrag{grid-template-columns:minmax(0,1fr)}
+  .bogen-wrap{padding:8px}
+}
+@media (max-width:1180px){.etikett-auftrag{grid-template-columns:minmax(0,1fr)}}

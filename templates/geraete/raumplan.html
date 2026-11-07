@@ -1,0 +1,151 @@
+{% extends "basis.html" %}
+{% load l10n %}
+{% block titel %}Arbeitsplätze · WMC Inventar{% endblock %}
+{% block inhalt %}
+<section data-test="arbeitsplaetze">
+  <div class="page-head">
+    <div>
+      <h1>Arbeitsplätze</h1>
+      <p class="lead">{{ ok_anzahl }} von {{ plaetze_gesamt }} Arbeitsplätzen haben ihre Soll-Ausstattung.{% if plan_auswahl %} {{ plan_auswahl.standort }}, {{ plan_auswahl.etage }}.{% endif %}</p>
+    </div>
+    <div class="actions">
+      <a class="btn" href="/arbeitsplaetze/liste/" data-test="liste-link">Alle Plätze</a>
+      <a class="btn" href="/arbeitsplaetze/bedarf/" data-test="bedarf-link">Bedarf</a>
+      {% if bearbeiten_kann %}
+      {% if plan_auswahl %}
+      <a class="btn" href="{% url 'plan-bearbeiten' plan_auswahl.id %}" data-test="plan-bearbeiten">Plan bearbeiten</a>
+      {% else %}
+      <a class="btn" href="{% url 'plan-anlegen' %}" data-test="plan-anlegen">Neuer Plan</a>
+      {% endif %}
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="filter-bar">
+    <form method="get" class="filter-bar" data-test="auswahl">
+      <div class="field">
+        <label for="plan_id">Standort und Etage</label>
+        <select id="plan_id" name="plan">
+          {% for p in plane %}
+          <option value="{{ p.id }}" {% if p == plan_auswahl %}selected{% endif %}>{{ p.standort }} – {{ p.etage }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field" role="group" aria-label="Ansicht">
+        <label>Ansicht</label>
+        <div class="seg">
+          <a href="?ansicht=raumplan&amp;plan={{ plan_auswahl.id }}" class="seg-btn {% if anzeige_raumplan %}aktiv{% endif %}"{% if anzeige_raumplan %} aria-current="page"{% endif %}>Raumplan</a>
+          <a href="?ansicht=liste&amp;plan={{ plan_auswahl.id }}" class="seg-btn {% if anzeige_liste %}aktiv{% endif %}"{% if anzeige_liste %} aria-current="page"{% endif %}>Liste</a>
+        </div>
+      </div>
+      {% if anzeige_liste %}
+      <input type="hidden" name="ansicht" value="liste">
+      <div class="field">
+        <label for="nur_unvollstaendig">Zeige</label>
+        <select id="nur_unvollstaendig" name="unvollstaendig">
+          <option value="" {% if not nur_unvollstaendig %}selected{% endif %}>Alle ({{ plaetze_gesamt }})</option>
+          <option value="1" {% if nur_unvollstaendig %}selected{% endif %}>Unvollständig ({{ unvollstaendig|length }})</option>
+        </select>
+      </div>
+      {% endif %}
+    </form>
+  </div>
+
+  {% if anzeige_raumplan %}
+  <div class="plan-grid" data-test="raumplan"{% if plan_auswahl %} data-id="{{ plan_auswahl.id }}"{% endif %}{% if hervorheben %} data-hervorheben="{{ hervorheben }}"{% endif %}>
+    {# F-65: Unter der Mindestbreite scrollt der Plan in seinem Rahmen; die Marken bleiben lesbar und überlappen nicht. #}
+    <div class="plan-scroll" tabindex="0" role="group" aria-label="Grundriss mit den Plätzen und Räumen">
+    <figure class="plan-fig" data-test="plan-flaeche">
+      {% if plan_auswahl.grundriss %}
+      <img src="{% url 'plan-grundriss' plan_auswahl.id %}" alt="Grundriss {{ plan_auswahl.standort }} {{ plan_auswahl.etage }}" class="plan-bild" data-test="plan-bild">
+      {% else %}
+      <div class="plan-leer" data-test="plan-leer">Kein Grundriss hinterlegt. Plan bearbeiten, um einen zu laden.</div>
+      {% endif %}
+      <div class="plan-orte" data-test="plan-orte">
+        {% for o in plaetze %}{% if o.ort.position_x is not None and o.ort.position_y is not None %}
+        <button type="button" class="orte platz {{ o.klasse }}"
+                data-test="platz" data-id="{{ o.ort.kennung }}" data-ort-id="{{ o.ort.id }}" data-pfad="/arbeitsplaetze/{{ o.ort.kennung }}/popup/"
+                data-soll-ist="{{ o.soll_ist }}"
+                data-x="{{ o.ort.position_x|unlocalize }}"
+                data-y="{{ o.ort.position_y|unlocalize }}"
+                aria-label="{{ o.beschriftung }}">
+          <span class="platz-kennung" aria-hidden="true">{{ o.ort.kennung }}</span>
+          <span class="platz-zeichen" aria-hidden="true">{{ o.zeichen }}</span>
+          <span class="platz-text" aria-hidden="true">{{ o.text }}</span>
+        </button>
+        {% endif %}{% endfor %}
+        {% for r in raumorte %}{% if r.position_x is not None and r.position_y is not None %}
+        <button type="button" class="orte raum"
+                data-test="raumort" data-id="{{ r.kennung }}" data-ort-id="{{ r.id }}" data-pfad="/arbeitsplaetze/raum/{{ r.kennung }}/popup/"
+                data-x="{{ r.position_x|unlocalize }}"
+                data-y="{{ r.position_y|unlocalize }}"
+                aria-label="Raum {{ r.name }}, {{ r.geraete_anzahl }} Gerät{{ r.geraete_anzahl|pluralize:"e" }}">
+          <span class="raum-name" aria-hidden="true">{{ r.name }}</span>
+          <span class="raum-anzahl" aria-hidden="true">{{ r.geraete_anzahl }} Gerät{{ r.geraete_anzahl|pluralize:"e" }}</span>
+        </button>
+        {% endif %}{% endfor %}
+      </div>
+    </figure>
+    </div>
+    <aside class="plan-seite">
+      <div class="legende" data-test="legende">
+        <h3>Legende</h3>
+        <ul>
+          <li class="legende-eintrag vollstaendig"><span class="platz-zeichen" aria-hidden="true">✓</span> vollständig</li>
+          <li class="legende-eintrag fehlt"><span class="platz-zeichen" aria-hidden="true">−</span> unvollständig</li>
+          <li class="legende-eintrag zuviel"><span class="platz-zeichen" aria-hidden="true">+</span> mehr als Soll</li>
+        </ul>
+      </div>
+      <div class="plan-rueme" data-test="raeume-liste">
+        <h3>Räume</h3>
+        <ul>
+          {% for r in raumorte %}
+          <li><button type="button" class="linkish" data-test="raum-link" data-pfad="/arbeitsplaetze/raum/{{ r.kennung }}/popup/">{{ r.name }}</button> <span class="muted small">{{ r.geraete_anzahl }} Gerät{{ r.geraete_anzahl|pluralize:"e" }}</span></li>
+          {% empty %}
+          <li class="muted">Keine Räume ohne festen Platz.</li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% if unvollstaendig %}
+      <div class="plan-unvollstaendig" data-test="unvollstaendig-liste">
+        <h3>Unvollständige Plätze ({{ unvollstaendig|length }})</h3>
+        <ul>
+          {% for u in unvollstaendig %}
+          <li><a href="/arbeitsplaetze/{{ u.ort.kennung }}/" data-test="platz-link">{{ u.ort.kennung }}</a><span class="muted small">{% for kategorie, anzahl in u.abgleich.fehlend %}fehlt: {{ anzahl }} × {{ kategorie.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</span></li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+      {% if ohne_position %}
+      <div class="plan-ohne-position" data-test="ohne-position">
+        <h3>Ohne Position ({{ ohne_position|length }})</h3>
+        <ul>
+          {% for o in ohne_position %}
+          <li>{{ o.ort.kennung }} <span class="muted small">– nicht auf dem Plan platziert</span></li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+    </aside>
+  </div>
+  <p class="help">Ein Klick oder Enter auf einen Platz zeigt Person, Soll-Ist-Ergebnis und alle Geräte.</p>
+  {% else %}
+  <div class="liste" data-test="arbeitsplaetze-liste">
+    {% for o in plaetze %}
+    <div class="zeile spalten-planliste" data-test="zeile" data-id="{{ o.ort.kennung }}">
+      <a href="/arbeitsplaetze/{{ o.ort.kennung }}/" data-test="platz-link">{{ o.ort.kennung }}</a>
+      <span class="muted">{{ o.ort.raum }}</span>
+      <span data-test="feste-person">{% if o.ort.feste_person %}{{ o.ort.feste_person.voller_name }}{% else %}<span class="muted">{{ o.ort.notiz|default:"–" }}</span>{% endif %}</span>
+      <span class="platz-chip {{ o.klasse }}" data-test="platz-chip">{{ o.zeichen }} {{ o.text }}</span>
+      <span class="muted small" data-test="fehlliste">{% for kategorie, anzahl in o.abgleich.fehlend %}fehlt: {{ anzahl }} × {{ kategorie.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>
+      <button type="button" class="btn sm" data-test="popup-oeffnen" data-pfad="/arbeitsplaetze/{{ o.ort.kennung }}/popup/">Details</button>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  <div id="platz-popup" class="popup" hidden data-test="platz-popup"></div>
+</section>
+{% endblock %}
+{% block skripte %}
+<script src="/static/raumplan.js"></script>
+{% endblock %}

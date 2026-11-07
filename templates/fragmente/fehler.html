@@ -1,0 +1,15 @@
+{# Gemeinsames Fehlerfragment (A-0097): zeigt alle Fehler des Formulars – #}
+{# Non-Feld und je Feld – in einem Element data-test=fehler oben.  #}
+{# Die Feldfehler bleiben zusätzlich neben dem Feld. #}
+{% if form.errors %}
+  <div class="meldung error" data-test="fehler">
+    {% for e in form.non_field_errors %}
+      {{ e }}{% if not forloop.last %} · {% endif %}
+    {% endfor %}
+    {% for field in form %}
+      {% for e in field.errors %}
+        {{ field.label }}: {{ e }}{% if not forloop.last %} · {% endif %}
+      {% endfor %}
+    {% endfor %}
+  </div>
+{% endif %}
